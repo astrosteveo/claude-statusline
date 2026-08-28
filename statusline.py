@@ -56,10 +56,10 @@ DEFAULTS = {
     "bar": {
         "width": 12,
         "partial": True,          # sub-cell resolution for the boundary cell
-        "partial_style": "shade",  # "shade" (░▒▓) | "eighth" (▏▎▍) | "off"
+        "partial_style": "auto",  # "auto" | "eighth" (▏▎▍) | "shade" (░▒▓) | "off"
         "min_sliver": True,       # any usage > 0 shows at least a sliver
         "full": "█",
-        "empty": "░",
+        "empty": "█",
     },
     "thresholds": {"yellow": 50, "orange": 75, "red": 90},
     "features": {
@@ -341,6 +341,37 @@ def pct_color(pct) -> str:
 _EIGHTHS = "▏▎▍▌▋▊▉"          # 1/8 .. 7/8, left-aligned
 _SHADES = "░▒▓"               # ~25%, ~50%, ~75% density, full cell
 
+_SHADE_TRACK = ("░", "▒", "▓")   # textured track
+_SOLID_TRACK = ("█",)            # fully-inked track
+_BLANK_TRACK = (" ", "")         # bare terminal background
+
+
+def _as_bg(spec: str):
+    """Turn a foreground SGR spec into its background equivalent."""
+    if spec.startswith("38;"):
+        return "48;" + spec[3:]
+    if spec.isdigit() and 30 <= int(spec) <= 37:
+        return str(int(spec) + 10)
+    if spec.isdigit() and 90 <= int(spec) <= 97:
+        return str(int(spec) + 10)
+    return None
+
+
+def _partial_plan(style: str, empty_ch: str):
+    """Pick a boundary-cell family whose remainder matches the track.
+
+    An eighth-block inks only the left fraction of its cell, so the rest must
+    be painted to match the track or it reads as a hole. That works when the
+    track is solid (paint the cell background) or blank (paint nothing), but a
+    textured ░ track cannot be reproduced by a solid background — there, the
+    shade family is the only family that stays continuous.
+    """
+    if style == "auto":
+        style = "shade" if empty_ch in _SHADE_TRACK else "eighth"
+    if style == "eighth":
+        return "eighth", empty_ch in _SOLID_TRACK
+    return style, False
+
 
 def make_bar(pct, width=None) -> str:
     """Usage bar with optional sub-cell resolution."""
@@ -351,9 +382,10 @@ def make_bar(pct, width=None) -> str:
     pct = max(0.0, min(100.0, num(pct, 0)))
     color = pct_color(pct)
     full_ch, empty_ch = bcfg["full"], bcfg["empty"]
-    style = bcfg.get("partial_style", "shade")
+    style = bcfg.get("partial_style", "auto")
     if not bcfg.get("partial", True):
         style = "off"
+    style, need_bg = _partial_plan(style, empty_ch)
 
     cells = pct / 100.0 * width
     full = int(cells)
@@ -383,7 +415,16 @@ def make_bar(pct, width=None) -> str:
                 part = ramp[min(len(ramp) - 1, int(frac * len(ramp)))]
 
     empty = width - full - (1 if part else 0)
-    return c(color, full_ch * full + part) + c("dim", empty_ch * max(0, empty))
+    out = c(color, full_ch * full)
+    if part:
+        bg = _as_bg(CFG["colors"]["dim"]) if need_bg else None
+        if bg:
+            # Paint the cell's unfilled remainder in the track colour so the
+            # bar stays continuous across the boundary.
+            out += f"\033[{CFG['colors'][color]};{bg}m{part}{C['reset']}"
+        else:
+            out += c(color, part)
+    return out + c("dim", empty_ch * max(0, empty))
 
 
 def home_path(path: str) -> str:

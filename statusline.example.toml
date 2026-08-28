@@ -27,16 +27,19 @@ width = 12
 partial = true      # give the boundary cell sub-cell resolution
 min_sliver = true   # any usage above 0 shows at least a sliver
 full = "█"
-empty = "░"
+empty = "█"    # the track. "█" solid, "░" textured, " " blank.
 
 # How the boundary cell between filled and empty is drawn:
-#   "shade"   ░▒▓ — varies density and inks the whole cell, so the partial
-#             cell keeps the same texture as the track. Matches empty = "░".
-#   "eighth"  ▏▎▍ — varies width, painting a sliver at the left of the cell
-#             and leaving the rest bare. Finer (8 steps vs 3), but it leaves
-#             an unshaded notch in a textured track. Pair with empty = " ".
+#   "auto"    match the family to the track (recommended). A solid or blank
+#             track gets eighth-blocks; a textured ░ track gets shades.
+#   "eighth"  ▏▎▍ — 8 steps per cell. Inks only the left fraction, so the
+#             remainder is painted in the track colour when the track is
+#             solid. Against a textured ░ track that is impossible and the
+#             cell reads as a notch, which is why "auto" avoids the pairing.
+#   "shade"   ░▒▓ — 3 steps per cell. Varies density and inks the whole cell,
+#             so it stays continuous on a textured track.
 #   "off"     no partial cell; the bar rounds to whole cells.
-partial_style = "shade"
+partial_style = "auto"
 
 [thresholds]
 yellow = 50

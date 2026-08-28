@@ -78,7 +78,8 @@ class BarTests(unittest.TestCase):
         S.apply_config(S._deep_merge(S.DEFAULTS, {}))
 
     def test_zero_is_empty(self):
-        self.assertEqual(strip(S.make_bar(0, 10)), "░" * 10)
+        self.assertEqual(strip(S.make_bar(0, 10)),
+                         S.CFG["bar"]["empty"] * 10)
 
     def test_full_is_full(self):
         self.assertEqual(strip(S.make_bar(100, 10)), "█" * 10)
@@ -89,15 +90,28 @@ class BarTests(unittest.TestCase):
                 self.assertEqual(S.display_width(S.make_bar(pct, width)), width,
                                  f"pct={pct} width={width}")
 
-    def test_small_nonzero_shows_a_sliver(self):
-        """A 2% bar must not look identical to 0%."""
-        self.assertNotEqual(strip(S.make_bar(2, 12)), strip(S.make_bar(0, 12)))
+    def test_small_nonzero_is_distinguishable(self):
+        """2% must never render identically to 0%.
+
+        Where the track glyph differs from the fill glyph, that difference is
+        carried by shape and survives a mono or low-contrast theme. On a solid
+        track (fill and track are both █) only colour can carry it — that is
+        inherent to the style, so it is asserted rather than assumed.
+        """
+        for empty in ("█", "░", " "):
+            S.apply_config(S._deep_merge(S.DEFAULTS, {"bar": {"empty": empty}}))
+            self.assertNotEqual(S.make_bar(2, 12), S.make_bar(0, 12),
+                                f"empty={empty!r}: 2% renders exactly as 0%")
+            if empty != S.CFG["bar"]["full"]:
+                self.assertNotEqual(
+                    strip(S.make_bar(2, 12)), strip(S.make_bar(0, 12)),
+                    f"empty={empty!r}: 2% differs from 0% only by colour")
 
     def test_shade_style_never_breaks_the_track(self):
         """Regression: eighth-blocks left the rest of their cell unshaded, so
         the ░ track had a visible notch at the fill boundary."""
-        S.apply_config(S._deep_merge(S.DEFAULTS,
-                                     {"bar": {"partial_style": "shade"}}))
+        S.apply_config(S._deep_merge(
+            S.DEFAULTS, {"bar": {"partial_style": "shade", "empty": "░"}}))
         allowed = set("█░▒▓")
         for width in (6, 12, 20):
             for pct in range(0, 101):
@@ -114,6 +128,42 @@ class BarTests(unittest.TestCase):
                     self.assertEqual(S.display_width(S.make_bar(pct, width)),
                                      width, f"{style} pct={pct} width={width}")
 
+    def test_auto_matches_family_to_track(self):
+        """A textured track cannot host an eighth-block without a notch."""
+        self.assertEqual(S._partial_plan("auto", "░"), ("shade", False))
+        self.assertEqual(S._partial_plan("auto", "▒"), ("shade", False))
+        self.assertEqual(S._partial_plan("auto", "█"), ("eighth", True))
+        self.assertEqual(S._partial_plan("auto", " "), ("eighth", False))
+
+    def test_solid_track_paints_the_partial_remainder(self):
+        """The fix: on a solid track the boundary cell carries a background
+        colour, so its unfilled fraction matches the cells beside it."""
+        S.apply_config(S._deep_merge(S.DEFAULTS, {"bar": {"empty": "█"}}))
+        bg = S._as_bg(S.CFG["colors"]["dim"])
+        self.assertIsNotNone(bg)
+        for pct in (1, 6, 13, 27, 44, 62, 91, 97):
+            bar = S.make_bar(pct, 12)
+            partial = [ch for ch in strip(bar) if ch in S._EIGHTHS]
+            if partial:
+                self.assertIn(bg, bar,
+                              f"pct={pct}: partial cell has no track background")
+
+    def test_blank_track_needs_no_background(self):
+        S.apply_config(S._deep_merge(S.DEFAULTS, {"bar": {"empty": " "}}))
+        self.assertNotIn("48;", S.make_bar(6, 12))
+
+    def test_default_gives_eight_step_resolution(self):
+        """Distinct percentages inside one cell must render distinctly."""
+        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+        seen = {strip(S.make_bar(p, 8)) for p in range(0, 13)}
+        self.assertGreaterEqual(len(seen), 8, "lost sub-cell resolution")
+
+    def test_as_bg_conversion(self):
+        self.assertEqual(S._as_bg("38;5;240"), "48;5;240")
+        self.assertEqual(S._as_bg("38;2;10;20;30"), "48;2;10;20;30")
+        self.assertEqual(S._as_bg("31"), "41")
+        self.assertIsNone(S._as_bg("1"))
+
     def test_eighth_style_still_available(self):
         S.apply_config(S._deep_merge(S.DEFAULTS,
                                      {"bar": {"partial_style": "eighth"}}))
@@ -125,8 +175,8 @@ class BarTests(unittest.TestCase):
         self.assertTrue(set(strip(S.make_bar(37, 12))) <= set("█░"))
 
     def test_off_style_still_shows_a_sliver(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS,
-                                     {"bar": {"partial_style": "off"}}))
+        S.apply_config(S._deep_merge(
+            S.DEFAULTS, {"bar": {"partial_style": "off", "empty": "░"}}))
         self.assertNotEqual(strip(S.make_bar(2, 12)), strip(S.make_bar(0, 12)))
 
     def test_monotonic(self):

@@ -6,7 +6,7 @@ flush to the right edge of the terminal.
 
 ```
 ◆ Opus 5 (1M context) · high │ ▸ …/u/Projects/widget-factory │ $24.73 59m +1006/-21 │ refactor the parser
-ctx ███▒░░░░░░░░ 28% (279k/1.0M)                                                                5h █▒░░░░░░░░░░ 12% ⇢18% ↻1h43m·19:17 │ 7d ▓░░░░░░░░░░░ 6% ⇢56% ↻6d5h
+ctx ███▎████████ 28% (279k/1.0M)                                                                5h █▍██████████ 12% ⇢18% ↻1h43m·19:22 │ 7d ▋███████████ 6% ⇢56% ↻6d5h
 ```
 
 Pure Python 3.11+, no third-party dependencies, no network calls.
@@ -78,12 +78,25 @@ width = 16
 pace = false
 ```
 
-Bars carry sub-cell resolution so a 2% window does not render identically to
-an empty one. The boundary cell defaults to the shade family (`░▒▓`), which
-inks the whole cell and so keeps the texture of the track running through it;
-`bar.partial_style = "eighth"` switches to `▏▎▍`, which is finer (8 steps
-rather than 3) but leaves the rest of that cell bare — pair it with
-`empty = " "` if you want it. `"off"` rounds to whole cells.
+Bars carry sub-cell resolution, so a 2% window does not render identically to
+an empty one and a 12-cell bar resolves 96 levels rather than 12.
+
+The boundary cell between filled and empty is the fiddly part. Eighth-blocks
+(`▏▎▍`) ink only the left fraction of their cell, so the remainder has to be
+painted to match the track or the bar reads as notched. `partial_style =
+"auto"` picks a family that matches whatever track you configured:
+
+| `empty` | family | steps/cell | boundary remainder |
+|---------|--------|-----------|--------------------|
+| `"█"` solid *(default)* | eighth `▏▎▍` | 8 | painted in the track colour |
+| `"░"` textured | shade `░▒▓` | 3 | inked by the glyph itself |
+| `"  "` blank | eighth `▏▎▍` | 8 | nothing to match |
+
+A solid track cannot distinguish 0% from 2% by shape, since fill and track are
+the same glyph — only colour separates them. If you need the distinction to
+survive a mono or low-contrast theme, use `empty = " "`, which keeps all eight
+steps, or `empty = "░"`, which trades down to three. Set `partial_style`
+explicitly to override the pairing, or `"off"` to round to whole cells.
 
 See [`statusline.example.toml`](statusline.example.toml) for the annotated set,
 `--dump-config` for the resolved values, and `--doctor` for which file actually
