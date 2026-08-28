@@ -1,0 +1,54 @@
+{
+  "model": {
+    "display_name": "Opus 5 (1M context)",
+    "id": "claude-opus-5[1m]"
+  },
+  "effort": {
+    "level": "high"
+  },
+  "session_name": "Leftover mining game anchors",
+  "workspace": {
+    "current_dir": "/home/u/Projects/space-miner",
+    "project_dir": "/home/u/Projects/space-miner",
+    "repo": {
+      "host": "github.com",
+      "owner": "astrosteveo",
+      "name": "space-miner"
+    }
+  },
+  "version": "2.1.251",
+  "output_style": {
+    "name": "default"
+  },
+  "cost": {
+    "total_cost_usd": 24.73,
+    "total_duration_ms": 3541221,
+    "total_lines_added": 1006,
+    "total_lines_removed": 21
+  },
+  "context_window": {
+    "used_percentage": 28,
+    "total_input_tokens": 278532,
+    "context_window_size": 1000000
+  },
+  "exceeds_200k_tokens": true,
+  "prompt_cache": {
+    "warm": true,
+    "hit_ratio": 0.989,
+    "recache_tokens_if_cold": 278532
+  },
+  "thinking": {
+    "enabled": true
+  },
+  "fast_mode": false,
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": 4,
+      "resets_at": 1787956200
+    },
+    "seven_day": {
+      "used_percentage": 2,
+      "resets_at": 1788490000
+    }
+  }
+}

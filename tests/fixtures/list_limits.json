@@ -1,0 +1,16 @@
+{
+  "model": {
+    "display_name": "Haiku 4.5"
+  },
+  "cwd": "/srv/app",
+  "rate_limits": [
+    {
+      "window": "five_hour",
+      "used_percentage": 50
+    },
+    {
+      "window": "seven_day",
+      "used_percentage": 12
+    }
+  ]
+}

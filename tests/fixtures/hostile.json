@@ -1,0 +1,39 @@
+{
+  "model": {
+    "display_name": [
+      "not",
+      "a",
+      "string"
+    ]
+  },
+  "effort": {
+    "level": 5
+  },
+  "cwd": null,
+  "cost": {
+    "total_cost_usd": "expensive",
+    "total_duration_ms": null,
+    "total_lines_added": "x",
+    "total_lines_removed": {}
+  },
+  "context_window": {
+    "used_percentage": "abc",
+    "total_input_tokens": "many",
+    "context_window_size": 0
+  },
+  "prompt_cache": "not a dict",
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": Infinity,
+      "resets_at": "not-a-date"
+    },
+    "seven_day": {
+      "used_percentage": null
+    }
+  },
+  "github": {
+    "pull_request": {
+      "number": "abc"
+    }
+  }
+}

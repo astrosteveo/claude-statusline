@@ -1,0 +1,88 @@
+# claude-statusline configuration
+#
+# Copy to ~/.config/claude-statusline/config.toml and edit. Every key is
+# optional — anything you omit falls back to the built-in default. Run
+# `statusline.py --dump-config` to see the fully resolved values, and
+# `statusline.py --doctor` to check which file is actually being loaded.
+
+[layout]
+# Columns the host TUI reserves at the right edge before it truncates.
+# Claude Code's fullscreen TUI eats ~4 beyond the COLUMNS it reports, so the
+# default is 4 reserved + 1 wrap gap. To calibrate precisely, see the
+# "Calibrating right_margin" section of the README.
+right_margin = 5
+
+separator = " │ "
+
+# Used when the host does not export COLUMNS.
+fallback_columns = 200
+
+# Glyphs your font renders double-width even though Unicode calls them narrow.
+# Symptom: the right-anchored bars get clipped by exactly the number of these
+# on screen. Check yours with --ruler.
+wide_glyphs = []
+
+[bar]
+width = 12
+partial = true      # eighth-block glyphs give 8x sub-cell resolution
+min_sliver = true   # any usage above 0 shows at least a sliver
+full = "█"
+empty = "░"
+
+[thresholds]
+yellow = 50
+orange = 75
+red = 90
+
+[features]
+pace = true                   # project end-of-window usage from burn rate
+pace_min_elapsed = 0.10       # don't extrapolate from under 10% of a window
+reset_clock = true            # append wall-clock time of the window reset
+last_commit = true            # nudge with time since last commit when dirty
+last_commit_nudge_min = 45
+context_tokens = true         # show token count beside the context percentage
+context_size = true           # ... and the total window size, e.g. (380k/1.0M)
+prompt_cache = true           # warn when the prompt cache is cold
+prompt_cache_min_ratio = 0.90
+model_window = true           # show the per-model 7d limit when distinct
+repo_links = true             # OSC-8 hyperlinks on branch and PR
+fast_mode = true
+
+[git]
+enabled = true
+timeout = 2.0
+cache_ttl = 2.0        # seconds a cached git read stays fresh
+slow_threshold = 0.35  # a read slower than this triggers backoff
+slow_backoff = 10.0    # ttl = max(cache_ttl, duration * slow_backoff)
+
+[glyphs]
+model = "◆"
+dir = "▸"
+git = "⎇"
+reset = "↻"
+stash = "⚑"
+ahead = "↑"
+behind = "↓"
+pace = "⇢"
+clock = "⏱"
+pr = "⇄"
+host = "⌂"
+env = "⬢"
+fast = "⚡"
+cache = "⌗"
+
+[colors]
+# Raw SGR parameters. 256-color ("38;5;N") or truecolor ("38;2;R;G;B").
+reset = "0"
+dim = "38;5;240"
+gray = "38;5;245"
+model = "38;5;141"
+dir = "38;5;39"
+cyan = "38;5;80"
+green = "38;5;114"
+yellow = "38;5;221"
+orange = "38;5;208"
+red = "38;5;203"
+gold = "38;5;179"
+purple = "38;5;176"
+bold = "1"

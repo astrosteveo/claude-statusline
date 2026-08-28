@@ -1,0 +1,16 @@
+{
+  "model": {
+    "id": "claude-sonnet-5"
+  },
+  "cwd": "/srv/app",
+  "rateLimits": {
+    "fiveHour": {
+      "usedPercentage": 33,
+      "resetsAt": 1787953600
+    },
+    "sevenDay": {
+      "usedPercentage": 8,
+      "resetsAt": 1788350000
+    }
+  }
+}
