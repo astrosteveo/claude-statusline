@@ -50,7 +50,8 @@ Point `~/.claude/settings.json` at the script yourself:
 **Line 1** — model and effort (`⚡` when fast mode is on), working directory,
 git state, PR badge, prompt-cache warning, cost / wall time / lines changed,
 virtualenv and SSH host, session name. Segments have priorities and the
-lowest-value ones drop out as the terminal narrows.
+lowest-value ones drop out as the terminal narrows. A liveness tick
+(`⠋⠙⠹⠸⠼⠴⠦⠧`) is docked to the far right.
 
 **Line 2** — context usage on the left, then the 5-hour and 7-day rate-limit
 windows pushed against the right edge. Each limit bar carries a burn-rate
@@ -62,6 +63,29 @@ Git state reads: `⎇ branch`, `↑↓` ahead/behind, `∅` no upstream, `+stage
 `~dirty`, `?untracked`, `!conflicts`, `⚑stashes`, and `⏱` since the last commit
 once a dirty tree goes stale. Branch and PR are OSC-8 hyperlinks when the host
 supplies repo metadata.
+
+### The liveness tick
+
+Sitting and typing for a while, it is not obvious whether the bar is still
+refreshing or showing figures from ten minutes ago. The tick in the top-right
+corner advances on every refresh, so motion means current.
+
+Each refresh is a separate process with no memory of the previous one, so
+there is no counter to increment — the frame is derived from the wall clock
+instead. That is what makes the indicator trustworthy: a status line that has
+stopped being invoked, or is wedged, freezes on whatever frame it last drew
+rather than continuing to animate. Motion is real evidence, not decoration.
+
+Turn it off with `heartbeat = false`, slow it with `heartbeat_period`, or pick
+different frames:
+
+```toml
+[glyphs]
+heartbeat_frames = "◐◓◑◒"    # or "▘▝▗▖", "▁▂▃▄▅▆▇▆▅▄▃▂", "⠁⠂⠄⡀⢀⠠⠐⠈"
+```
+
+It is dropped automatically when the terminal is too narrow to spare the
+column.
 
 ## Configuration
 

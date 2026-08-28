@@ -64,6 +64,15 @@ model_window = true           # show the per-model 7d limit when distinct
 repo_links = true             # OSC-8 hyperlinks on branch and PR
 fast_mode = true
 
+# A liveness tick docked to the right of line 1, so you can tell at a glance
+# that the bar is still refreshing while you sit and type. Each refresh is a
+# separate process with no memory of the last, so the frame is derived from
+# the wall clock — which means a stalled status line freezes on whatever
+# frame it last drew, and that is exactly the tell.
+heartbeat = true
+heartbeat_color = "dim"    # any key from [colors]
+heartbeat_period = 1.0     # seconds per frame; match your refreshInterval
+
 [git]
 enabled = true
 timeout = 2.0
@@ -86,6 +95,11 @@ host = "⌂"
 env = "⬢"
 fast = "⚡"
 cache = "⌗"
+
+# One character per frame, cycled in order. Must be single-width glyphs.
+# Alternatives: "⠁⠂⠄⡀⢀⠠⠐⠈" (orbit)  "▘▝▗▖" (quadrants)
+#               "◐◓◑◒" (arc)          "▁▂▃▄▅▆▇▆▅▄▃▂" (wave)
+heartbeat_frames = "⠋⠙⠹⠸⠼⠴⠦⠧"
 
 [colors]
 # Raw SGR parameters. 256-color ("38;5;N") or truecolor ("38;2;R;G;B").

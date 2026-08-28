@@ -78,6 +78,13 @@ DEFAULTS = {
         "model_window": True,
         "repo_links": True,
         "fast_mode": True,
+        # A liveness tick docked to the right of line 1. The frame is derived
+        # from the wall clock rather than a counter, because each refresh is a
+        # brand new process with no memory of the last one — so if refreshing
+        # stops, the frame simply stops moving, which is the whole signal.
+        "heartbeat": True,
+        "heartbeat_color": "dim",
+        "heartbeat_period": 1.0,   # seconds per frame
     },
     "git": {
         "enabled": True,
@@ -91,6 +98,8 @@ DEFAULTS = {
         "stash": "⚑", "ahead": "↑", "behind": "↓",
         "pace": "⇢", "clock": "⏱", "pr": "⇄", "host": "⌂",
         "env": "⬢", "fast": "⚡", "cache": "⌗",
+        # One character per frame, cycled in order.
+        "heartbeat_frames": "⠋⠙⠹⠸⠼⠴⠦⠧",
     },
     "colors": {
         "reset": "0", "dim": "38;5;240", "gray": "38;5;245",
@@ -863,6 +872,26 @@ def cache_segment(data):
     return None
 
 
+def heartbeat(now=None) -> str:
+    """A tick that advances every refresh, proving the bar is still live.
+
+    Each refresh is a separate process, so there is no counter to increment;
+    the frame comes from the wall clock instead. That makes it self
+    synchronising and, more usefully, means a stalled status line freezes on
+    whatever frame it last drew.
+    """
+    feats = CFG["features"]
+    if not feats.get("heartbeat", True):
+        return ""
+    frames = CFG["glyphs"].get("heartbeat_frames") or ""
+    if not frames:
+        return ""
+    period = num(feats.get("heartbeat_period"), 1.0) or 1.0
+    now = time.time() if now is None else now
+    idx = int(now / period) % len(frames)
+    return c(feats.get("heartbeat_color", "dim"), frames[idx])
+
+
 # ------------------------------------------------------------------ render ---
 def build_line1(data, cwd, worktree):
     seg = []
@@ -984,7 +1013,7 @@ def usable_width(cols=None) -> int:
     return max(20, cols - max(0, lay["right_margin"]))
 
 
-def render(data, cols=None) -> str:
+def render(data, cols=None, now=None) -> str:
     if not isinstance(data, dict):
         data = {}
     cwd = (dig(data, "workspace", "current_dir")
@@ -992,7 +1021,18 @@ def render(data, cols=None) -> str:
     worktree = dig(data, "workspace", "git_worktree")
     avail = usable_width(cols)
     sep = c("dim", CFG["layout"]["separator"])
-    line1 = assemble_line1(build_line1(data, cwd, worktree), avail, sep)
+
+    beat = heartbeat(now)
+    beat_w = display_width(beat)
+    # Reserve the tick plus one column of gap, but give up on it rather than
+    # crowd out real information on a very narrow terminal.
+    reserve = beat_w + 1 if beat_w and avail - beat_w - 1 >= 20 else 0
+
+    line1 = assemble_line1(build_line1(data, cwd, worktree),
+                           avail - reserve, sep)
+    if reserve:
+        pad = avail - display_width(line1) - beat_w
+        line1 += " " * max(1, pad) + beat
     line2 = assemble_line2(data, avail, sep)
     return line1 + "\n" + line2
 

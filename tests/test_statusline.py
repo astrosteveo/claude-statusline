@@ -261,6 +261,73 @@ class RenderTests(unittest.TestCase):
         self.assertNotIn("ctx", strip(S.render(data, cols=174).split("\n")[0]))
 
 
+class HeartbeatTests(unittest.TestCase):
+    def setUp(self):
+        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+
+    def tearDown(self):
+        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+
+    def test_frames_are_single_cell(self):
+        for ch in S.CFG["glyphs"]["heartbeat_frames"]:
+            self.assertEqual(S.cell_width(ch), 1, f"{ch!r} is not 1 cell")
+
+    def test_advances_every_period(self):
+        seen = [strip(S.heartbeat(now=1000 + t)) for t in range(8)]
+        self.assertEqual(len(set(seen)), 8, "frames repeat within one cycle")
+
+    def test_cycles_back_round(self):
+        self.assertEqual(strip(S.heartbeat(now=1000)),
+                         strip(S.heartbeat(now=1008)))
+
+    def test_period_is_honoured(self):
+        S.apply_config(S._deep_merge(
+            S.DEFAULTS, {"features": {"heartbeat_period": 4.0}}))
+        self.assertEqual(strip(S.heartbeat(now=1000)),
+                         strip(S.heartbeat(now=1003)))
+        self.assertNotEqual(strip(S.heartbeat(now=1000)),
+                            strip(S.heartbeat(now=1004)))
+
+    def test_docked_to_the_right_edge(self):
+        with open(os.path.join(FIXTURES, "full.json")) as fh:
+            data = json.load(fh)
+        for cols in (200, 174, 120, 100, 80):
+            line1 = S.render(data, cols=cols, now=1000).split("\n")[0]
+            tick = strip(S.heartbeat(now=1000))
+            self.assertTrue(strip(line1).endswith(tick),
+                            f"@{cols}: line 1 does not end with the tick")
+            self.assertEqual(S.display_width(line1), S.usable_width(cols),
+                             f"@{cols}: tick is not flush right")
+
+    def test_line1_still_fits_with_the_tick(self):
+        for name, data in fixtures():
+            for cols in WIDTHS:
+                line1 = S.render(data, cols=cols, now=1000).split("\n")[0]
+                self.assertLessEqual(S.display_width(line1),
+                                     S.usable_width(cols), f"{name} @ {cols}")
+
+    def test_can_be_disabled(self):
+        S.apply_config(S._deep_merge(S.DEFAULTS,
+                                     {"features": {"heartbeat": False}}))
+        self.assertEqual(S.heartbeat(now=1000), "")
+        with open(os.path.join(FIXTURES, "full.json")) as fh:
+            data = json.load(fh)
+        line1 = strip(S.render(data, cols=174, now=1000).split("\n")[0])
+        self.assertFalse(line1.endswith(" "), "disabled tick left padding behind")
+
+    def test_dropped_when_there_is_no_room(self):
+        """Real information beats decoration on a cramped terminal."""
+        with open(os.path.join(FIXTURES, "full.json")) as fh:
+            data = json.load(fh)
+        line1 = strip(S.render(data, cols=24, now=1000).split("\n")[0])
+        self.assertNotIn(strip(S.heartbeat(now=1000)), line1)
+
+    def test_empty_frames_is_safe(self):
+        S.apply_config(S._deep_merge(
+            S.DEFAULTS, {"glyphs": {"heartbeat_frames": ""}}))
+        self.assertEqual(S.heartbeat(now=1000), "")
+
+
 class WindowTests(unittest.TestCase):
     def test_snake_case(self):
         w = S.find_windows({"rate_limits": {"five_hour": {"used_percentage": 5},
