@@ -6,7 +6,7 @@ flush to the right edge of the terminal.
 
 ```
 ◆ Opus 5 (1M context) · high │ ▸ …/u/Projects/widget-factory │ $24.73 59m +1006/-21 │ refactor the parser
-ctx ███▎░░░░░░░░ 28% (279k/1.0M)                                                                5h █▍░░░░░░░░░░ 12% ⇢18% ↻1h43m·19:10 │ 7d ▋░░░░░░░░░░░ 6% ⇢56% ↻6d5h
+ctx ███▒░░░░░░░░ 28% (279k/1.0M)                                                                5h █▒░░░░░░░░░░ 12% ⇢18% ↻1h43m·19:17 │ 7d ▓░░░░░░░░░░░ 6% ⇢56% ↻6d5h
 ```
 
 Pure Python 3.11+, no third-party dependencies, no network calls.
@@ -77,6 +77,13 @@ width = 16
 [features]
 pace = false
 ```
+
+Bars carry sub-cell resolution so a 2% window does not render identically to
+an empty one. The boundary cell defaults to the shade family (`░▒▓`), which
+inks the whole cell and so keeps the texture of the track running through it;
+`bar.partial_style = "eighth"` switches to `▏▎▍`, which is finer (8 steps
+rather than 3) but leaves the rest of that cell bare — pair it with
+`empty = " "` if you want it. `"off"` rounds to whole cells.
 
 See [`statusline.example.toml`](statusline.example.toml) for the annotated set,
 `--dump-config` for the resolved values, and `--doctor` for which file actually

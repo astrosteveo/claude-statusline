@@ -55,8 +55,9 @@ DEFAULTS = {
     },
     "bar": {
         "width": 12,
-        "partial": True,     # sub-cell resolution via eighth-block glyphs
-        "min_sliver": True,  # any usage > 0 shows at least a sliver
+        "partial": True,          # sub-cell resolution for the boundary cell
+        "partial_style": "shade",  # "shade" (░▒▓) | "eighth" (▏▎▍) | "off"
+        "min_sliver": True,       # any usage > 0 shows at least a sliver
         "full": "█",
         "empty": "░",
     },
@@ -329,7 +330,16 @@ def pct_color(pct) -> str:
     return "green"
 
 
-_EIGHTHS = "▏▎▍▌▋▊▉"          # 1/8 .. 7/8 of a cell
+# Two families of partial-fill glyph, and they do not mix.
+#
+#   shade   ░▒▓  vary *density* and ink the whole cell, so a partial cell keeps
+#                the same texture as the ░ track running through it.
+#   eighth  ▏▎▍  vary *width*, painting a sliver at the left of the cell and
+#                leaving the rest as bare background — precise, but it punches
+#                a visible hole in a shaded track. Only sensible when the track
+#                is blank (empty = " ").
+_EIGHTHS = "▏▎▍▌▋▊▉"          # 1/8 .. 7/8, left-aligned
+_SHADES = "░▒▓"               # ~25%, ~50%, ~75% density, full cell
 
 
 def make_bar(pct, width=None) -> str:
@@ -341,20 +351,37 @@ def make_bar(pct, width=None) -> str:
     pct = max(0.0, min(100.0, num(pct, 0)))
     color = pct_color(pct)
     full_ch, empty_ch = bcfg["full"], bcfg["empty"]
-
+    style = bcfg.get("partial_style", "shade")
     if not bcfg.get("partial", True):
-        filled = int(round(pct / 100.0 * width))
-        return c(color, full_ch * filled) + c("dim", empty_ch * (width - filled))
+        style = "off"
 
     cells = pct / 100.0 * width
     full = int(cells)
+    frac = cells - full
+    sliver = full == 0 and pct > 0 and bcfg.get("min_sliver", True)
     part = ""
+
+    if style == "off":
+        filled = int(round(cells))
+        if filled == 0 and sliver:
+            filled = 1
+        return (c(color, full_ch * filled)
+                + c("dim", empty_ch * max(0, width - filled)))
+
     if full < width:
-        eighths = int((cells - full) * 8)
-        if eighths == 0 and full == 0 and pct > 0 and bcfg.get("min_sliver", True):
-            eighths = 1
-        if eighths:
-            part = _EIGHTHS[eighths - 1]
+        if style == "eighth":
+            eighths = int(frac * 8)
+            if eighths == 0 and sliver:
+                eighths = 1
+            if eighths:
+                part = _EIGHTHS[eighths - 1]
+        else:                                   # shade
+            # Drop any shade that collides with the track glyph, so a partial
+            # cell is distinguishable by shape alone and not only by colour.
+            ramp = [ch for ch in _SHADES if ch != empty_ch] or [full_ch]
+            if frac >= 1.0 / (2 * len(ramp)) or sliver:
+                part = ramp[min(len(ramp) - 1, int(frac * len(ramp)))]
+
     empty = width - full - (1 if part else 0)
     return c(color, full_ch * full + part) + c("dim", empty_ch * max(0, empty))
 

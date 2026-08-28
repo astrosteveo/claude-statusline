@@ -69,7 +69,7 @@ class WidthTests(unittest.TestCase):
 
     def test_bar_glyphs_are_single_cell(self):
         """The whole right-anchoring scheme depends on this."""
-        for ch in "█░" + S._EIGHTHS:
+        for ch in "█░" + S._EIGHTHS + S._SHADES:
             self.assertEqual(S.cell_width(ch), 1, f"{ch!r} is not 1 cell")
 
 
@@ -91,6 +91,42 @@ class BarTests(unittest.TestCase):
 
     def test_small_nonzero_shows_a_sliver(self):
         """A 2% bar must not look identical to 0%."""
+        self.assertNotEqual(strip(S.make_bar(2, 12)), strip(S.make_bar(0, 12)))
+
+    def test_shade_style_never_breaks_the_track(self):
+        """Regression: eighth-blocks left the rest of their cell unshaded, so
+        the ░ track had a visible notch at the fill boundary."""
+        S.apply_config(S._deep_merge(S.DEFAULTS,
+                                     {"bar": {"partial_style": "shade"}}))
+        allowed = set("█░▒▓")
+        for width in (6, 12, 20):
+            for pct in range(0, 101):
+                glyphs = set(strip(S.make_bar(pct, width)))
+                self.assertTrue(glyphs <= allowed,
+                                f"pct={pct} width={width} used {glyphs - allowed}")
+
+    def test_every_style_is_width_exact(self):
+        for style in ("shade", "eighth", "off"):
+            S.apply_config(S._deep_merge(S.DEFAULTS,
+                                         {"bar": {"partial_style": style}}))
+            for width in (1, 6, 12, 20):
+                for pct in range(0, 101):
+                    self.assertEqual(S.display_width(S.make_bar(pct, width)),
+                                     width, f"{style} pct={pct} width={width}")
+
+    def test_eighth_style_still_available(self):
+        S.apply_config(S._deep_merge(S.DEFAULTS,
+                                     {"bar": {"partial_style": "eighth"}}))
+        self.assertTrue(set(strip(S.make_bar(6, 12))) & set(S._EIGHTHS))
+
+    def test_off_style_rounds_to_whole_cells(self):
+        S.apply_config(S._deep_merge(S.DEFAULTS,
+                                     {"bar": {"partial_style": "off"}}))
+        self.assertTrue(set(strip(S.make_bar(37, 12))) <= set("█░"))
+
+    def test_off_style_still_shows_a_sliver(self):
+        S.apply_config(S._deep_merge(S.DEFAULTS,
+                                     {"bar": {"partial_style": "off"}}))
         self.assertNotEqual(strip(S.make_bar(2, 12)), strip(S.make_bar(0, 12)))
 
     def test_monotonic(self):

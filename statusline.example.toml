@@ -24,10 +24,19 @@ wide_glyphs = []
 
 [bar]
 width = 12
-partial = true      # eighth-block glyphs give 8x sub-cell resolution
+partial = true      # give the boundary cell sub-cell resolution
 min_sliver = true   # any usage above 0 shows at least a sliver
 full = "█"
 empty = "░"
+
+# How the boundary cell between filled and empty is drawn:
+#   "shade"   ░▒▓ — varies density and inks the whole cell, so the partial
+#             cell keeps the same texture as the track. Matches empty = "░".
+#   "eighth"  ▏▎▍ — varies width, painting a sliver at the left of the cell
+#             and leaving the rest bare. Finer (8 steps vs 3), but it leaves
+#             an unshaded notch in a textured track. Pair with empty = " ".
+#   "off"     no partial cell; the bar rounds to whole cells.
+partial_style = "shade"
 
 [thresholds]
 yellow = 50
