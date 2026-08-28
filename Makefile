@@ -1,10 +1,15 @@
-.PHONY: help test lint install uninstall demo doctor ruler clean
+.PHONY: help test test-unit test-install lint install uninstall demo doctor ruler clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-test:  ## Run the test suite
+test: test-unit test-install  ## Run every test
+
+test-unit:  ## Run the Python test suite
 	python3 -m unittest discover -s tests -v
+
+test-install:  ## Run the install.sh bootstrap tests (isolated $$HOME)
+	bash tests/test_install.sh
 
 lint:  ## Byte-compile and check the example config stays in sync
 	python3 -m py_compile statusline.py

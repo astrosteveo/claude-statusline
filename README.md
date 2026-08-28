@@ -201,6 +201,11 @@ point of the layout, so it is checked exhaustively rather than by eye.
 `hostile.json` feeds deliberately wrong types through every field to keep the
 "never crash" guarantee honest.
 
+`tests/test_install.sh` covers the bootstrap itself against a throwaway
+`$HOME`: repeat installs, pre-existing and malformed `settings.json`, all
+three install modes, and that `--uninstall` returns the user's own status line
+rather than one of our artefacts.
+
 ## License
 
 MIT
