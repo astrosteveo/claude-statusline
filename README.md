@@ -6,7 +6,7 @@ flush to the right edge of the terminal.
 
 ```
 ◆ Opus 5 (1M context) · high │ ▸ …/u/Projects/widget-factory │ $24.73 59m +1006/-21 │ refactor the parser
-ctx ███▎████████ 28% (279k/1.0M)                                                                5h █▍██████████ 12% ⇢18% ↻1h43m·19:22 │ 7d ▋███████████ 6% ⇢56% ↻6d5h
+ctx ███▋█████████ 28% (279k/1.0M)                                                             5h █▌███████████ 12% ⇢18% ↻1h43m·19:26 │ 7d ▊████████████ 6% ⇢56% ↻6d5h
 ```
 
 Pure Python 3.11+, no third-party dependencies, no network calls.
@@ -79,7 +79,14 @@ pace = false
 ```
 
 Bars carry sub-cell resolution, so a 2% window does not render identically to
-an empty one and a 12-cell bar resolves 96 levels rather than 12.
+an empty one.
+
+The default width of 13 is chosen, not taste. The host reports whole-number
+percentages, so there are 101 possible inputs; at 8 sub-steps per cell, 13
+cells give 104 distinct renderings and every input gets its own. Twelve cells
+give 96 and collide on 1/2, 25/26, 50/51 and 75/76 — the four points where a
+change genuinely happened but the bar does not move. Beyond 13 the input runs
+out first, so extra cells cost columns and return nothing.
 
 The boundary cell between filled and empty is the fiddly part. Eighth-blocks
 (`▏▎▍`) ink only the left fraction of their cell, so the remainder has to be

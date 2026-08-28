@@ -23,7 +23,11 @@ fallback_columns = 200
 wide_glyphs = []
 
 [bar]
-width = 12
+# The host sends whole-number percentages, so there are 101 possible inputs.
+# At 8 sub-steps per cell, 13 cells (104 steps) is the narrowest bar that
+# renders every one of them distinctly; 12 collides on 1/2, 25/26, 50/51 and
+# 75/76, and anything above 13 spends columns without adding information.
+width = 13
 partial = true      # give the boundary cell sub-cell resolution
 min_sliver = true   # any usage above 0 shows at least a sliver
 full = "█"

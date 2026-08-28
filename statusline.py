@@ -54,7 +54,10 @@ DEFAULTS = {
         "wide_glyphs": [],
     },
     "bar": {
-        "width": 12,
+        # 13 cells x 8 sub-steps = 104 >= the 101 integer percentages the host
+        # sends, so every distinct input renders distinctly. Narrower collides;
+        # wider adds columns without adding information.
+        "width": 13,
         "partial": True,          # sub-cell resolution for the boundary cell
         "partial_style": "auto",  # "auto" | "eighth" (▏▎▍) | "shade" (░▒▓) | "off"
         "min_sliver": True,       # any usage > 0 shows at least a sliver

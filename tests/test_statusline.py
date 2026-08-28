@@ -158,6 +158,19 @@ class BarTests(unittest.TestCase):
         seen = {strip(S.make_bar(p, 8)) for p in range(0, 13)}
         self.assertGreaterEqual(len(seen), 8, "lost sub-cell resolution")
 
+    def test_default_width_is_lossless(self):
+        """The host sends whole percentages; the default bar must render all
+        101 of them distinctly. 8 sub-steps x 13 cells = 104 >= 101."""
+        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+        seen = {S.make_bar(p, S.CFG["bar"]["width"]) for p in range(101)}
+        self.assertEqual(len(seen), 101,
+                         f"{101 - len(seen)} percentages are visually identical")
+
+    def test_narrower_bars_lose_resolution(self):
+        """Guards the reasoning behind the default rather than just the value."""
+        self.assertLess(len({S.make_bar(p, 12) for p in range(101)}), 101)
+        self.assertEqual(len({S.make_bar(p, 13) for p in range(101)}), 101)
+
     def test_as_bg_conversion(self):
         self.assertEqual(S._as_bg("38;5;240"), "48;5;240")
         self.assertEqual(S._as_bg("38;2;10;20;30"), "48;2;10;20;30")
