@@ -5,8 +5,8 @@ repo state and cost on top; context and rate-limit bars underneath, anchored
 flush to the right edge of the terminal.
 
 ```
-◆ Opus 5 (1M context) · high │ ▸ …/u/Projects/space-miner │ $24.73 59m +1006/-21 │ Leftover mining game anchors
-ctx ███▎░░░░░░░░ 28% (279k/1.0M)                                                                5h █▍░░░░░░░░░░ 12% ⇢18% ↻1h43m·19:08 │ 7d ▋░░░░░░░░░░░ 6% ⇢56% ↻6d5h
+◆ Opus 5 (1M context) · high │ ▸ …/u/Projects/widget-factory │ $24.73 59m +1006/-21 │ refactor the parser
+ctx ███▎░░░░░░░░ 28% (279k/1.0M)                                                                5h █▍░░░░░░░░░░ 12% ⇢18% ↻1h43m·19:10 │ 7d ▋░░░░░░░░░░░ 6% ⇢56% ↻6d5h
 ```
 
 Pure Python 3.11+, no third-party dependencies, no network calls.

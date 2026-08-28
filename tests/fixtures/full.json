@@ -6,14 +6,14 @@
   "effort": {
     "level": "high"
   },
-  "session_name": "Leftover mining game anchors",
+  "session_name": "refactor the parser",
   "workspace": {
-    "current_dir": "/home/u/Projects/space-miner",
-    "project_dir": "/home/u/Projects/space-miner",
+    "current_dir": "/home/u/Projects/widget-factory",
+    "project_dir": "/home/u/Projects/widget-factory",
     "repo": {
       "host": "github.com",
-      "owner": "astrosteveo",
-      "name": "space-miner"
+      "owner": "octocat",
+      "name": "widget-factory"
     }
   },
   "version": "2.1.251",
