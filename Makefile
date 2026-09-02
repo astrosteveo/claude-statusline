@@ -12,7 +12,7 @@ test-install:  ## Run the install.sh bootstrap tests (isolated $$HOME)
 	bash tests/test_install.sh
 
 lint:  ## Byte-compile and check the example config stays in sync
-	python3 -m py_compile statusline.py
+	python3 -m compileall -q claude_statusline statusline.py
 	python3 -m unittest tests.test_statusline.ConfigTests -v
 
 install:  ## Symlink into ~/.claude and patch settings.json

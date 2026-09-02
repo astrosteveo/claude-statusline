@@ -13,7 +13,8 @@ FIXTURES = os.path.join(HERE, "fixtures")
 SCRIPT = os.path.join(ROOT, "statusline.py")
 
 sys.path.insert(0, ROOT)
-import statusline as S  # noqa: E402
+import claude_statusline as S  # noqa: E402
+from claude_statusline import bar as B  # noqa: E402
 
 WIDTHS = (200, 174, 160, 120, 100, 80, 60, 40)
 _SGR = re.compile(r"\033\[[0-9;]*[@-~]")
@@ -60,22 +61,22 @@ class WidthTests(unittest.TestCase):
         self.assertEqual(S.display_width("⏱️"), 2)
 
     def test_configured_wide_glyph_override(self):
-        cfg = S._deep_merge(S.DEFAULTS, {"layout": {"wide_glyphs": ["⏱"]}})
+        cfg = S.deep_merge(S.DEFAULTS, {"layout": {"wide_glyphs": ["⏱"]}})
         S.apply_config(cfg)
         try:
             self.assertEqual(S.display_width("⏱"), 2)
         finally:
-            S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+            S.apply_config(S.deep_merge(S.DEFAULTS, {}))
 
     def test_bar_glyphs_are_single_cell(self):
         """The whole right-anchoring scheme depends on this."""
-        for ch in "█░" + S._EIGHTHS + S._SHADES:
+        for ch in "█░" + B._EIGHTHS + B._SHADES:
             self.assertEqual(S.cell_width(ch), 1, f"{ch!r} is not 1 cell")
 
 
 class BarTests(unittest.TestCase):
     def setUp(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
 
     def test_zero_is_empty(self):
         self.assertEqual(strip(S.make_bar(0, 10)),
@@ -99,7 +100,7 @@ class BarTests(unittest.TestCase):
         inherent to the style, so it is asserted rather than assumed.
         """
         for empty in ("█", "░", " "):
-            S.apply_config(S._deep_merge(S.DEFAULTS, {"bar": {"empty": empty}}))
+            S.apply_config(S.deep_merge(S.DEFAULTS, {"bar": {"empty": empty}}))
             self.assertNotEqual(S.make_bar(2, 12), S.make_bar(0, 12),
                                 f"empty={empty!r}: 2% renders exactly as 0%")
             if empty != S.CFG["bar"]["full"]:
@@ -110,7 +111,7 @@ class BarTests(unittest.TestCase):
     def test_shade_style_never_breaks_the_track(self):
         """Regression: eighth-blocks left the rest of their cell unshaded, so
         the ░ track had a visible notch at the fill boundary."""
-        S.apply_config(S._deep_merge(
+        S.apply_config(S.deep_merge(
             S.DEFAULTS, {"bar": {"partial_style": "shade", "empty": "░"}}))
         allowed = set("█░▒▓")
         for width in (6, 12, 20):
@@ -121,7 +122,7 @@ class BarTests(unittest.TestCase):
 
     def test_every_style_is_width_exact(self):
         for style in ("shade", "eighth", "off"):
-            S.apply_config(S._deep_merge(S.DEFAULTS,
+            S.apply_config(S.deep_merge(S.DEFAULTS,
                                          {"bar": {"partial_style": style}}))
             for width in (1, 6, 12, 20):
                 for pct in range(0, 101):
@@ -130,38 +131,38 @@ class BarTests(unittest.TestCase):
 
     def test_auto_matches_family_to_track(self):
         """A textured track cannot host an eighth-block without a notch."""
-        self.assertEqual(S._partial_plan("auto", "░"), ("shade", False))
-        self.assertEqual(S._partial_plan("auto", "▒"), ("shade", False))
-        self.assertEqual(S._partial_plan("auto", "█"), ("eighth", True))
-        self.assertEqual(S._partial_plan("auto", " "), ("eighth", False))
+        self.assertEqual(B._partial_plan("auto", "░"), ("shade", False))
+        self.assertEqual(B._partial_plan("auto", "▒"), ("shade", False))
+        self.assertEqual(B._partial_plan("auto", "█"), ("eighth", True))
+        self.assertEqual(B._partial_plan("auto", " "), ("eighth", False))
 
     def test_solid_track_paints_the_partial_remainder(self):
         """The fix: on a solid track the boundary cell carries a background
         colour, so its unfilled fraction matches the cells beside it."""
-        S.apply_config(S._deep_merge(S.DEFAULTS, {"bar": {"empty": "█"}}))
-        bg = S._as_bg(S.CFG["colors"]["dim"])
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"bar": {"empty": "█"}}))
+        bg = B._as_bg(S.CFG["colors"]["dim"])
         self.assertIsNotNone(bg)
         for pct in (1, 6, 13, 27, 44, 62, 91, 97):
             bar = S.make_bar(pct, 12)
-            partial = [ch for ch in strip(bar) if ch in S._EIGHTHS]
+            partial = [ch for ch in strip(bar) if ch in B._EIGHTHS]
             if partial:
                 self.assertIn(bg, bar,
                               f"pct={pct}: partial cell has no track background")
 
     def test_blank_track_needs_no_background(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS, {"bar": {"empty": " "}}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"bar": {"empty": " "}}))
         self.assertNotIn("48;", S.make_bar(6, 12))
 
     def test_default_gives_eight_step_resolution(self):
         """Distinct percentages inside one cell must render distinctly."""
-        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
         seen = {strip(S.make_bar(p, 8)) for p in range(0, 13)}
         self.assertGreaterEqual(len(seen), 8, "lost sub-cell resolution")
 
     def test_default_width_is_lossless(self):
         """The host sends whole percentages; the default bar must render all
         101 of them distinctly. 8 sub-steps x 13 cells = 104 >= 101."""
-        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
         seen = {S.make_bar(p, S.CFG["bar"]["width"]) for p in range(101)}
         self.assertEqual(len(seen), 101,
                          f"{101 - len(seen)} percentages are visually identical")
@@ -172,23 +173,23 @@ class BarTests(unittest.TestCase):
         self.assertEqual(len({S.make_bar(p, 13) for p in range(101)}), 101)
 
     def test_as_bg_conversion(self):
-        self.assertEqual(S._as_bg("38;5;240"), "48;5;240")
-        self.assertEqual(S._as_bg("38;2;10;20;30"), "48;2;10;20;30")
-        self.assertEqual(S._as_bg("31"), "41")
-        self.assertIsNone(S._as_bg("1"))
+        self.assertEqual(B._as_bg("38;5;240"), "48;5;240")
+        self.assertEqual(B._as_bg("38;2;10;20;30"), "48;2;10;20;30")
+        self.assertEqual(B._as_bg("31"), "41")
+        self.assertIsNone(B._as_bg("1"))
 
     def test_eighth_style_still_available(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS,
+        S.apply_config(S.deep_merge(S.DEFAULTS,
                                      {"bar": {"partial_style": "eighth"}}))
-        self.assertTrue(set(strip(S.make_bar(6, 12))) & set(S._EIGHTHS))
+        self.assertTrue(set(strip(S.make_bar(6, 12))) & set(B._EIGHTHS))
 
     def test_off_style_rounds_to_whole_cells(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS,
+        S.apply_config(S.deep_merge(S.DEFAULTS,
                                      {"bar": {"partial_style": "off"}}))
         self.assertTrue(set(strip(S.make_bar(37, 12))) <= set("█░"))
 
     def test_off_style_still_shows_a_sliver(self):
-        S.apply_config(S._deep_merge(
+        S.apply_config(S.deep_merge(
             S.DEFAULTS, {"bar": {"partial_style": "off", "empty": "░"}}))
         self.assertNotEqual(strip(S.make_bar(2, 12)), strip(S.make_bar(0, 12)))
 
@@ -210,7 +211,7 @@ class BarTests(unittest.TestCase):
 
 class RenderTests(unittest.TestCase):
     def setUp(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
 
     def test_never_exceeds_budget(self):
         """The core invariant: no line may overflow the usable width."""
@@ -263,10 +264,10 @@ class RenderTests(unittest.TestCase):
 
 class HeartbeatTests(unittest.TestCase):
     def setUp(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
 
     def tearDown(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
 
     def test_frames_are_single_cell(self):
         for ch in S.CFG["glyphs"]["heartbeat_frames"]:
@@ -281,7 +282,7 @@ class HeartbeatTests(unittest.TestCase):
                          strip(S.heartbeat(now=1008)))
 
     def test_period_is_honoured(self):
-        S.apply_config(S._deep_merge(
+        S.apply_config(S.deep_merge(
             S.DEFAULTS, {"features": {"heartbeat_period": 4.0}}))
         self.assertEqual(strip(S.heartbeat(now=1000)),
                          strip(S.heartbeat(now=1003)))
@@ -307,7 +308,7 @@ class HeartbeatTests(unittest.TestCase):
                                      S.usable_width(cols), f"{name} @ {cols}")
 
     def test_can_be_disabled(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS,
+        S.apply_config(S.deep_merge(S.DEFAULTS,
                                      {"features": {"heartbeat": False}}))
         self.assertEqual(S.heartbeat(now=1000), "")
         with open(os.path.join(FIXTURES, "full.json")) as fh:
@@ -323,7 +324,7 @@ class HeartbeatTests(unittest.TestCase):
         self.assertNotIn(strip(S.heartbeat(now=1000)), line1)
 
     def test_empty_frames_is_safe(self):
-        S.apply_config(S._deep_merge(
+        S.apply_config(S.deep_merge(
             S.DEFAULTS, {"glyphs": {"heartbeat_frames": ""}}))
         self.assertEqual(S.heartbeat(now=1000), "")
 
@@ -364,7 +365,7 @@ class WindowTests(unittest.TestCase):
 
 class ConfigTests(unittest.TestCase):
     def tearDown(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
 
     def test_example_matches_defaults(self):
         """Guards against config drift between the example and the code."""
@@ -406,9 +407,9 @@ class ConfigTests(unittest.TestCase):
             os.unlink(path)
 
     def test_right_margin_changes_usable_width(self):
-        S.apply_config(S._deep_merge(S.DEFAULTS, {"layout": {"right_margin": 0}}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"layout": {"right_margin": 0}}))
         self.assertEqual(S.usable_width(100), 100)
-        S.apply_config(S._deep_merge(S.DEFAULTS, {"layout": {"right_margin": 9}}))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"layout": {"right_margin": 9}}))
         self.assertEqual(S.usable_width(100), 91)
 
 

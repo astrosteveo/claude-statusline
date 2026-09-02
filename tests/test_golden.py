@@ -19,7 +19,7 @@ FIXTURES = os.path.join(HERE, "fixtures")
 GOLDEN = os.path.join(HERE, "goldens", "classic.json")
 
 sys.path.insert(0, ROOT)
-import statusline as S  # noqa: E402
+import claude_statusline as S  # noqa: E402
 
 WIDTHS = (200, 174, 160, 120, 100, 80, 60, 40)
 
@@ -47,14 +47,14 @@ def render_all():
         for var in UNPINNABLE_ENV:
             os.environ.pop(var, None)
         time.tzset()
-        S.apply_config(S._deep_merge(S.DEFAULTS, PINNED_CONFIG))
+        S.apply_config(S.deep_merge(S.DEFAULTS, PINNED_CONFIG))
         try:
-            with mock.patch("statusline.time.time", return_value=NOW):
+            with mock.patch("claude_statusline.segments.time.time", return_value=NOW):
                 for name, data in fixtures():
                     for cols in WIDTHS:
                         out[f"{name}@{cols}"] = S.render(data, cols=cols, now=NOW)
         finally:
-            S.apply_config(S._deep_merge(S.DEFAULTS, {}))
+            S.apply_config(S.deep_merge(S.DEFAULTS, {}))
     time.tzset()
     return out
 
