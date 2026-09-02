@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ..config import GLYPHS
+from ..config import CFG, GLYPHS
 from ..util import compact_path, dig, home_path
 from . import Opt, Segment, register
 
@@ -116,3 +116,35 @@ class Version(Segment):
     def fields_at(self, ctx, opts, level):
         v = ctx.data.get("version")
         return {"version": str(v)} if v else None
+
+
+@register
+class Vim(Segment):
+    name = "vim"
+    doc = "Vim mode, when vim keybindings are on. Pair with hideVimModeIndicator in settings."
+    priority = 35
+    format = "<vimmode>-- {mode} --</vimmode>"
+    fields = {"mode": "NORMAL, INSERT, VISUAL or VISUAL LINE"}
+    colors = {"vimmode": "green in INSERT, yellow in VISUAL, gray otherwise"}
+
+    def fields_at(self, ctx, opts, level):
+        mode = dig(ctx.data, "vim", "mode")
+        return {"mode": str(mode)} if mode else None
+
+    def colors_at(self, ctx, opts, fields):
+        mode = fields["mode"]
+        tone = "green" if mode == "INSERT" else ("yellow" if mode.startswith("VISUAL") else "gray")
+        return {"vimmode": CFG["colors"][tone]}
+
+
+@register
+class Agent(Segment):
+    name = "agent"
+    doc = "The agent name when Claude Code runs with --agent."
+    priority = 38
+    format = "<purple>@{name}</purple>"
+    fields = {"name": "agent name"}
+
+    def fields_at(self, ctx, opts, level):
+        name = dig(ctx.data, "agent", "name")
+        return {"name": str(name)} if name else None

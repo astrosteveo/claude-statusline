@@ -186,3 +186,15 @@ class SevenDayModel(Limit):
         f = super().fields_at(ctx, opts, level)
         f["label"] = f"7d·{win.get('label') or 'model'}"
         return f
+
+
+@register
+class Spend(Limit):
+    name = "limit_spend"
+    doc = "The spend-limit window, for accounts behind a gateway that meters spend."
+    priority = 72
+    slot = "spend"
+    window_len = 0
+    label = "spend"
+    options = {**Limit.options,
+               "missing": Opt(str, "", "Template when absent; empty hides it.")}

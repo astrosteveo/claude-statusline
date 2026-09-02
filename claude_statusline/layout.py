@@ -266,9 +266,11 @@ def build_layout(cfg=None) -> Layout:
         else:
             problems.append(Problem("warning", path, "empty line"))
 
-    for name in tables:
+    for name in list(tables):
         if name not in seen and isinstance(tables[name], dict):
             if name in REGISTRY or "type" in tables[name]:
+                # Still resolve it, so a typo in its options is reported too.
+                _resolve_segment(name, tables, problems, set())
                 problems.append(Problem("warning", f"segment.{name}",
                                         "configured but not placed on any line"))
             else:

@@ -1,0 +1,23 @@
+{
+  "model": {"display_name": "Opus 5 (1M context)", "id": "claude-opus-5[1m]"},
+  "effort": {"level": "high"},
+  "session_name": "refactor the parser",
+  "workspace": {
+    "current_dir": "/home/u/Projects/widget-factory",
+    "project_dir": "/home/u/Projects/widget-factory",
+    "repo": {"host": "github.com", "owner": "octocat", "name": "widget-factory"}
+  },
+  "version": "2.1.251",
+  "output_style": {"name": "default"},
+  "cost": {"total_cost_usd": 24.73, "total_duration_ms": 3541221,
+           "total_lines_added": 1006, "total_lines_removed": 21},
+  "context_window": {"used_percentage": 28, "total_input_tokens": 278532,
+                     "context_window_size": 1000000},
+  "prompt_cache": {"warm": true, "hit_ratio": 0.989},
+  "thinking": {"enabled": true},
+  "fast_mode": false,
+  "rate_limits": {
+    "five_hour": {"used_percentage": 62, "resets_at": "+1h43m"},
+    "seven_day": {"used_percentage": 24, "resets_at": "+4d3h"}
+  }
+}

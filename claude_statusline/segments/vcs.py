@@ -66,7 +66,9 @@ class Git(Segment):
 
 
 PR_STATE_COLOR = {"open": "green", "draft": "gray", "merged": "purple",
-                  "closed": "red", "mr": "green"}
+                  "closed": "red", "mr": "green", "approved": "green",
+                  "changes_requested": "orange", "review_required": "yellow",
+                  "pending": "yellow"}
 
 
 def _hunt(n, depth=0):
@@ -91,31 +93,59 @@ class PR(Segment):
     format = "<link><prstate>{glyph} {sigil}{number}[ {checks}]</prstate></link>"
     options = {"links": Opt(bool, True, "OSC-8 hyperlink to the PR.")}
     fields = {"glyph": "the PR glyph", "sigil": "# for GitHub, ! for GitLab", "number": "PR number",
-              "state": "open, draft, merged, closed", "checks": "✓ ✗ or ● for the check status",
-              "url": "PR URL"}
-    colors = {"prstate": "green open, gray draft, purple merged, red closed"}
+              "state": "open, draft, merged, closed, or the review state",
+              "checks": "✓ ✗ or ● for the check status", "kind": "github or gitlab", "url": "PR URL"}
+    colors = {"prstate": "green open/approved, gray draft, purple merged, red closed, "
+                         "orange changes requested, yellow awaiting review"}
 
     def fields_at(self, ctx, opts, level):
         data = ctx.data
-        node = data.get("github") or data.get("gitlab") or data.get("pull_request")
+        # The host documents a top-level `pr` object (number, url, review_state,
+        # kind); older and third-party shapes nest it under github/gitlab.
+        node = (data.get("pr") or data.get("github") or data.get("gitlab")
+                or data.get("pull_request"))
         pr = _hunt(node) if isinstance(node, dict) else None
         if not pr:
             return None
         number = pr.get("number") or pr.get("pr_number") or pr.get("prNumber") or pr.get("id")
-        state = str(pr.get("state") or pr.get("status") or "open").lower()
+        state = str(pr.get("state") or pr.get("status") or pr.get("review_state") or "open").lower()
         if pr.get("draft") or pr.get("is_draft"):
             state = "draft"
         checks = str(pr.get("checks") or pr.get("check_status") or "").lower()
         mark = {"failure": "✗", "failing": "✗", "error": "✗", "success": "✓", "passing": "✓",
                 "pending": "●", "running": "●"}.get(checks, "")
+        kind = str(pr.get("kind") or ("gitlab" if "gitlab" in data else "github")).lower()
         url = pr.get("url") or pr.get("html_url") or ""
         if not url:
             base = repo_url(data)
             url = f"{base}/pull/{number}" if base else ""
-        return {"glyph": GLYPHS["pr"], "sigil": "!" if "gitlab" in data else "#",
-                "number": str(number), "state": state, "checks": mark,
+        return {"glyph": GLYPHS["pr"], "sigil": "!" if "gitlab" in kind or kind == "mr" else "#",
+                "number": str(number), "state": state, "checks": mark, "kind": kind,
                 "url": url if opts["links"] else "",
                 "_color": PR_STATE_COLOR.get(state, "cyan")}
 
     def colors_at(self, ctx, opts, fields):
         return {"prstate": CFG["colors"][fields["_color"]]}
+
+
+@register
+class Worktree(Segment):
+    name = "worktree"
+    doc = "The worktree session the host reports (name and branch)."
+    priority = 62
+    format = "<cyan>{glyph} {name}</cyan><dim>[ {branch}]</dim>"
+    fields = {"glyph": "the worktree glyph (⎇)", "name": "worktree name",
+              "branch": "worktree branch", "original_branch": "branch the worktree was cut from"}
+
+    def fields_at(self, ctx, opts, level):
+        wt = ctx.data.get("worktree")
+        if not isinstance(wt, dict):
+            name = ctx.worktree
+            if not name:
+                return None
+            wt = {"name": name}
+        name = wt.get("name") or ""
+        if not name:
+            return None
+        return {"glyph": GLYPHS["git"], "name": str(name), "branch": str(wt.get("branch") or ""),
+                "original_branch": str(wt.get("original_branch") or "")}

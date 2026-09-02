@@ -1,0 +1,33 @@
+{
+  "model": {"id": "claude-opus-5", "display_name": "Opus 5"},
+  "cwd": "/home/u/Projects/app",
+  "workspace": {"current_dir": "/home/u/Projects/app", "project_dir": "/home/u/Projects/app",
+                "added_dirs": [], "git_worktree": "feature-x",
+                "repo": {"host": "github.com", "owner": "octocat", "name": "app"}},
+  "version": "2.1.260",
+  "output_style": {"name": "Explanatory"},
+  "cost": {"total_cost_usd": 3.14, "total_duration_ms": 900000, "total_api_duration_ms": 200000,
+           "total_lines_added": 40, "total_lines_removed": 8},
+  "context_window": {"total_input_tokens": 50000, "total_output_tokens": 4000,
+                     "context_window_size": 200000, "used_percentage": 27, "remaining_percentage": 73,
+                     "current_usage": null},
+  "exceeds_200k_tokens": false,
+  "fast_mode": false,
+  "effort": {"level": "medium"},
+  "thinking": {"enabled": true},
+  "rate_limits": {
+    "five_hour": {"used_percentage": 40, "resets_at": 1787956200},
+    "seven_day": {"used_percentage": 15, "resets_at": 1788490000},
+    "spend_limit": {"used_percentage": 55, "resets_at": 1788490000}
+  },
+  "prompt_cache": {"warm": true, "hit_ratio": 0.95},
+  "session_id": "abc-123",
+  "session_name": "docs pass",
+  "vim": {"mode": "INSERT"},
+  "agent": {"name": "reviewer"},
+  "pr": {"number": 77, "url": "https://github.com/octocat/app/pull/77",
+         "review_state": "approved", "kind": "github"},
+  "worktree": {"name": "feature-x", "path": "/home/u/Projects/app/.claude/worktrees/feature-x",
+               "branch": "claude/feature-x", "original_cwd": "/home/u/Projects/app",
+               "original_branch": "main"}
+}

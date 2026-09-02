@@ -42,6 +42,8 @@ def find_windows(data):
         k = _norm_key(key)
         if "five_hour" in k or k in ("5h", "five", "session"):
             take("5h", obj)
+        elif "spend" in k:
+            take("spend", obj)
         elif "seven_day" in k or "week" in k or k in ("7d", "seven"):
             model = next((m for m in ("opus", "sonnet", "haiku") if m in k), None)
             take("7d_model" if model else "7d", obj, model)
