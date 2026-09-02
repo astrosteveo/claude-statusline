@@ -434,6 +434,10 @@ class HelperTests(unittest.TestCase):
         self.assertIsNone(S.num(float("nan")))
         self.assertEqual(S.num("3.5"), 3.5)
 
+    def test_num_rejects_infinity(self):
+        self.assertIsNone(S.num(float("inf")))
+        self.assertIsNone(S.num("-inf"))
+
     def test_num_rejects_bool(self):
         self.assertIsNone(S.num(True))
 

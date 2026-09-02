@@ -32,7 +32,9 @@ def num(value, default=None):
         out = float(value)
     except (TypeError, ValueError):
         return default
-    return default if out != out else out          # reject NaN
+    if out != out or out in (float("inf"), float("-inf")):
+        return default                             # reject NaN and infinities
+    return out
 
 
 def short_num(n) -> str:
