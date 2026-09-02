@@ -14,5 +14,5 @@ Roughly ordered; each item is independently mergeable.
 - [x] Subcommands: `render`, `segments`, `validate`, `preview`, `doctor`, `ruler`, `dump-config`, with old `--flag` aliases.
 - [x] `migrate`: map `[features]` keys onto segment options, rewrite the file with a backup, report what changed. `doctor` lists legacy keys.
 - [x] `install.sh`: copy the package directory in `--copy` mode; tests updated.
-- [ ] Plugin manifest; `statusline-design` skill with `SKILL.md` and reference files (schema, catalog, host constraints, worked examples). Every example validates in the test suite.
-- [ ] README rewrite around the engine: schema, catalog, presets, the skill, migration notes.
+- [x] Plugin manifest; `statusline-design` skill with `SKILL.md` and reference files (schema, catalog, host constraints, worked examples). Every example validates in the test suite.
+- [x] README rewrite around the engine: schema, catalog, presets, the skill, migration notes.

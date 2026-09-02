@@ -1,15 +1,19 @@
 # claude-statusline
 
-A two-line status line for [Claude Code](https://claude.com/claude-code): model,
-repo state and cost on top; context and rate-limit bars underneath, anchored
-flush to the right edge of the terminal.
+A status line engine for [Claude Code](https://claude.com/claude-code). You
+describe the bar as lines of named segments in a small TOML file; the engine
+renders it, keeps it inside the terminal at every width, and never blanks.
+It ships as a plugin with a skill, so you can also just tell Claude what you
+want to see and let it write the layout for you.
 
 ```
-◆ Opus 5 (1M context) · high │ ▸ …/u/Projects/widget-factory │ $24.73 59m +1006/-21 │ refactor the parser
-ctx ███▋█████████ 28% (279k/1.0M)                                                             5h █▌███████████ 12% ⇢18% ↻1h43m·19:26 │ 7d ▊████████████ 6% ⇢56% ↻6d5h
+◆ Opus 5 (1M context) · high │ ▸ …/u/Projects/widget-factory │ $24.73 59m +1006/-21 │ refactor the parser                                                               ⠋
+ctx ███▓░░░░░░░░░ 28% (279k/1.0M)                                                                5h ████████░░░░░ 62% ⇢94% ↻1h43m·22:29 │ 7d ███░░░░░░░░░░ 24% ⇢58% ↻4d3h
 ```
 
-Pure Python 3.11+, no third-party dependencies, no network calls.
+(Shown with the textured `░` track so the fill reads in plain text; the default solid track carries it in colour.)
+
+Pure Python 3.11+, stdlib only, no network calls, about 18 ms per refresh.
 
 ## Install
 
@@ -19,14 +23,31 @@ cd ~/Projects/claude-statusline
 ./install.sh
 ```
 
-That installs a small shim into `~/.claude/`, seeds a config at
+That writes a small shim into `~/.claude/`, seeds a config at
 `~/.config/claude-statusline/config.toml`, and patches `statusLine` into
-`~/.claude/settings.json` — backing up anything it replaces. Start a new
-session (or run `/statusline`) to see it.
+`~/.claude/settings.json`, backing up anything it replaces. Start a new
+session or run `/statusline` to see it. `./install.sh --uninstall` puts your
+previous status line back.
 
-`./install.sh --symlink` symlinks the script instead; `--copy` installs a
-standalone snapshot that does not need the repo to stay put; and
-`./install.sh --uninstall` puts your previous status line back.
+### As a plugin
+
+```
+/plugin marketplace add astrosteveo/claude-statusline
+/plugin install claude-statusline@claude-statusline
+```
+
+Then ask for a bar:
+
+```
+/claude-statusline:design one line, bars on the right, muted colours
+```
+
+The skill runs `install.sh` for you if the status line is not wired up yet,
+writes the config, validates it, previews it at your terminal's width and at
+narrower ones, and shows you what you will see before you see it. It knows
+the host's constraints (see
+[constraints.md](skills/design/reference/constraints.md)) so it will tell you
+when something is not possible rather than produce a bar that clips.
 
 ### Manual install
 
@@ -43,112 +64,159 @@ Point `~/.claude/settings.json` at the script yourself:
 }
 ```
 
-`padding: 0` matters — the layout does its own right-edge accounting.
+`padding: 0` matters; the layout does its own right-edge accounting.
 
-## What it shows
+## Upgrading from 1.x
 
-**Line 1** — model and effort (`⚡` when fast mode is on), working directory,
-git state, PR badge, prompt-cache warning, cost / wall time / lines changed,
-virtualenv and SSH host, session name. Segments have priorities and the
-lowest-value ones drop out as the terminal narrows. A liveness tick
-(`⠋⠙⠹⠸⠼⠴⠦⠧`) is docked to the far right.
+The `[features]` table is no longer read. Everything it switched is now an
+option on the segment it belongs to, or a matter of which segments you place.
+The old file still renders (as the classic layout) and `doctor` lists each
+legacy key with its replacement. To rewrite it:
 
-**Line 2** — context usage on the left, then the 5-hour and 7-day rate-limit
-windows pushed against the right edge. Each limit bar carries a burn-rate
-projection (`⇢103%` means "at this pace you will exhaust the window") and a
-reset countdown with wall-clock time. A per-model weekly cap appears as
-`7d·opus` when it differs from the overall one.
-
-Git state reads: `⎇ branch`, `↑↓` ahead/behind, `∅` no upstream, `+staged`,
-`~dirty`, `?untracked`, `!conflicts`, `⚑stashes`, and `⏱` since the last commit
-once a dirty tree goes stale. Branch and PR are OSC-8 hyperlinks when the host
-supplies repo metadata.
-
-### The liveness tick
-
-Sitting and typing for a while, it is not obvious whether the bar is still
-refreshing or showing figures from ten minutes ago. The tick in the top-right
-corner advances on every refresh, so motion means current.
-
-Each refresh is a separate process with no memory of the previous one, so
-there is no counter to increment — the frame is derived from the wall clock
-instead. That is what makes the indicator trustworthy: a status line that has
-stopped being invoked, or is wedged, freezes on whatever frame it last drew
-rather than continuing to animate. Motion is real evidence, not decoration.
-
-Turn it off with `heartbeat = false`, slow it with `heartbeat_period`, or pick
-different frames:
-
-```toml
-[glyphs]
-heartbeat_frames = "◐◓◑◒"    # or "▘▝▗▖", "▁▂▃▄▅▆▇▆▅▄▃▂", "⠁⠂⠄⡀⢀⠠⠐⠈"
+```sh
+python3 ~/.claude/statusline.py migrate ~/.config/claude-statusline/config.toml --write
 ```
 
-It is dropped automatically when the terminal is too narrow to spare the
-column.
+It backs the file up and prints every mapping it applied.
 
-## Configuration
+## The layout
 
 Everything lives in `~/.config/claude-statusline/config.toml` (or
 `~/.claude/statusline.toml`, or wherever `$CLAUDE_STATUSLINE_CONFIG` points).
-Every key is optional and merges over the defaults, so a three-line file is
-fine:
+Every key is optional and merges over the defaults, so this is a complete
+config:
 
 ```toml
-[bar]
-width = 16
+preset = "dashboard"
 
-[features]
-pace = false
+[segment.heartbeat]
+frames = "◐◓◑◒"
 ```
 
+A **preset** supplies the lines: `classic` (two lines, the default),
+`minimal` (one line) or `dashboard` (three lines, bars on the left).
+`statusline.py presets` shows them. Declare your own with `[[line]]` tables,
+each with a `left` group that flows from the left edge and a `right` group
+pushed against the right edge:
+
+```toml
+[[line]]
+left = ["model", "dir", "git", "pr"]
+right = ["session", "heartbeat"]
+gap = 1                       # minimum columns between the groups
+
+[[line]]
+left = ["context", "limit_5h", "limit_7d"]
+```
+
+A **segment** is tuned with a `[segment.<name>]` table. Every segment takes
+`format` and `priority`; the rest are listed by `statusline.py segments
+<name>`. A table with `type` names an instance, so the same segment can appear
+twice:
+
+```toml
+[segment.dir]
+depth = 2
+
+[segment.greeting]
+type = "text"
+text = "hello"
+format = "<gold>{text}</gold>"
+```
+
+Full schema: [schema.md](skills/design/reference/schema.md). Whole layouts to
+copy: [examples.md](skills/design/reference/examples.md).
+
+### Segments
+
+| segment | shows |
+|---------|-------|
+| `model` | model name, effort level, `⚡` in fast mode |
+| `dir` | working directory, compacted |
+| `git` | branch, `↑↓` ahead/behind, `∅` no upstream, `+staged ~dirty ?untracked !conflicts ⚑stashes`, `⏱` since the last commit once a dirty tree goes stale |
+| `pr` | pull or merge request number, review state, checks |
+| `worktree` | worktree name and branch |
+| `context` | context-window bar, percentage, tokens |
+| `limit_5h`, `limit_7d`, `limit_7d_model`, `limit_spend` | rate-limit bars with burn-rate projection (`⇢103%` means "at this pace you will exhaust the window") and reset countdown |
+| `cost`, `duration`, `diff` | dollars, wall time, lines changed, together or apart |
+| `cache` | prompt-cache warning, only when it is costing money |
+| `env`, `host` | virtualenv, hostname over SSH or in a container |
+| `session`, `output_style`, `version`, `agent`, `vim` | what the host says about the session |
+| `text`, `clock` | a label; the time |
+| `heartbeat` | a tick that proves the bar is still refreshing |
+
+The complete list, with every option, field and colour, is
+[catalog.md](skills/design/reference/catalog.md), generated from the code.
+
+### Templates
+
+A segment's `format` is text with `{field}` placeholders, `[optional groups]`
+that vanish when a field inside is empty, `<colour>…</colour>` spans naming a
+key of `[colors]`, and `<link>…</link>` for an OSC-8 hyperlink:
+
+```toml
+[segment.model]
+format = "<model>{name}</model><dim>[ · {effort}]</dim>"
+
+[segment.limit_5h]
+format = "<gray>5h</gray> {bar}[ <dim>{reset}</dim>]"    # bar and countdown, no percentage
+```
+
+### How a line fits
+
+The engine measures every line against the usable width. When a line is too
+wide, every segment on it steps down one detail level together: the reset
+clock goes, then the pace projection, then bars shrink to half width, then
+bars disappear. Only when the leanest rendering still overflows does the
+lowest-priority segment drop, after which the richest level that fits is
+chosen again. Bars on one line therefore always share a width, and the thing
+you care about survives if you give it a higher `priority`.
+
+`statusline.py preview --width 80,120,160` shows the layout at each width
+and annotates every line with its level and anything dropped.
+
+### The heartbeat
+
+Each refresh is a separate process with no memory of the previous one, so
+the tick's frame is derived from the wall clock rather than a counter. That is
+what makes it trustworthy: a status line that has stopped being invoked
+freezes on whatever frame it last drew instead of continuing to animate.
+Motion is evidence, not decoration. Leave `heartbeat` out of the line to turn
+it off, or pick different frames:
+
+```toml
+[segment.heartbeat]
+frames = "◐◓◑◒"    # or "▘▝▗▖", "▁▂▃▄▅▆▇▆▅▄▃▂", "⠁⠂⠄⡀⢀⠠⠐⠈"
+period = 1.0       # seconds per frame; match refreshInterval
+```
+
+### Bars
+
 Bars carry sub-cell resolution, so a 2% window does not render identically to
-an empty one.
-
-The default width of 13 is chosen, not taste. The host reports whole-number
-percentages, so there are 101 possible inputs; at 8 sub-steps per cell, 13
-cells give 104 distinct renderings and every input gets its own. Twelve cells
-give 96 and collide on 1/2, 25/26, 50/51 and 75/76 — the four points where a
-change genuinely happened but the bar does not move. Beyond 13 the input runs
-out first, so extra cells cost columns and return nothing.
-
-The boundary cell between filled and empty is the fiddly part. Eighth-blocks
-(`▏▎▍`) ink only the left fraction of their cell, so the remainder has to be
-painted to match the track or the bar reads as notched. `partial_style =
-"auto"` picks a family that matches whatever track you configured:
-
-| `empty` | family | steps/cell | boundary remainder |
-|---------|--------|-----------|--------------------|
-| `"█"` solid *(default)* | eighth `▏▎▍` | 8 | painted in the track colour |
-| `"░"` textured | shade `░▒▓` | 3 | inked by the glyph itself |
-| `"  "` blank | eighth `▏▎▍` | 8 | nothing to match |
-
-A solid track cannot distinguish 0% from 2% by shape, since fill and track are
-the same glyph — only colour separates them. If you need the distinction to
-survive a mono or low-contrast theme, use `empty = " "`, which keeps all eight
-steps, or `empty = "░"`, which trades down to three. Set `partial_style`
-explicitly to override the pairing, or `"off"` to round to whole cells.
-
-See [`statusline.example.toml`](statusline.example.toml) for the annotated set,
-`--dump-config` for the resolved values, and `--doctor` for which file actually
-loaded.
+an empty one. The default width of 13 is chosen, not taste: the host reports
+whole-number percentages, so there are 101 possible inputs, and 13 cells at 8
+sub-steps per cell is the narrowest bar that renders every one of them
+distinctly. `[bar].empty` picks the track (`█` solid, `░` textured, `" "`
+blank) and `partial_style = "auto"` picks a boundary-cell family that matches
+it so the bar never reads as notched. See
+[statusline.example.toml](statusline.example.toml) for the annotated set.
 
 ## Calibrating `right_margin`
 
 The host reserves some columns at the right edge before it truncates with an
-ellipsis, and the count is not discoverable from inside the script — Claude
-Code's fullscreen TUI takes about 4 beyond the `COLUMNS` it reports. If your
-line 2 ends in `…`, or the bars stop short of the edge, calibrate:
+ellipsis, and the count is not discoverable from inside the script; Claude
+Code's fullscreen TUI takes about 4 beyond the `COLUMNS` it reports. If a line
+ends in `…`, or the right group stops short of the edge, calibrate:
 
 ```sh
-python3 ~/.claude/statusline.py --ruler
+python3 ~/.claude/statusline.py ruler
 ```
 
 Temporarily point `statusLine.command` at that and look at the second row,
 which counts *down* to the right edge:
 
 - The last digit you can see is how many columns are being clipped. Add it to
-  `right_margin`.
+  `layout.right_margin`.
 - If the row ends in `0` with no gap, `right_margin` is already correct.
 - If there is blank space after the `0`, reduce `right_margin` by that much.
 
@@ -166,35 +234,37 @@ wide_glyphs = ["⏱", "⬢"]
 
 ## Performance
 
-The script runs on every refresh — once a second by default. Git state is
+The script runs on every refresh, once a second by default. Git state is
 cached in `$XDG_RUNTIME_DIR/claude-statusline/`, keyed on the mtimes of
 `index`, `HEAD` and the merge/rebase markers so a commit or checkout
 invalidates it immediately, with a TTL (default 2s) as the real freshness
-bound. Worktree edits do not move those mtimes, so dirty-file counts refresh on
-the TTL rather than instantly.
+bound. A repo whose `git status` exceeds `slow_threshold` gets exponentially
+backed off, so a monorepo that takes 800 ms to stat is polled every 8 seconds
+instead of stalling every refresh. Set `git.enabled = false` to opt out.
 
-A repo whose `git status` exceeds `slow_threshold` gets exponentially backed
-off (`ttl = duration × slow_backoff`), so a monorepo that takes 800 ms to stat
-is polled every 8 seconds instead of stalling every refresh. Set
-`git.enabled = false` to opt out entirely.
+Typical cost on a small repo is ~18 ms, half of it interpreter startup.
+`install.sh` writes a shim rather than a symlink so CPython can cache the
+engine's bytecode; `--symlink` and `--copy` are there if you prefer.
 
-Typical cost on a small repo is ~18 ms, a third of it Python interpreter
-startup. `install.sh` writes a shim into `~/.claude/` rather than symlinking,
-because a script run directly is never bytecode-cached — letting CPython cache
-`statusline.pyc` saves about 4 ms of recompilation on every refresh. Use
-`--symlink` or `--copy` if you would rather not have the shim.
+The catalog is closed on purpose. A user-supplied shell command in a segment
+would run once a second with no cache, and nothing about the bar's cost could
+be promised any more.
 
 ## Troubleshooting
 
 ```sh
-python3 ~/.claude/statusline.py --doctor    # config path, width, cache state
-python3 ~/.claude/statusline.py --demo      # render a sample payload
+python3 ~/.claude/statusline.py doctor      # config path, preset, lines, problems, width
+python3 ~/.claude/statusline.py validate    # every problem in the config, with hints
+python3 ~/.claude/statusline.py preview     # the layout at 100, 140 and 200 columns
 make test                                   # full suite
 ```
 
 **The bar is blank.** The script never exits non-zero and always prints
 something; a blank bar means Claude Code is not running it. Check
 `statusLine.command` in `settings.json`.
+
+**A segment is missing.** Run `validate`. A misspelt segment or option is
+reported with a suggestion and skipped, so the rest of the bar still renders.
 
 **It shows only model and directory.** That is the fallback: rendering raised.
 Reproduce with the real payload:
@@ -208,27 +278,25 @@ CLAUDE_STATUSLINE_DEBUG=1 python3 ~/.claude/statusline.py < ~/payload.json
 swallowing it. Payload capture is off by default so the script is not writing
 to disk once a second.
 
-**Limits show `—` or `limits n/a`.** The host is not sending `rate_limits`.
-The parser handles snake_case, camelCase, list-shaped and nested variants; if
+**Limits show `—`.** The host is not sending that `rate_limits` window. The
+parser handles snake_case, camelCase, list-shaped and nested variants; if
 yours differs, capture a payload as above and open an issue.
 
 ## Development
 
 ```sh
-make test     # 47 tests, stdlib unittest
-make lint     # byte-compile + config drift check
+make test       # unit suite + install.sh tests, stdlib unittest
+make lint       # byte-compile; example config and skill catalog in sync
+make catalog    # regenerate skills/design/reference/catalog.md from the code
 ```
 
-The suite renders every fixture in `tests/fixtures/` at eight terminal widths
-and asserts no line ever exceeds its budget — that invariant is the whole
-point of the layout, so it is checked exhaustively rather than by eye.
+The suite renders every preset and every example layout from the skill
+against every fixture at eight terminal widths and asserts no line ever
+exceeds its budget; that invariant is the whole point of the layout, so it is
+checked exhaustively rather than by eye. A golden file pins the classic
+layout's exact output so refactors cannot move it by a column, and
 `hostile.json` feeds deliberately wrong types through every field to keep the
 "never crash" guarantee honest.
-
-`tests/test_install.sh` covers the bootstrap itself against a throwaway
-`$HOME`: repeat installs, pre-existing and malformed `settings.json`, all
-three install modes, and that `--uninstall` returns the user's own status line
-rather than one of our artefacts.
 
 ## License
 

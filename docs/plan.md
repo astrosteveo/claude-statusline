@@ -114,8 +114,9 @@ Out:
 
 ## Open questions
 
-- Whether a plugin manifest can register the `statusLine` command itself.
-  Assumed not; `install.sh` keeps patching `settings.json`. Check during
-  the plugin task.
+- ~~Whether a plugin manifest can register the `statusLine` command itself.~~
+  Resolved: it cannot (plugin `settings.json` supports only `agent` and
+  `subagentStatusLine`), so `install.sh` keeps patching `settings.json` and
+  the skill runs it when needed.
 - Whether `limit_7d_model` should stay a separate segment or become an option
   on `limit_7d`. Separate for now because it has its own priority.

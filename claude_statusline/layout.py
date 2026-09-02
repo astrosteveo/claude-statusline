@@ -144,7 +144,7 @@ def _coerce(value, opt, path, problems):
     return opt.default
 
 
-def _resolve_segment(name, tables, problems, seen):
+def _resolve_segment(name, tables, problems, seen, colors=None):
     """Turn a name from a line into a SegmentSpec, or None."""
     table = tables.get(name)
     if not isinstance(table, dict):
@@ -184,7 +184,7 @@ def _resolve_segment(name, tables, problems, seen):
             for field in sorted(tpl.fields - set(seg.fields) - {"url"}):
                 problems.append(Problem("warning", f"segment.{name}.{key}",
                                         f"{{{field}}} is not a field of {type_!r}"))
-            known = set(CFG["colors"]) | set(seg.colors)
+            known = set(colors if colors is not None else CFG["colors"]) | set(seg.colors)
             for color in sorted(tpl.colors - known):
                 problems.append(Problem("warning", f"segment.{name}.{key}",
                                         f"<{color}> is not a colour"))
@@ -235,6 +235,7 @@ def build_layout(cfg=None) -> Layout:
             problems.append(Problem("warning", f"features.{key}",
                                     f"no longer read; use {LEGACY_FEATURES.get(key, 'the segment options')}"))
 
+    colors = cfg.get("colors") if isinstance(cfg.get("colors"), dict) else {}
     seen = set()
     lines = []
     for idx, raw in enumerate(lines_raw):
@@ -253,7 +254,7 @@ def build_layout(cfg=None) -> Layout:
                 names = []
             specs = []
             for name in names:
-                spec = _resolve_segment(name, tables, problems, seen)
+                spec = _resolve_segment(name, tables, problems, seen, colors)
                 if spec is not None:
                     specs.append(spec)
             groups.append(specs)
@@ -270,7 +271,7 @@ def build_layout(cfg=None) -> Layout:
         if name not in seen and isinstance(tables[name], dict):
             if name in REGISTRY or "type" in tables[name]:
                 # Still resolve it, so a typo in its options is reported too.
-                _resolve_segment(name, tables, problems, set())
+                _resolve_segment(name, tables, problems, set(), colors)
                 problems.append(Problem("warning", f"segment.{name}",
                                         "configured but not placed on any line"))
             else:
