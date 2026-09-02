@@ -1,0 +1,10 @@
+{
+  "name": "claude-statusline",
+  "version": "2.0.0",
+  "description": "A status line engine for Claude Code: compose your own bar from a catalog of segments, and let Claude design it with you.",
+  "author": {"name": "Steven Mosley"},
+  "homepage": "https://github.com/astrosteveo/claude-statusline",
+  "repository": "https://github.com/astrosteveo/claude-statusline",
+  "license": "MIT",
+  "keywords": ["statusline", "status-line", "terminal", "ui"]
+}

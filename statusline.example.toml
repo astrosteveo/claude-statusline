@@ -2,8 +2,77 @@
 #
 # Copy to ~/.config/claude-statusline/config.toml and edit. Every key is
 # optional — anything you omit falls back to the built-in default. Run
-# `statusline.py --dump-config` to see the fully resolved values, and
-# `statusline.py --doctor` to check which file is actually being loaded.
+# `statusline.py dump-config` to see the fully resolved values, `validate`
+# to check a file, `preview` to see it at several widths, and `segments`
+# for the catalog of segments and their options.
+
+# Which preset supplies the lines when this file declares none of its own:
+# "classic" (two lines, the default), "minimal" (one line) or "dashboard"
+# (three lines, bars on the left). A [[line]] below replaces the preset's
+# lines entirely; [segment.*] tables merge over the preset's.
+preset = "classic"
+
+# --- lines -------------------------------------------------------------------
+# Each [[line]] has a `left` group that flows from the left edge and a
+# `right` group pushed against the right edge; `gap` is the minimum number
+# of columns between them (default 2). When a line is too narrow, every
+# segment on it steps down a detail level together (reset clock, then pace,
+# then narrower bars, then no bars) before the lowest-priority segment is
+# dropped. These two lines are the classic preset, written out.
+
+[[line]]
+left = ["model", "dir", "git", "pr", "cache", "cost", "env", "session", "output_style"]
+right = ["heartbeat"]
+gap = 1
+
+[[line]]
+left = ["context"]
+right = ["limit_5h", "limit_7d", "limit_7d_model"]
+
+# --- segments ----------------------------------------------------------------
+# [segment.<name>] tunes a segment placed above. Every segment accepts
+# `format` (a template: {field}, [optional group], <colour>...</colour>,
+# <link>...</link>) and `priority` (higher survives longer when the line is
+# too narrow); the rest are listed by `statusline.py segments`. A table may
+# also name an instance of a segment with `type`, e.g.
+#
+#   [segment.greeting]
+#   type = "text"
+#   text = "hello"
+#   format = "<gold>{text}</gold>"
+
+[segment.model]
+fast = true                  # show ⚡ when fast mode is on
+
+[segment.dir]
+depth = 3                    # trailing path components to keep
+
+[segment.git]
+links = true                 # OSC-8 hyperlink on the branch
+last_commit = true           # read the last commit time when the tree is dirty
+nudge_min = 45               # minutes before ⏱ appears on a dirty tree
+
+[segment.cache]
+min_ratio = 0.90             # warn below this prompt-cache hit ratio
+
+[segment.context]
+tokens = true                # token count beside the percentage
+size = true                  # ...and the window size, e.g. (380k/1.0M)
+
+[segment.limit_5h]
+pace = true                  # ⇢ projected usage at reset
+pace_min_elapsed = 0.10      # don't extrapolate from under 10% of a window
+clock = true                 # wall-clock time of the reset
+
+[segment.limit_7d]
+pace = true
+clock = true
+
+[segment.heartbeat]
+period = 1.0                 # seconds per frame; match refreshInterval
+color = "dim"                # any key from [colors]
+
+# --- style -------------------------------------------------------------------
 
 [layout]
 # Columns the host TUI reserves at the right edge before it truncates.
@@ -19,7 +88,7 @@ fallback_columns = 200
 
 # Glyphs your font renders double-width even though Unicode calls them narrow.
 # Symptom: the right-anchored bars get clipped by exactly the number of these
-# on screen. Check yours with --ruler.
+# on screen. Check yours with `ruler`.
 wide_glyphs = []
 
 [bar]
@@ -50,29 +119,6 @@ yellow = 50
 orange = 75
 red = 90
 
-[features]
-pace = true                   # project end-of-window usage from burn rate
-pace_min_elapsed = 0.10       # don't extrapolate from under 10% of a window
-reset_clock = true            # append wall-clock time of the window reset
-last_commit = true            # nudge with time since last commit when dirty
-last_commit_nudge_min = 45
-context_tokens = true         # show token count beside the context percentage
-context_size = true           # ... and the total window size, e.g. (380k/1.0M)
-prompt_cache = true           # warn when the prompt cache is cold
-prompt_cache_min_ratio = 0.90
-model_window = true           # show the per-model 7d limit when distinct
-repo_links = true             # OSC-8 hyperlinks on branch and PR
-fast_mode = true
-
-# A liveness tick docked to the right of line 1, so you can tell at a glance
-# that the bar is still refreshing while you sit and type. Each refresh is a
-# separate process with no memory of the last, so the frame is derived from
-# the wall clock — which means a stalled status line freezes on whatever
-# frame it last drew, and that is exactly the tell.
-heartbeat = true
-heartbeat_color = "dim"    # any key from [colors]
-heartbeat_period = 1.0     # seconds per frame; match your refreshInterval
-
 [git]
 enabled = true
 timeout = 2.0
@@ -96,13 +142,15 @@ env = "⬢"
 fast = "⚡"
 cache = "⌗"
 
-# One character per frame, cycled in order. Must be single-width glyphs.
+# One character per frame, cycled in order by the heartbeat segment. Must be
+# single-width glyphs.
 # Alternatives: "⠁⠂⠄⡀⢀⠠⠐⠈" (orbit)  "▘▝▗▖" (quadrants)
 #               "◐◓◑◒" (arc)          "▁▂▃▄▅▆▇▆▅▄▃▂" (wave)
 heartbeat_frames = "⠋⠙⠹⠸⠼⠴⠦⠧"
 
 [colors]
 # Raw SGR parameters. 256-color ("38;5;N") or truecolor ("38;2;R;G;B").
+# Templates refer to these by name: <model>...</model>, <dim>...</dim>.
 reset = "0"
 dim = "38;5;240"
 gray = "38;5;245"
