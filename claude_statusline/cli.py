@@ -9,7 +9,8 @@ import time
 from . import __version__
 from .config import CFG, CONFIG_SEARCH, DEBUG_ENV, DUMP_ENV, apply_config, config_path, load_config
 from .gitinfo import _cache_dir
-from .render import fallback, render, usable_width
+from .config import usable_width
+from .render import fallback, render
 
 HELP = """Claude Code status line.
 
@@ -96,22 +97,37 @@ def cmd_doctor(cols=None) -> str:
     return "\n".join(lines)
 
 
-def cmd_dump_config() -> str:
-    def fmt(v):
-        if isinstance(v, bool):
-            return "true" if v else "false"
-        if isinstance(v, (int, float)):
-            return str(v)
-        if isinstance(v, list):
-            return "[" + ", ".join(fmt(x) for x in v) + "]"
-        return json.dumps(str(v), ensure_ascii=False)
+def _toml_value(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    return json.dumps(str(v), ensure_ascii=False)
 
+
+def cmd_dump_config() -> str:
     out = [f"# claude-statusline {__version__} — effective configuration"]
+    for key, val in CFG.items():
+        if not isinstance(val, (dict, list)):
+            out.append(f"{key} = {_toml_value(val)}")
     for section, body in CFG.items():
-        out.append(f"\n[{section}]")
-        for key, val in body.items():
-            out.append(f"{key} = {fmt(val)}")
-    return "\n".join(out)
+        if section == "line":
+            for entry in body:
+                out.append("\n[[line]]")
+                for key, val in entry.items():
+                    out.append(f"{key} = {_toml_value(val)}")
+        elif section == "segment":
+            for name, table in body.items():
+                out.append(f"\n[segment.{name}]")
+                for key, val in table.items():
+                    out.append(f"{key} = {_toml_value(val)}")
+        elif isinstance(body, dict):
+            out.append(f"\n[{section}]")
+            for key, val in body.items():
+                out.append(f"{key} = {_toml_value(val)}")
+    return "\n".join(out) + "\n"
 
 
 def main(argv=None) -> int:

@@ -1,0 +1,13 @@
+# classic — the original two-line bar.
+#
+# Model, repo state and cost on top with a liveness tick in the corner;
+# context on the left of line 2 with the rate-limit windows flush right.
+
+[[line]]
+left = ["model", "dir", "git", "pr", "cache", "cost", "env", "session", "output_style"]
+right = ["heartbeat"]
+gap = 1
+
+[[line]]
+left = ["context"]
+right = ["limit_5h", "limit_7d", "limit_7d_model"]

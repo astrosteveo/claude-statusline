@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 import sys
 
+from .util import deep_merge
+
 
 CONFIG_ENV = "CLAUDE_STATUSLINE_CONFIG"
 DUMP_ENV = "CLAUDE_STATUSLINE_DUMP"      # set to a path to capture raw payloads
@@ -19,6 +21,13 @@ SEVEN_DAY = 7 * 86400
 
 # ---------------------------------------------------------------- defaults ---
 DEFAULTS = {
+    # Which preset supplies the lines when the config declares none.
+    "preset": "classic",
+    # Lines, richest first; each has `left` and `right` lists of segment
+    # names and an optional `gap` (minimum columns between the groups).
+    "line": [],
+    # Per-segment overrides: [segment.<name>] with format, priority, options.
+    "segment": {},
     "layout": {
         # Columns the host TUI reserves at the right edge. Claude Code's
         # fullscreen TUI consumes ~4 beyond the COLUMNS it reports (frame and
@@ -43,27 +52,6 @@ DEFAULTS = {
         "empty": "█",
     },
     "thresholds": {"yellow": 50, "orange": 75, "red": 90},
-    "features": {
-        "pace": True,
-        "pace_min_elapsed": 0.10,
-        "reset_clock": True,
-        "last_commit": True,
-        "last_commit_nudge_min": 45,
-        "context_tokens": True,
-        "context_size": True,
-        "prompt_cache": True,
-        "prompt_cache_min_ratio": 0.90,
-        "model_window": True,
-        "repo_links": True,
-        "fast_mode": True,
-        # A liveness tick docked to the right of line 1. The frame is derived
-        # from the wall clock rather than a counter, because each refresh is a
-        # brand new process with no memory of the last one — so if refreshing
-        # stops, the frame simply stops moving, which is the whole signal.
-        "heartbeat": True,
-        "heartbeat_color": "dim",
-        "heartbeat_period": 1.0,   # seconds per frame
-    },
     "git": {
         "enabled": True,
         "timeout": 2.0,
@@ -76,7 +64,7 @@ DEFAULTS = {
         "stash": "⚑", "ahead": "↑", "behind": "↓",
         "pace": "⇢", "clock": "⏱", "pr": "⇄", "host": "⌂",
         "env": "⬢", "fast": "⚡", "cache": "⌗",
-        # One character per frame, cycled in order.
+        # One character per frame, cycled in order by the heartbeat segment.
         "heartbeat_frames": "⠋⠙⠹⠸⠼⠴⠦⠧",
     },
     "colors": {
@@ -88,21 +76,12 @@ DEFAULTS = {
     },
 }
 
-# Mutable module state, rebound by apply_config().
+# Mutable module state, rebound in place by apply_config().
 CFG: dict = {}
+GENERATION = 0        # bumps on every apply_config, so caches can notice
 C: dict = {}
 GLYPHS: dict = {}
 WIDE: set = set()
-
-
-def deep_merge(base: dict, over: dict) -> dict:
-    out = dict(base)
-    for key, val in (over or {}).items():
-        if isinstance(val, dict) and isinstance(out.get(key), dict):
-            out[key] = deep_merge(out[key], val)
-        else:
-            out[key] = val
-    return out
 
 
 def config_path() -> str | None:
@@ -144,6 +123,20 @@ def apply_config(cfg: dict) -> None:
     GLYPHS.update(cfg["glyphs"])
     WIDE.clear()
     WIDE.update(cfg["layout"].get("wide_glyphs") or ())
+    global GENERATION
+    GENERATION += 1
+
+
+def usable_width(cols=None) -> int:
+    """Columns the bar may use: the terminal width minus the host's margin."""
+    lay = CFG["layout"]
+    if cols is None:
+        try:
+            cols = int(os.environ.get("COLUMNS") or 0)
+        except ValueError:
+            cols = 0
+        cols = cols or lay["fallback_columns"]
+    return max(20, cols - max(0, lay["right_margin"]))
 
 
 apply_config(deep_merge(DEFAULTS, {}))

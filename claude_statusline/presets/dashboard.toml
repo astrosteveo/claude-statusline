@@ -1,0 +1,16 @@
+# dashboard — three lines, bars on the left.
+#
+# Identity on top, every usage bar in a row underneath, spend and
+# environment on the bottom with the clock in the corner.
+
+[[line]]
+left = ["model", "dir", "git", "pr"]
+right = ["session", "heartbeat"]
+gap = 1
+
+[[line]]
+left = ["context", "limit_5h", "limit_7d", "limit_7d_model"]
+
+[[line]]
+left = ["cost", "cache", "env"]
+right = ["clock"]

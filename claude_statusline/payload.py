@@ -1,13 +1,10 @@
 """Reading the host payload where its shape is not fixed."""
 from __future__ import annotations
 
-from .config import CFG
 from .util import dig, num
 
 
 def repo_url(data) -> str | None:
-    if not CFG["features"]["repo_links"]:
-        return None
     host = dig(data, "workspace", "repo", "host")
     owner = dig(data, "workspace", "repo", "owner")
     name = dig(data, "workspace", "repo", "name")

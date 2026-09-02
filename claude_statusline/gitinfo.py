@@ -75,7 +75,7 @@ def _cache_write(path: str, key: str, data, took: float) -> None:
 
 
 # --------------------------------------------------------------------- git ---
-def git_info(cwd: str):
+def git_info(cwd: str, last_commit: bool = True):
     if not CFG["git"]["enabled"]:
         return None
     timeout = CFG["git"]["timeout"]
@@ -88,7 +88,7 @@ def git_info(cwd: str):
         return None
     root, gitdir = lines[0], lines[1]
 
-    cache, key = _cache_file(root), _repo_key(gitdir)
+    cache, key = _cache_file(root), _repo_key(gitdir) + f"|lc:{int(last_commit)}"
     hit = _cache_read(cache, key)
     if hit is not None:
         return hit
@@ -150,7 +150,7 @@ def git_info(cwd: str):
         info["state"] = "BISECT"
 
     dirty = info["staged"] or info["dirty"] or info["conflict"]
-    if CFG["features"]["last_commit"] and dirty:
+    if last_commit and dirty:
         ct = run(["git", "--no-optional-locks", "log", "-1", "--format=%ct"],
                  cwd=cwd, timeout=timeout)
         if ct and ct.strip().isdigit():

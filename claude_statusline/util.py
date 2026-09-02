@@ -6,6 +6,16 @@ import subprocess
 from datetime import datetime
 
 
+def deep_merge(base: dict, over: dict) -> dict:
+    out = dict(base)
+    for key, val in (over or {}).items():
+        if isinstance(val, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], val)
+        else:
+            out[key] = val
+    return out
+
+
 def dig(obj, *path, default=None):
     for key in path:
         if not isinstance(obj, dict) or key not in obj:

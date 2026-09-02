@@ -49,10 +49,9 @@ def render_all():
         time.tzset()
         S.apply_config(S.deep_merge(S.DEFAULTS, PINNED_CONFIG))
         try:
-            with mock.patch("claude_statusline.segments.time.time", return_value=NOW):
-                for name, data in fixtures():
-                    for cols in WIDTHS:
-                        out[f"{name}@{cols}"] = S.render(data, cols=cols, now=NOW)
+            for name, data in fixtures():
+                for cols in WIDTHS:
+                    out[f"{name}@{cols}"] = S.render(data, cols=cols, now=NOW)
         finally:
             S.apply_config(S.deep_merge(S.DEFAULTS, {}))
     time.tzset()

@@ -269,33 +269,31 @@ class HeartbeatTests(unittest.TestCase):
     def tearDown(self):
         S.apply_config(S.deep_merge(S.DEFAULTS, {}))
 
+    @staticmethod
+    def tick(now, **opts):
+        return strip(S.render_segment("heartbeat", now=now, **opts))
+
     def test_frames_are_single_cell(self):
         for ch in S.CFG["glyphs"]["heartbeat_frames"]:
             self.assertEqual(S.cell_width(ch), 1, f"{ch!r} is not 1 cell")
 
     def test_advances_every_period(self):
-        seen = [strip(S.heartbeat(now=1000 + t)) for t in range(8)]
+        seen = [self.tick(1000 + t) for t in range(8)]
         self.assertEqual(len(set(seen)), 8, "frames repeat within one cycle")
 
     def test_cycles_back_round(self):
-        self.assertEqual(strip(S.heartbeat(now=1000)),
-                         strip(S.heartbeat(now=1008)))
+        self.assertEqual(self.tick(1000), self.tick(1008))
 
     def test_period_is_honoured(self):
-        S.apply_config(S.deep_merge(
-            S.DEFAULTS, {"features": {"heartbeat_period": 4.0}}))
-        self.assertEqual(strip(S.heartbeat(now=1000)),
-                         strip(S.heartbeat(now=1003)))
-        self.assertNotEqual(strip(S.heartbeat(now=1000)),
-                            strip(S.heartbeat(now=1004)))
+        self.assertEqual(self.tick(1000, period=4.0), self.tick(1003, period=4.0))
+        self.assertNotEqual(self.tick(1000, period=4.0), self.tick(1004, period=4.0))
 
     def test_docked_to_the_right_edge(self):
         with open(os.path.join(FIXTURES, "full.json")) as fh:
             data = json.load(fh)
         for cols in (200, 174, 120, 100, 80):
             line1 = S.render(data, cols=cols, now=1000).split("\n")[0]
-            tick = strip(S.heartbeat(now=1000))
-            self.assertTrue(strip(line1).endswith(tick),
+            self.assertTrue(strip(line1).endswith(self.tick(1000)),
                             f"@{cols}: line 1 does not end with the tick")
             self.assertEqual(S.display_width(line1), S.usable_width(cols),
                              f"@{cols}: tick is not flush right")
@@ -307,26 +305,30 @@ class HeartbeatTests(unittest.TestCase):
                 self.assertLessEqual(S.display_width(line1),
                                      S.usable_width(cols), f"{name} @ {cols}")
 
-    def test_can_be_disabled(self):
-        S.apply_config(S.deep_merge(S.DEFAULTS,
-                                     {"features": {"heartbeat": False}}))
-        self.assertEqual(S.heartbeat(now=1000), "")
+    def test_left_out_of_the_layout(self):
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"line": [
+            {"left": ["model", "dir", "session"]}, {"left": ["context"]}]}))
         with open(os.path.join(FIXTURES, "full.json")) as fh:
             data = json.load(fh)
         line1 = strip(S.render(data, cols=174, now=1000).split("\n")[0])
-        self.assertFalse(line1.endswith(" "), "disabled tick left padding behind")
+        self.assertNotIn(self.tick(1000), line1)
+        self.assertFalse(line1.endswith(" "), "no tick, yet padding was left behind")
 
     def test_dropped_when_there_is_no_room(self):
         """Real information beats decoration on a cramped terminal."""
         with open(os.path.join(FIXTURES, "full.json")) as fh:
             data = json.load(fh)
         line1 = strip(S.render(data, cols=24, now=1000).split("\n")[0])
-        self.assertNotIn(strip(S.heartbeat(now=1000)), line1)
+        self.assertNotIn(self.tick(1000), line1)
 
     def test_empty_frames_is_safe(self):
         S.apply_config(S.deep_merge(
             S.DEFAULTS, {"glyphs": {"heartbeat_frames": ""}}))
-        self.assertEqual(S.heartbeat(now=1000), "")
+        self.assertEqual(self.tick(1000), "")
+
+    def test_frames_option_overrides_glyphs(self):
+        self.assertEqual(self.tick(1000, frames="ab"), "a")
+        self.assertEqual(self.tick(1001, frames="ab"), "b")
 
 
 class WindowTests(unittest.TestCase):
@@ -374,13 +376,24 @@ class ConfigTests(unittest.TestCase):
             cfg = tomllib.load(fh)
         for section, body in cfg.items():
             self.assertIn(section, S.DEFAULTS, f"unknown section [{section}]")
+            if not isinstance(body, dict) or section == "segment":
+                continue
             for key in body:
                 self.assertIn(key, S.DEFAULTS[section],
                               f"unknown key {section}.{key}")
         for section, body in S.DEFAULTS.items():
+            if not isinstance(body, dict) or section == "segment":
+                self.assertIn(section, cfg, f"{section} is undocumented in the example")
+                continue
             for key in body:
                 self.assertIn(key, cfg.get(section, {}),
                               f"{section}.{key} is undocumented in the example")
+
+    def test_example_layout_is_clean(self):
+        """The example must validate without a single complaint."""
+        layout = S.build_layout(S.load_config(os.path.join(ROOT, "statusline.example.toml")))
+        self.assertEqual([str(p) for p in layout.problems], [])
+        self.assertEqual(len(layout.lines), 2)
 
     def test_broken_config_falls_back(self):
         import tempfile
