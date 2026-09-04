@@ -475,6 +475,34 @@ class WindowTests(unittest.TestCase):
     def test_missing_limits(self):
         self.assertEqual(S.find_windows({}), {})
 
+    def test_qualified_weekly_window_is_not_the_weekly_window(self):
+        """A slice of the week must never be drawn as the whole of it."""
+        w = S.find_windows({"rate_limits": {
+            "seven_day_overage_included": {"used_percentage": 80},
+            "seven_day_oauth_apps": {"used_percentage": 70}}})
+        self.assertNotIn("7d", w)
+
+    def test_fable_is_a_model(self):
+        w = S.find_windows({"rate_limits": {"seven_day_fable": {"used_percentage": 56}}})
+        self.assertEqual(w["7d_model"]["label"], "fable")
+
+    def test_model_scoped_list(self):
+        """The documented per-model shape: each entry names its own model."""
+        w = S.find_windows({"rate_limits": {
+            "seven_day": {"used_percentage": 9},
+            "model_scoped": [{"display_name": "Fable", "utilization": 56,
+                              "resets_at": 1788040000}]}})
+        self.assertEqual(w["7d_model"]["pct"], 56)
+        self.assertEqual(w["7d_model"]["label"], "Fable")
+
+    def test_model_scoped_beats_a_qualified_key(self):
+        """A window that names its own model is the better-titled one."""
+        w = S.find_windows({"rate_limits": {
+            "seven_day_opus": {"used_percentage": 40},
+            "model_scoped": [{"display_name": "Fable", "utilization": 56}]}})
+        self.assertEqual(w["7d_model"]["label"], "Fable")
+
+
 
 class ConfigTests(unittest.TestCase):
     def tearDown(self):

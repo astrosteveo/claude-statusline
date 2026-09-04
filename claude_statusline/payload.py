@@ -24,6 +24,13 @@ def _norm_key(key) -> str:
     return "".join(out).replace("-", "_")
 
 
+# Model families that qualify a weekly window's key, e.g. `seven_day_fable`.
+MODEL_KEYS = ("opus", "sonnet", "haiku", "fable")
+
+# Keys that mean the overall weekly window rather than a slice of it.
+SEVEN_DAY_KEYS = ("seven_day", "7d", "seven", "week", "weekly")
+
+
 def find_windows(data):
     """Locate the 5h / 7d windows, tolerating key-name and shape variants."""
     node = data.get("rate_limits") or data.get("rateLimits") or data
@@ -38,6 +45,23 @@ def find_windows(data):
         found[slot] = {"pct": pct, "label": label,
                        "resets_at": obj.get("resets_at", obj.get("resetsAt"))}
 
+    def take_scoped(obj):
+        """`model_scoped`: the documented per-model weekly windows, each entry
+        naming its own model rather than qualifying a key. Nothing sends it
+        today; reading it here means `limit_7d_model` lights up on its own if
+        anything ever does.
+        """
+        scoped = obj.get("model_scoped", obj.get("modelScoped"))
+        for item in scoped if isinstance(scoped, list) else ():
+            if not isinstance(item, dict):
+                continue
+            name = item.get("display_name", item.get("displayName"))
+            if name:
+                take("7d_model",
+                     {"used_percentage": item.get("utilization", item.get("used_percentage")),
+                      "resets_at": item.get("resets_at", item.get("resetsAt"))},
+                     str(name).strip())
+
     def classify(key, obj):
         k = _norm_key(key)
         if "five_hour" in k or k in ("5h", "five", "session"):
@@ -45,8 +69,15 @@ def find_windows(data):
         elif "spend" in k:
             take("spend", obj)
         elif "seven_day" in k or "week" in k or k in ("7d", "seven"):
-            model = next((m for m in ("opus", "sonnet", "haiku") if m in k), None)
-            take("7d_model" if model else "7d", obj, model)
+            model = next((m for m in MODEL_KEYS if m in k), None)
+            if model:
+                take("7d_model", obj, model)
+            elif k in SEVEN_DAY_KEYS:
+                take("7d", obj)
+            # Anything else qualifying the weekly window — seven_day_oauth_apps,
+            # seven_day_overage_included — meters something narrower than the
+            # plain one. Drawing it as the plain one would be worse than
+            # leaving it out.
         else:
             return False
         return True
@@ -67,6 +98,8 @@ def find_windows(data):
             if isinstance(val, (dict, list)) and not classify(key, val):
                 walk(val, depth + 1)
 
+    if isinstance(node, dict):
+        take_scoped(node)
     walk(node)
     if "7d" not in found and "7d_model" in found:
         found["7d"] = found["7d_model"]
