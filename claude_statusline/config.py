@@ -45,11 +45,22 @@ DEFAULTS = {
         # sends, so every distinct input renders distinctly. Narrower collides;
         # wider adds columns without adding information.
         "width": 13,
+        # A named glyph set: block, shade, thin, dots, pips, ascii. The keys
+        # below override the style's glyphs when set; "" means "from the style".
+        "style": "block",
+        "full": "",
+        "empty": "",
+        "cap_left": "",
+        "cap_right": "",
+        # How the filled cells are coloured: "level" (one colour by threshold),
+        # "gradient" (each cell by its own position), a [colors] key, or a
+        # comma-separated list of keys spread along the bar.
+        "fill": "level",
+        "track": "dim",           # [colors] key for the empty cells and caps
         "partial": True,          # sub-cell resolution for the boundary cell
         "partial_style": "auto",  # "auto" | "eighth" (▏▎▍) | "shade" (░▒▓) | "off"
         "min_sliver": True,       # any usage > 0 shows at least a sliver
-        "full": "█",
-        "empty": "█",
+        "pulse": False,           # past the red threshold, embolden on odd seconds
     },
     "thresholds": {"yellow": 50, "orange": 75, "red": 90},
     "git": {

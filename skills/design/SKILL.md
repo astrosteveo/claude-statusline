@@ -17,6 +17,7 @@ ENGINE="python3 ${CLAUDE_PLUGIN_ROOT}/statusline.py"
 $ENGINE doctor                      # config path, preset, lines, problems, usable width
 $ENGINE segments [name] [--json]    # the catalog: options, fields, colours
 $ENGINE presets                     # classic, minimal, dashboard
+$ENGINE bars [--width N]            # every bar style and fill, side by side
 $ENGINE validate <config>           # errors with did-you-mean; exit 1 on errors
 $ENGINE preview --config <config> --width 80,120,<cols> --plain
 $ENGINE migrate <config> [--write]  # fold a pre-2.0 [features] table into segment options
@@ -83,6 +84,12 @@ the segment list; `reference/examples.md` has whole layouts to start from.
 | "different colour for X" | a `<colour>` tag in that segment's `format`; add new names under `[colors]` |
 | "a label / a divider / my name" | `text` segments, one `[segment.<name>] type = "text"` per instance |
 | "no percentage, just the bar" | `format` without `{pct}`; keep `{bar}` |
+| "prettier bars" / "a different bar look" | `[bar] style =` one of block, shade, thin, dots, pips, ascii; show them with `bars` |
+| "rainbow bar" / "colour the bar by usage" | `[bar] fill = "gradient"`; a fixed colour is `fill = "cyan"`, a spread is `"cyan,purple"` |
+| "brackets around the bar" | `[bar] cap_left = "▕"` and `cap_right = "▏"` (or `[` `]`); caps sit outside `width` |
+| "make it obvious when I'm nearly out" | `[bar] pulse = true`; the fill emboldens every other second past the red threshold |
+| "one bar different from the others" | `style` and `fill` on that segment: `[segment.context] style = "thin"` |
+| "a different spinner" | `[segment.heartbeat] frames = "arc"` (dots, orbit, quadrants, arc, wave, pulse, bounce, line) or a string of glyphs |
 | "hide when idle / only show when dirty" | not expressible yet: segments hide only when they have nothing to show |
 | "run my own script in the bar" | not supported, by design (constraints.md explains the refresh budget) |
 

@@ -130,6 +130,29 @@ right = ["limit_5h", "limit_7d", "limit_7d_model"]
 clock = false
 ```
 
+## Styled bars
+
+The classic layout with textured, gradient-coloured bars in brackets, a thin
+cyan context bar, and an arc spinner.
+
+```toml
+preset = "classic"
+
+[bar]
+style = "shade"
+fill = "gradient"
+cap_left = "▕"
+cap_right = "▏"
+
+[segment.context]
+style = "thin"
+fill = "cyan"
+
+[segment.heartbeat]
+frames = "arc"
+color = "purple"
+```
+
 ## Migrating a 1.x config
 
 If `doctor` or `validate` prints `features.* : no longer read`, run

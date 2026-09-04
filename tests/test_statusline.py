@@ -70,8 +70,119 @@ class WidthTests(unittest.TestCase):
 
     def test_bar_glyphs_are_single_cell(self):
         """The whole right-anchoring scheme depends on this."""
-        for ch in "█░" + B._EIGHTHS + B._SHADES:
+        from claude_statusline.segments.env import FRAME_SETS
+        for ch in "█░" + B.style_glyphs() + "".join(FRAME_SETS.values()):
             self.assertEqual(S.cell_width(ch), 1, f"{ch!r} is not 1 cell")
+
+
+class BarStyleTests(unittest.TestCase):
+    """Named styles, fills, caps and the pulse effect."""
+
+    def setUp(self):
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
+
+    def tearDown(self):
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
+
+    def test_default_style_is_block(self):
+        self.assertEqual(B.resolve()["style"], "block")
+        self.assertEqual((B.resolve()["full"], B.resolve()["empty"]), ("█", "█"))
+
+    def test_every_style_and_fill_is_width_exact(self):
+        fills = ("level", "gradient", "cyan", "cyan,purple", "green,yellow,red")
+        for style, spec in B.STYLES.items():
+            caps = len(spec["cap_left"]) + len(spec["cap_right"])
+            for fill in fills:
+                for width in (1, 4, 6, 13, 20):
+                    for pct in range(0, 101):
+                        bar = S.make_bar(pct, width, style, fill)
+                        self.assertEqual(S.display_width(bar), width + caps,
+                                         f"{style}/{fill} pct={pct} width={width}")
+
+    def test_every_style_uses_only_its_own_glyphs(self):
+        for style, spec in B.STYLES.items():
+            allowed = set(spec["full"] + spec["empty"] + spec["ramp"]
+                          + spec["cap_left"] + spec["cap_right"] + B._EIGHTHS + B._SHADES)
+            for pct in range(0, 101):
+                glyphs = set(strip(S.make_bar(pct, 13, style)))
+                self.assertTrue(glyphs <= allowed, f"{style} pct={pct} used {glyphs - allowed}")
+
+    def test_every_style_distinguishes_small_from_zero(self):
+        for style in B.STYLES:
+            self.assertNotEqual(strip(S.make_bar(2, 12, style)), strip(S.make_bar(0, 12, style)),
+                                f"{style}: 2% renders exactly as 0%") if style != "block" else None
+
+    def test_style_from_config(self):
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"bar": {"style": "thin"}}))
+        self.assertIn("━", strip(S.make_bar(50, 10)))
+        self.assertIn("─", strip(S.make_bar(50, 10)))
+
+    def test_config_glyphs_override_only_the_configured_style(self):
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"bar": {"style": "block", "empty": " "}}))
+        self.assertEqual(strip(S.make_bar(0, 5)), "     ")
+        self.assertEqual(strip(S.make_bar(0, 5, "dots")), "○○○○○")
+
+    def test_unknown_style_falls_back_to_block(self):
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"bar": {"style": "nope"}}))
+        self.assertEqual(B.resolve()["style"], "block")
+        self.assertEqual(S.display_width(S.make_bar(50, 10)), 10)
+
+    def test_gradient_walks_the_thresholds(self):
+        bar = S.make_bar(100, 13, "block", "gradient")
+        for name in ("green", "yellow", "orange", "red"):
+            self.assertIn(f"\033[{S.CFG['colors'][name]}m", bar, name)
+        low = S.make_bar(20, 13, "block", "gradient")
+        self.assertNotIn(f"\033[{S.CFG['colors']['red']}m", low)
+
+    def test_fixed_and_spread_fills(self):
+        self.assertIn(f"\033[{S.CFG['colors']['cyan']}m", S.make_bar(50, 13, "block", "cyan"))
+        self.assertNotIn(f"\033[{S.CFG['colors']['green']}m", S.make_bar(50, 13, "block", "cyan"))
+        spread = S.make_bar(100, 13, "block", "cyan,purple")
+        self.assertIn(f"\033[{S.CFG['colors']['cyan']}m", spread)
+        self.assertIn(f"\033[{S.CFG['colors']['purple']}m", spread)
+
+    def test_caps_frame_the_bar_in_the_track_colour(self):
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"bar": {"cap_left": "▕", "cap_right": "▏"}}))
+        bar = S.make_bar(50, 10)
+        self.assertEqual(S.display_width(bar), 12)
+        self.assertTrue(strip(bar).startswith("▕") and strip(bar).endswith("▏"))
+        self.assertTrue(bar.startswith(f"\033[{S.CFG['colors']['dim']}m▕"))
+        # Caps frame every bar, including one that picked its own style.
+        self.assertEqual(strip(S.make_bar(0, 4, "dots")), "▕○○○○▏")
+
+    def test_track_colour(self):
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"bar": {"track": "purple", "empty": "░"}}))
+        self.assertIn(f"\033[{S.CFG['colors']['purple']}m░", S.make_bar(50, 10))
+
+    def test_pulse_emboldens_on_odd_seconds_past_red(self):
+        S.apply_config(S.deep_merge(S.DEFAULTS, {"bar": {"pulse": True}}))
+        self.assertIn("\033[1;", S.make_bar(95, 10, now=1001))
+        self.assertNotIn("\033[1;", S.make_bar(95, 10, now=1000))
+        self.assertNotIn("\033[1;", S.make_bar(50, 10, now=1001))
+        self.assertNotIn("\033[1;", S.make_bar(95, 10))
+        S.apply_config(S.deep_merge(S.DEFAULTS, {}))
+        self.assertNotIn("\033[1;", S.make_bar(95, 10, now=1001))
+
+    def test_segment_style_and_fill_override(self):
+        data = {"context_window": {"used_percentage": 50, "context_window_size": 200000}}
+        out = S.render_segment("context", data, style="dots", fill="cyan")
+        self.assertIn("●", strip(out))
+        self.assertIn(f"\033[{S.CFG['colors']['cyan']}m", out)
+        self.assertNotIn("●", strip(S.render_segment("context", data)))
+
+    def test_check_reports_bad_values(self):
+        cfg = S.deep_merge(S.DEFAULTS, {"bar": {"style": "nope", "fill": "mauve", "track": "x",
+                                                 "partial_style": "wat", "full": "ab"}})
+        paths = sorted(p for p, _ in B.check(cfg))
+        self.assertEqual(paths, ["bar.fill", "bar.full", "bar.partial_style", "bar.style", "bar.track"])
+        self.assertEqual(B.check(S.deep_merge(S.DEFAULTS, {"bar": {"style": "shade", "fill": "cyan,gold"}})), [])
+
+    def test_heartbeat_named_frame_sets(self):
+        from claude_statusline.segments.env import FRAME_SETS
+        for name, frames in FRAME_SETS.items():
+            out = strip(S.render_segment("heartbeat", {}, now=0, frames=name))
+            self.assertEqual(out, frames[0], name)
+        self.assertEqual(strip(S.render_segment("heartbeat", {}, now=0, frames="ab")), "a")
 
 
 class BarTests(unittest.TestCase):
@@ -79,8 +190,8 @@ class BarTests(unittest.TestCase):
         S.apply_config(S.deep_merge(S.DEFAULTS, {}))
 
     def test_zero_is_empty(self):
-        self.assertEqual(strip(S.make_bar(0, 10)),
-                         S.CFG["bar"]["empty"] * 10)
+        self.assertEqual(strip(S.make_bar(0, 10)), B.resolve()["empty"] * 10)
+        self.assertEqual(strip(S.make_bar(0, 10)), "█" * 10)
 
     def test_full_is_full(self):
         self.assertEqual(strip(S.make_bar(100, 10)), "█" * 10)

@@ -1,7 +1,7 @@
 """claude-statusline: a declarative status line engine for Claude Code."""
 from __future__ import annotations
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 from .config import CFG, DEFAULTS, apply_config, config_path, deep_merge, load_config, usable_width  # noqa: E402,F401
 from .width import cell_width, display_width  # noqa: E402,F401

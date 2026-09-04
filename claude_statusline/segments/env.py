@@ -49,6 +49,19 @@ class Host(Segment):
         return {"glyph": GLYPHS["host"], "host": os.uname().nodename}
 
 
+# Named frame sets; every glyph is one cell. `frames` may name one of these.
+FRAME_SETS = {
+    "dots": "⠋⠙⠹⠸⠼⠴⠦⠧",
+    "orbit": "⠁⠂⠄⡀⢀⠠⠐⠈",
+    "quadrants": "▘▝▗▖",
+    "arc": "◐◓◑◒",
+    "wave": "▁▂▃▄▅▆▇▆▅▄▃▂",
+    "pulse": "·•●•",
+    "bounce": "⠁⠂⠄⠂",
+    "line": "|/-\\",
+}
+
+
 @register
 class Heartbeat(Segment):
     name = "heartbeat"
@@ -57,7 +70,8 @@ class Heartbeat(Segment):
     priority = 99
     format = "<tick>{frame}</tick>"
     options = {
-        "frames": Opt(str, "", "One glyph per frame; empty means [glyphs].heartbeat_frames."),
+        "frames": Opt(str, "", "One glyph per frame, or a named set (dots, orbit, quadrants, "
+                            "arc, wave, pulse, bounce, line); empty means [glyphs].heartbeat_frames."),
         "period": Opt(float, 1.0, "Seconds per frame; match refreshInterval."),
         "color": Opt(str, "dim", "A [colors] key for the tick."),
     }
@@ -66,6 +80,7 @@ class Heartbeat(Segment):
 
     def fields_at(self, ctx, opts, level):
         frames = opts["frames"] or GLYPHS.get("heartbeat_frames") or ""
+        frames = FRAME_SETS.get(frames, frames)
         if not frames:
             return None
         period = num(opts["period"], 1.0) or 1.0

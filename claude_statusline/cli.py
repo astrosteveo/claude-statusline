@@ -14,6 +14,7 @@ import sys
 import time
 
 from . import __version__
+from . import bar as barmod
 from .config import (CFG, CONFIG_SEARCH, DEBUG_ENV, DEFAULTS, DUMP_ENV, apply_config,
                      config_path, load_config, usable_width)
 from .fit import LEVELS
@@ -35,6 +36,7 @@ commands
   segments [name] [--json|--markdown]
                                   the catalog: every segment, its options, fields and colours
   presets [--json]                the bundled layouts
+  bars [--width W] [--plain]      every bar style and fill at a few percentages
   validate [path] [--json]        check a config file; exit 1 on errors
   preview [--config P] [--preset N] [--width W,W] [--sample S] [--plain] [--json]
                                   render a layout at several widths with a sample payload
@@ -132,7 +134,8 @@ def cmd_doctor(cols=None) -> str:
         f"  →  fallback {CFG['layout']['fallback_columns']}",
         f"  right_margin    {CFG['layout']['right_margin']}",
         f"  usable width    {usable_width(cols)}",
-        f"  bar             width={CFG['bar']['width']} "
+        f"  bar             style={barmod.resolve()['style']} fill={barmod.resolve()['fill']} "
+        f"width={CFG['bar']['width']} "
         f"partial={CFG['bar']['partial']}",
         f"  git             enabled={CFG['git']['enabled']} "
         f"ttl={CFG['git']['cache_ttl']}s",
@@ -273,6 +276,31 @@ def cmd_segments(name=None, as_json=False, as_markdown=False) -> str:
     return "\n".join(out)
 
 
+def cmd_bars(width=None, as_plain=False, as_json=False, fills=("level", "gradient")) -> str:
+    """Every bar style at a few percentages, with each fill, so people can pick."""
+    width = CFG["bar"]["width"] if not width else width
+    pcts = (0, 8, 33, 50, 66, 84, 100)
+    items = []
+    for name, spec in barmod.STYLES.items():
+        rows = []
+        for fill in fills:
+            bars = [barmod.make_bar(p, width, name, fill) for p in pcts]
+            rows.append({"fill": fill, "bars": [plain(b) for b in bars] if as_plain or as_json else bars})
+        items.append({"style": name, "doc": spec["doc"], "rows": rows})
+    if as_json:
+        return json.dumps({"width": width, "pcts": list(pcts), "styles": items},
+                          indent=2, ensure_ascii=False)
+    out = [f"bar styles at width {width}; columns are {', '.join(f'{p}%' for p in pcts)}", ""]
+    for it in items:
+        out.append(f"{it['style']:<7} {it['doc']}")
+        for row in it["rows"]:
+            out.append(f"  {row['fill']:<9} " + "  ".join(row["bars"]))
+        out.append("")
+    out.append("[bar] style = \"<name>\"   fill = \"level\" | \"gradient\" | a [colors] key | \"key,key,...\"")
+    out.append("per segment: [segment.context] style = \"thin\"  fill = \"cyan\"")
+    return "\n".join(out)
+
+
 def cmd_presets(as_json=False) -> str:
     items = []
     for name in list_presets():
@@ -316,6 +344,20 @@ def check_config(raw: dict):
             for key in body:
                 if key not in DEFAULTS[section]:
                     out.append(Problem("error", f"{section}.{key}", "unknown key"))
+    merged = deep_merge(DEFAULTS, raw)
+    if isinstance(merged.get("bar"), dict) and isinstance(merged.get("colors"), dict):
+        out += [Problem("error", path, msg) for path, msg in barmod.check(merged)]
+        for name, table in (raw.get("segment") or {}).items():
+            if not isinstance(table, dict):
+                continue
+            style = table.get("style")
+            if isinstance(style, str) and style and style not in barmod.STYLES:
+                out.append(Problem("error", f"segment.{name}.style",
+                                   f"unknown style {style!r}; one of {', '.join(barmod.STYLES)}"))
+            fill = table.get("fill")
+            if isinstance(fill, str) and fill:
+                out += [Problem("error", f"segment.{name}.fill", m)
+                        for m in barmod.check_fill(fill, merged["colors"])]
     return out
 
 
@@ -570,6 +612,8 @@ def main(argv=None) -> int:
     p = sub.add_parser("segments"); p.add_argument("name", nargs="?"); p.add_argument("--json", action="store_true")
     p.add_argument("--markdown", action="store_true")
     p = sub.add_parser("presets"); p.add_argument("--json", action="store_true")
+    p = sub.add_parser("bars"); p.add_argument("--width", type=int); p.add_argument("--plain", action="store_true")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("validate"); p.add_argument("path", nargs="?"); p.add_argument("--json", action="store_true")
     p = sub.add_parser("preview")
     p.add_argument("--config"); p.add_argument("--preset"); p.add_argument("--width", default="100,140,200")
@@ -602,6 +646,8 @@ def main(argv=None) -> int:
             print()
     elif args.cmd == "presets":
         print(cmd_presets(args.json))
+    elif args.cmd == "bars":
+        print(cmd_bars(args.width, args.plain, args.json))
     elif args.cmd == "validate":
         text, code = cmd_validate(args.path, args.json)
         print(text)

@@ -55,7 +55,7 @@ Default format: `<tick>{frame}</tick>`
 
 | option | type | default | meaning |
 |--------|------|---------|---------|
-| `frames` | str | `""` | One glyph per frame; empty means [glyphs].heartbeat_frames. |
+| `frames` | str | `""` | One glyph per frame, or a named set (dots, orbit, quadrants, arc, wave, pulse, bounce, line); empty means [glyphs].heartbeat_frames. |
 | `period` | float | `1.0` | Seconds per frame; match refreshInterval. |
 | `color` | str | `"dim"` | A [colors] key for the tick. |
 
@@ -127,6 +127,8 @@ Default format: `<gray>{label}</gray>[ {bar}] <level>{pct}%</level>[ <pacecolor>
 | option | type | default | meaning |
 |--------|------|---------|---------|
 | `width` | int | `-1` | Bar cells; -1 means [bar].width. |
+| `style` | str | `""` | Bar style for this segment; empty means [bar].style. |
+| `fill` | str | `""` | Bar fill for this segment; empty means [bar].fill. |
 | `pace` | bool | `true` | Project end-of-window usage from the burn rate. |
 | `pace_min_elapsed` | float | `0.1` | Do not extrapolate from under this fraction of the window. |
 | `clock` | bool | `true` | Append the wall-clock time of the reset. |
@@ -155,6 +157,8 @@ Default format: `<gray>{label}</gray>[ {bar}] <level>{pct}%</level>[ <pacecolor>
 | option | type | default | meaning |
 |--------|------|---------|---------|
 | `width` | int | `-1` | Bar cells; -1 means [bar].width. |
+| `style` | str | `""` | Bar style for this segment; empty means [bar].style. |
+| `fill` | str | `""` | Bar fill for this segment; empty means [bar].fill. |
 | `pace` | bool | `true` | Project end-of-window usage from the burn rate. |
 | `pace_min_elapsed` | float | `0.1` | Do not extrapolate from under this fraction of the window. |
 | `clock` | bool | `true` | Append the wall-clock time of the reset. |
@@ -183,6 +187,8 @@ Default format: `<gray>{label}</gray>[ {bar}] <level>{pct}%</level>[ <pacecolor>
 | option | type | default | meaning |
 |--------|------|---------|---------|
 | `width` | int | `-1` | Bar cells; -1 means [bar].width. |
+| `style` | str | `""` | Bar style for this segment; empty means [bar].style. |
+| `fill` | str | `""` | Bar fill for this segment; empty means [bar].fill. |
 | `pace` | bool | `true` | Project end-of-window usage from the burn rate. |
 | `pace_min_elapsed` | float | `0.1` | Do not extrapolate from under this fraction of the window. |
 | `clock` | bool | `true` | Append the wall-clock time of the reset. |
@@ -212,6 +218,8 @@ Default format: `<gray>{label}</gray>[ {bar}] <level>{pct}%</level>[ <dim>({deta
 |--------|------|---------|---------|
 | `label` | str | `"ctx"` | Label before the bar. |
 | `width` | int | `-1` | Bar cells; -1 means [bar].width. |
+| `style` | str | `""` | Bar style for this segment; empty means [bar].style. |
+| `fill` | str | `""` | Bar fill for this segment; empty means [bar].fill. |
 | `tokens` | bool | `true` | Show the token count beside the percentage. |
 | `size` | bool | `true` | ...and the window size, e.g. (380k/1.0M). |
 
@@ -329,6 +337,8 @@ Default format: `<gray>{label}</gray>[ {bar}] <level>{pct}%</level>[ <pacecolor>
 | option | type | default | meaning |
 |--------|------|---------|---------|
 | `width` | int | `-1` | Bar cells; -1 means [bar].width. |
+| `style` | str | `""` | Bar style for this segment; empty means [bar].style. |
+| `fill` | str | `""` | Bar fill for this segment; empty means [bar].fill. |
 | `pace` | bool | `false` | Project end-of-window usage from the burn rate. |
 | `pace_min_elapsed` | float | `0.1` | Do not extrapolate from under this fraction of the window. |
 | `clock` | bool | `false` | Append the wall-clock time of the reset. |

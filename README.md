@@ -196,9 +196,40 @@ Bars carry sub-cell resolution, so a 2% window does not render identically to
 an empty one. The default width of 13 is chosen, not taste: the host reports
 whole-number percentages, so there are 101 possible inputs, and 13 cells at 8
 sub-steps per cell is the narrowest bar that renders every one of them
-distinctly. `[bar].empty` picks the track (`█` solid, `░` textured, `" "`
-blank) and `partial_style = "auto"` picks a boundary-cell family that matches
-it so the bar never reads as notched. See
+distinctly.
+
+Three choices are independent: the **style** (glyph set), the **fill** (how
+the filled cells are coloured) and the **track** (the colour of the empty
+cells). `python3 statusline.py bars` draws every style side by side.
+
+```toml
+[bar]
+style = "shade"          # block · shade · thin · dots · pips · ascii
+fill = "gradient"        # level · gradient · a [colors] key · "cyan,purple"
+track = "dim"            # [colors] key for the empty cells
+cap_left = "▕"           # optional glyphs framing the bar
+cap_right = "▏"
+pulse = true             # past the red threshold, embolden on odd seconds
+
+[segment.context]
+style = "thin"           # any bar segment can pick its own style and fill
+fill = "cyan"
+```
+
+| style | fill on track | resolution |
+|-------|---------------|------------|
+| `block` | `█` on `█` | eighth of a cell (the default) |
+| `shade` | `█` on `░` | shaded boundary cell |
+| `thin` | `━` on `─` | half a cell |
+| `dots` | `●` on `○` | half a cell |
+| `pips` | `▰` on `▱` | whole cells |
+| `ascii` | `#` on `-` in `[ ]` | whole cells |
+
+`full`, `empty` and the caps override a style's glyphs when set; every glyph
+must be one cell wide. `partial_style = "auto"` picks a boundary-cell family
+that matches the track so a block bar never reads as notched. The heartbeat
+takes a named frame set too (`frames = "arc"`: dots, orbit, quadrants, arc,
+wave, pulse, bounce, line). See
 [statusline.example.toml](statusline.example.toml) for the annotated set.
 
 ## Calibrating `right_margin`

@@ -30,6 +30,8 @@ class ContextWindow(Segment):
     options = {
         "label": Opt(str, "ctx", "Label before the bar."),
         "width": Opt(int, -1, "Bar cells; -1 means [bar].width."),
+        "style": Opt(str, "", "Bar style for this segment; empty means [bar].style."),
+        "fill": Opt(str, "", "Bar fill for this segment; empty means [bar].fill."),
         "tokens": Opt(bool, True, "Show the token count beside the percentage."),
         "size": Opt(bool, True, "...and the window size, e.g. (380k/1.0M)."),
     }
@@ -61,7 +63,7 @@ class ContextWindow(Segment):
         detail = ""
         if tokens and width > 0 and opts["tokens"]:
             detail = tokens + (f"/{size_s}" if size_s and opts["size"] else "")
-        return {"label": opts["label"], "bar": make_bar(pct, width), "pct": f"{pct:.0f}",
+        return {"label": opts["label"], "bar": make_bar(pct, width, opts["style"], opts["fill"], ctx.now), "pct": f"{pct:.0f}",
                 "tokens": tokens, "size": size_s, "detail": detail, "_pct": pct}
 
     def colors_at(self, ctx, opts, fields):
@@ -90,6 +92,8 @@ class Limit(Segment):
               "[ <pacecolor>{pace}</pacecolor>][ <dim>{reset}[·{clock}]</dim>]")
     options = {
         "width": Opt(int, -1, "Bar cells; -1 means [bar].width."),
+        "style": Opt(str, "", "Bar style for this segment; empty means [bar].style."),
+        "fill": Opt(str, "", "Bar fill for this segment; empty means [bar].fill."),
         "pace": Opt(bool, True, "Project end-of-window usage from the burn rate."),
         "pace_min_elapsed": Opt(float, 0.10, "Do not extrapolate from under this fraction of the window."),
         "clock": Opt(bool, True, "Append the wall-clock time of the reset."),
@@ -110,7 +114,7 @@ class Limit(Segment):
             return {"label": self.label, "_missing": True}
         pct = num(win.get("pct"), 0.0)
         width = _bar_width(opts, level)
-        f = {"label": self.label, "bar": make_bar(pct, width), "pct": f"{pct:.0f}",
+        f = {"label": self.label, "bar": make_bar(pct, width, opts["style"], opts["fill"], ctx.now), "pct": f"{pct:.0f}",
              "pace": "", "reset": "", "clock": "", "_pct": pct, "_pacecolor": "dim",
              "_missing": False}
         ts = to_epoch(win.get("resets_at"))

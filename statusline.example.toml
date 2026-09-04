@@ -97,10 +97,36 @@ wide_glyphs = []
 # renders every one of them distinctly; 12 collides on 1/2, 25/26, 50/51 and
 # 75/76, and anything above 13 spends columns without adding information.
 width = 13
+
+# The glyph set. `statusline.py bars` draws every style side by side.
+#   "block"  █ on █   eighth-cell resolution (the default)
+#   "shade"  █ on ░   shaded boundary cell
+#   "thin"   ━ on ─   half-cell resolution
+#   "dots"   ● on ○   half-cell resolution
+#   "pips"   ▰ on ▱   whole cells
+#   "ascii"  # on -   in [brackets], for fonts without block glyphs
+# A bar segment can pick its own: [segment.context] style = "thin".
+style = "block"
+
+# Override the style's glyphs; "" means "from the style". Every glyph must be
+# one cell wide. The track: "█" solid, "░" textured, " " blank.
+full = ""
+empty = ""
+cap_left = ""       # glyphs framing the bar, e.g. "▕" and "▏" or "[" and "]"
+cap_right = ""
+
+# How the filled cells are coloured:
+#   "level"     one colour for the whole fill, by [thresholds] (the default)
+#   "gradient"  each cell by its own position, so a full bar walks
+#               green → yellow → orange → red
+#   a [colors] key, e.g. "cyan", for a fixed colour
+#   a comma-separated list of keys, e.g. "cyan,purple", spread along the bar
+fill = "level"
+track = "dim"       # [colors] key for the empty cells and the caps
+
 partial = true      # give the boundary cell sub-cell resolution
 min_sliver = true   # any usage above 0 shows at least a sliver
-full = "█"
-empty = "█"    # the track. "█" solid, "░" textured, " " blank.
+pulse = false       # past the red threshold, embolden the fill on odd seconds
 
 # How the boundary cell between filled and empty is drawn:
 #   "auto"    match the family to the track (recommended). A solid or blank
@@ -143,9 +169,8 @@ fast = "⚡"
 cache = "⌗"
 
 # One character per frame, cycled in order by the heartbeat segment. Must be
-# single-width glyphs.
-# Alternatives: "⠁⠂⠄⡀⢀⠠⠐⠈" (orbit)  "▘▝▗▖" (quadrants)
-#               "◐◓◑◒" (arc)          "▁▂▃▄▅▆▇▆▅▄▃▂" (wave)
+# single-width glyphs. [segment.heartbeat] frames = "<name>" picks a bundled
+# set instead: dots, orbit, quadrants, arc, wave, pulse, bounce, line.
 heartbeat_frames = "⠋⠙⠹⠸⠼⠴⠦⠧"
 
 [colors]

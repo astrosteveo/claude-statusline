@@ -38,7 +38,10 @@ def fixtures():
     for name in sorted(os.listdir(FIXTURES)):
         if name.endswith(".json"):
             with open(os.path.join(FIXTURES, name)) as fh:
-                yield name[:-5], json.load(fh)
+                data = json.load(fh)
+            if not isinstance(data.get("cwd"), str) and "workspace" not in data:
+                data["cwd"] = "/home/u/proj"      # keep the test's own cwd out of the golden
+            yield name[:-5], data
 
 
 def render_all():

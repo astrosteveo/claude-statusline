@@ -101,10 +101,40 @@ These are global and unchanged from 1.x:
 | section | keys |
 |---------|------|
 | `[layout]` | `right_margin`, `separator`, `fallback_columns`, `wide_glyphs` |
-| `[bar]` | `width`, `partial`, `partial_style`, `min_sliver`, `full`, `empty` |
+| `[bar]` | `width`, `style`, `fill`, `track`, `cap_left`, `cap_right`, `full`, `empty`, `partial`, `partial_style`, `min_sliver`, `pulse` |
 | `[thresholds]` | `yellow`, `orange`, `red` (percentages) |
 | `[git]` | `enabled`, `timeout`, `cache_ttl`, `slow_threshold`, `slow_backoff` |
 | `[glyphs]` | one glyph per named use, plus `heartbeat_frames` |
 | `[colors]` | name → SGR parameters; add your own names for templates |
 
 `[features]` from 1.x is no longer read. `statusline.py migrate` rewrites it.
+
+## Bars
+
+A bar is `width` cells; three choices are independent and any bar segment
+(`context`, `limit_*`) may override the first two with its own `style` and
+`fill` options.
+
+| key | values | meaning |
+|-----|--------|---------|
+| `style` | `block` `shade` `thin` `dots` `pips` `ascii` | the glyph set; `statusline.py bars` draws them all |
+| `fill` | `level`, `gradient`, a `[colors]` key, or `"key,key"` | one colour by threshold; a colour per cell by its position; a fixed colour; colours spread along the bar |
+| `track` | a `[colors]` key | colour of the empty cells and the caps (default `dim`) |
+| `cap_left` / `cap_right` | one glyph each | frame the bar; they sit outside `width` |
+| `full` / `empty` | one glyph each | override the style's glyphs; `""` means "from the style" |
+| `pulse` | bool | past the red threshold, embolden the fill on odd seconds |
+
+```toml
+[bar]
+style = "shade"
+fill = "gradient"
+cap_left = "▕"
+cap_right = "▏"
+
+[segment.context]
+style = "thin"
+fill = "cyan"
+```
+
+Every glyph must be one cell wide; the fitter depends on it. The narrow
+detail level halves `width`; caps stay.
