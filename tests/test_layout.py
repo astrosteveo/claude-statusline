@@ -182,6 +182,14 @@ class RenderRobustnessTests(unittest.TestCase):
         out = strip(S.render({"model": {"display_name": "Opus"}, "effort": {"level": "max"}}, cols=80))
         self.assertEqual(out, "Opus @ max")
 
+    def test_short_name_drops_the_trailing_qualifier(self):
+        S.apply_config(cfg(line=[{"left": ["model"]}],
+                           segment={"model": {"format": "{short}[ · {effort}]"}}))
+        render = lambda model, **rest: strip(S.render({"model": {"display_name": model}, **rest}, cols=80))
+        self.assertEqual(render("Opus 5 (1M context)", effort={"level": "high"}), "Opus 5 · high")
+        self.assertEqual(render("Opus 5"), "Opus 5")
+        self.assertEqual(render("(1M context)"), "(1M context)")   # never blank the name
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

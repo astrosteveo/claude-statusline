@@ -1,6 +1,7 @@
 """Model, directory, session and the small static segments."""
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from ..config import CFG, GLYPHS
@@ -16,11 +17,15 @@ class Model(Segment):
     format = "<model>{glyph} {name}</model><yellow>{fast}</yellow><dim>[ · {effort}]</dim>"
     options = {"fast": Opt(bool, True, "Show the fast-mode glyph when fast mode is on.")}
     fields = {"glyph": "the model glyph", "name": "display name or id",
+              "short": "the name without a trailing qualifier like (1M context)",
               "fast": "fast-mode glyph, or empty", "effort": "effort level, 'think', or empty"}
 
     def fields_at(self, ctx, opts, level):
         data = ctx.data
-        name = (dig(data, "model", "display_name") or dig(data, "model", "id") or "claude")
+        name = str(dig(data, "model", "display_name") or dig(data, "model", "id") or "claude")
+        # The host folds the context size into the display name: "Opus 5 (1M
+        # context)". {short} drops that so the space can go to something else.
+        short = re.sub(r"\s*\([^()]*\)\s*$", "", name) or name
         fast = GLYPHS["fast"] if data.get("fast_mode") and opts["fast"] else ""
         effort = dig(data, "effort", "level")
         if effort:
@@ -29,7 +34,7 @@ class Model(Segment):
             effort = "think"
         else:
             effort = ""
-        return {"glyph": GLYPHS["model"], "name": str(name), "fast": fast, "effort": effort}
+        return {"glyph": GLYPHS["model"], "name": name, "short": short, "fast": fast, "effort": effort}
 
 
 @register
