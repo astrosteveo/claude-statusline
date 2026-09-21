@@ -148,6 +148,14 @@ copy: [examples.md](skills/design/reference/examples.md).
 The complete list, with every option, field and colour, is
 [catalog.md](skills/design/reference/catalog.md), generated from the code.
 
+The projection has two modes. `pace_mode = "average"` (the default) divides
+usage so far by the fraction of the window gone; it is stateless and drifts
+down only slowly after you ease off. `pace_mode = "recent"` measures the
+rate over the last `pace_lookback` of the window (a tenth, so 30 minutes of
+a 5h window) from a small history kept in the cache dir, so it follows a
+change of pace within minutes. Until that much history exists it shows the
+average.
+
 ### Templates
 
 A segment's `format` is text with `{field}` placeholders, `[optional groups]`

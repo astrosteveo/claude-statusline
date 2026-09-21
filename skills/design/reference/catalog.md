@@ -44,6 +44,7 @@ Default format: `<model>{glyph} {name}</model><yellow>{fast}</yellow><dim>[ · {
 |-------|-------|
 | `{glyph}` | the model glyph |
 | `{name}` | display name or id |
+| `{short}` | the name without a trailing qualifier like (1M context) |
 | `{fast}` | fast-mode glyph, or empty |
 | `{effort}` | effort level, 'think', or empty |
 
@@ -130,7 +131,9 @@ Default format: `<gray>{label}</gray>[ {bar}] <level>{pct}%</level>[ <pacecolor>
 | `style` | str | `""` | Bar style for this segment; empty means [bar].style. |
 | `fill` | str | `""` | Bar fill for this segment; empty means [bar].fill. |
 | `pace` | bool | `true` | Project end-of-window usage from the burn rate. |
-| `pace_min_elapsed` | float | `0.1` | Do not extrapolate from under this fraction of the window. |
+| `pace_mode` | str | `"average"` | average: usage so far over the fraction of the window gone. recent: the rate over the last pace_lookback of the window, from a history kept on disk. |
+| `pace_min_elapsed` | float | `0.1` | Do not extrapolate an average from under this fraction of the window. |
+| `pace_lookback` | float | `0.1` | Fraction of the window the recent rate is measured over (0.10 is 30 min of a 5h window); until that much history exists, recent falls back to average. |
 | `clock` | bool | `true` | Append the wall-clock time of the reset. |
 | `missing` | str | `"<dim>{label} —</dim>"` | Template used when the host sends no such window; empty hides it. |
 
@@ -160,7 +163,9 @@ Default format: `<gray>{label}</gray>[ {bar}] <level>{pct}%</level>[ <pacecolor>
 | `style` | str | `""` | Bar style for this segment; empty means [bar].style. |
 | `fill` | str | `""` | Bar fill for this segment; empty means [bar].fill. |
 | `pace` | bool | `true` | Project end-of-window usage from the burn rate. |
-| `pace_min_elapsed` | float | `0.1` | Do not extrapolate from under this fraction of the window. |
+| `pace_mode` | str | `"average"` | average: usage so far over the fraction of the window gone. recent: the rate over the last pace_lookback of the window, from a history kept on disk. |
+| `pace_min_elapsed` | float | `0.1` | Do not extrapolate an average from under this fraction of the window. |
+| `pace_lookback` | float | `0.1` | Fraction of the window the recent rate is measured over (0.10 is 30 min of a 5h window); until that much history exists, recent falls back to average. |
 | `clock` | bool | `true` | Append the wall-clock time of the reset. |
 | `missing` | str | `"<dim>{label} —</dim>"` | Template used when the host sends no such window; empty hides it. |
 
@@ -190,7 +195,9 @@ Default format: `<gray>{label}</gray>[ {bar}] <level>{pct}%</level>[ <pacecolor>
 | `style` | str | `""` | Bar style for this segment; empty means [bar].style. |
 | `fill` | str | `""` | Bar fill for this segment; empty means [bar].fill. |
 | `pace` | bool | `true` | Project end-of-window usage from the burn rate. |
-| `pace_min_elapsed` | float | `0.1` | Do not extrapolate from under this fraction of the window. |
+| `pace_mode` | str | `"average"` | average: usage so far over the fraction of the window gone. recent: the rate over the last pace_lookback of the window, from a history kept on disk. |
+| `pace_min_elapsed` | float | `0.1` | Do not extrapolate an average from under this fraction of the window. |
+| `pace_lookback` | float | `0.1` | Fraction of the window the recent rate is measured over (0.10 is 30 min of a 5h window); until that much history exists, recent falls back to average. |
 | `clock` | bool | `true` | Append the wall-clock time of the reset. |
 | `missing` | str | `""` | Template when absent; empty hides it. |
 
@@ -340,7 +347,9 @@ Default format: `<gray>{label}</gray>[ {bar}] <level>{pct}%</level>[ <pacecolor>
 | `style` | str | `""` | Bar style for this segment; empty means [bar].style. |
 | `fill` | str | `""` | Bar fill for this segment; empty means [bar].fill. |
 | `pace` | bool | `false` | Project end-of-window usage from the burn rate. |
-| `pace_min_elapsed` | float | `0.1` | Do not extrapolate from under this fraction of the window. |
+| `pace_mode` | str | `"average"` | average: usage so far over the fraction of the window gone. recent: the rate over the last pace_lookback of the window, from a history kept on disk. |
+| `pace_min_elapsed` | float | `0.1` | Do not extrapolate an average from under this fraction of the window. |
+| `pace_lookback` | float | `0.1` | Fraction of the window the recent rate is measured over (0.10 is 30 min of a 5h window); until that much history exists, recent falls back to average. |
 | `clock` | bool | `false` | Append the wall-clock time of the reset. |
 | `missing` | str | `""` | Template when absent; empty hides it. |
 

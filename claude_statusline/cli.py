@@ -15,6 +15,7 @@ import time
 
 from . import __version__
 from . import bar as barmod
+from . import pace as pacemod
 from .config import (CFG, CONFIG_SEARCH, DEBUG_ENV, DEFAULTS, DUMP_ENV, apply_config,
                      config_path, load_config, usable_width)
 from .fit import LEVELS
@@ -358,6 +359,10 @@ def check_config(raw: dict):
             if isinstance(fill, str) and fill:
                 out += [Problem("error", f"segment.{name}.fill", m)
                         for m in barmod.check_fill(fill, merged["colors"])]
+            mode = table.get("pace_mode")
+            if isinstance(mode, str) and mode not in pacemod.MODES:
+                out.append(Problem("error", f"segment.{name}.pace_mode",
+                                   f"unknown mode {mode!r}; one of {', '.join(pacemod.MODES)}"))
     return out
 
 

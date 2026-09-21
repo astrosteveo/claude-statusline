@@ -61,7 +61,9 @@ size = true                  # ...and the window size, e.g. (380k/1.0M)
 
 [segment.limit_5h]
 pace = true                  # ⇢ projected usage at reset
-pace_min_elapsed = 0.10      # don't extrapolate from under 10% of a window
+pace_mode = "average"        # average: usage so far over the window gone; recent: the last stretch's rate
+pace_min_elapsed = 0.10      # don't extrapolate an average from under 10% of a window
+pace_lookback = 0.10         # recent measures over this fraction of the window (30 min of 5h)
 clock = true                 # wall-clock time of the reset
 
 [segment.limit_7d]

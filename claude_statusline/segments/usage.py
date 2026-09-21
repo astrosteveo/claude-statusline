@@ -6,6 +6,7 @@ from datetime import datetime
 from ..bar import make_bar, pct_color
 from ..config import CFG, FIVE_HOUR, GLYPHS, SEVEN_DAY
 from ..fit import LEAN, LESS, NARROW, TEXT
+from ..pace import project
 from ..template import compile_template
 from ..util import dig, dur, num, short_num, to_epoch
 from . import Opt, Segment, register
@@ -95,7 +96,11 @@ class Limit(Segment):
         "style": Opt(str, "", "Bar style for this segment; empty means [bar].style."),
         "fill": Opt(str, "", "Bar fill for this segment; empty means [bar].fill."),
         "pace": Opt(bool, True, "Project end-of-window usage from the burn rate."),
-        "pace_min_elapsed": Opt(float, 0.10, "Do not extrapolate from under this fraction of the window."),
+        "pace_mode": Opt(str, "average", "average: usage so far over the fraction of the window gone. "
+                         "recent: the rate over the last pace_lookback of the window, from a history kept on disk."),
+        "pace_min_elapsed": Opt(float, 0.10, "Do not extrapolate an average from under this fraction of the window."),
+        "pace_lookback": Opt(float, 0.10, "Fraction of the window the recent rate is measured over "
+                             "(0.10 is 30 min of a 5h window); until that much history exists, recent falls back to average."),
         "clock": Opt(bool, True, "Append the wall-clock time of the reset."),
         "missing": Opt(str, "<dim>{label} —</dim>", "Template used when the host sends no such window; empty hides it."),
     }
@@ -122,9 +127,8 @@ class Limit(Segment):
             return f
         left = ts - ctx.now
         if opts["pace"] and level < LEAN and pct < 99 and self.window_len:
-            elapsed = (self.window_len - left) / self.window_len
-            if opts["pace_min_elapsed"] <= elapsed <= 1.0:
-                proj = pct / elapsed
+            proj = project(ctx, self.slot, pct, ts, self.window_len, opts)
+            if proj is not None:
                 f["pace"] = f"{GLYPHS['pace']}{min(proj, 999):.0f}%"
                 f["_pacecolor"] = "red" if proj >= 100 else ("orange" if proj >= 85 else "dim")
         f["reset"] = f"{GLYPHS['reset']}{dur(left)}"
