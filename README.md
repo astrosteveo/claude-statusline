@@ -1,341 +1,218 @@
 # claude-statusline
 
-A status line engine for [Claude Code](https://claude.com/claude-code). You
-describe the bar as lines of named segments in a small TOML file; the engine
-renders it, keeps it inside the terminal at every width, and never blanks.
-It ships as a plugin with a skill, so you can also just tell Claude what you
-want to see and let it write the layout for you.
+A fast, good-looking status line for [Claude Code](https://claude.com/claude-code),
+with an interactive configurator and **Claude Quest**, an RPG that plays itself
+while you work.
 
-```
-◆ Opus 5 (1M context) · high │ ▸ …/u/Projects/widget-factory │ $24.73 59m +1006/-21 │ refactor the parser                                                               ⠋
-ctx ███▓░░░░░░░░░ 28% (279k/1.0M)                                                                5h ████████░░░░░ 62% ⇢94% ↻1h43m·22:29 │ 7d ███░░░░░░░░░░ 24% ⇢58% ↻4d3h
-```
+![themes and styles](docs/gallery.png)
 
-(Shown with the textured `░` track so the fill reads in plain text; the default solid track carries it in colour.)
+- **Looks**: 19 themes, 8 styles (from plain text to powerline and rounded
+  capsules), Nerd Font, Unicode or emoji icons, 8 bar styles with sub-cell
+  precision and gradient fills. Truecolor, 256 or 16 colours.
+- **Configure it live**: `statusline.py configure` opens a full-screen editor
+  with a live preview of your bar; every change shows before you save it.
+- **Always fits**: every line is measured exactly the way Claude Code measures
+  it, gives up detail gracefully when the terminal is narrow, and never clips.
+- **Fast**: about 10 ms a refresh, 4 of them Python starting up. Git runs in
+  the background, so the bar never waits for it.
+- **Claude Quest**: XP for every tool Claude uses, loot as replies land,
+  bosses summoned by failing tests, daily quests, a shop, and a pet that
+  lives in the corner of your bar. One switch turns it on or off.
 
-Pure Python 3.11+, stdlib only, no network calls, about 18 ms per refresh.
+Pure Python 3.11+, standard library only (the kitty pet picture uses pycairo).
 
 ## Install
 
 ```sh
 git clone https://github.com/astrosteveo/claude-statusline ~/Projects/claude-statusline
 cd ~/Projects/claude-statusline
-./install.sh
+./install.sh            # add --quest to switch Claude Quest on too
 ```
 
-That writes a small shim into `~/.claude/`, seeds a config at
-`~/.config/claude-statusline/config.toml`, and patches `statusLine` into
-`~/.claude/settings.json`, backing up anything it replaces. Start a new
-session or run `/statusline` to see it. `./install.sh --uninstall` puts your
-previous status line back.
+That writes a small shim to `~/.claude/statusline.py`, creates
+`~/.config/claude-statusline/config.toml` with a look your terminal can draw,
+and points `statusLine` in `~/.claude/settings.json` at it, backing up
+anything it replaces. The bar appears on Claude Code's next refresh.
+`./install.sh --uninstall` puts your previous status line back.
 
-### As a plugin
+As a plugin, the `design` skill lets Claude restyle the bar for you:
 
 ```
 /plugin marketplace add astrosteveo/claude-statusline
 /plugin install claude-statusline@claude-statusline
+/claude-statusline:design one line, powerline, catppuccin
 ```
 
-Then ask for a bar:
-
-```
-/claude-statusline:design one line, bars on the right, muted colours
-```
-
-The skill runs `install.sh` for you if the status line is not wired up yet,
-writes the config, validates it, previews it at your terminal's width and at
-narrower ones, and shows you what you will see before you see it. It knows
-the host's constraints (see
-[constraints.md](skills/design/reference/constraints.md)) so it will tell you
-when something is not possible rather than produce a bar that clips.
-
-### Manual install
-
-Point `~/.claude/settings.json` at the script yourself:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "python3 ~/.claude/statusline.py",
-    "padding": 0,
-    "refreshInterval": 1
-  }
-}
-```
-
-`padding: 0` matters; the layout does its own right-edge accounting.
-
-## Upgrading from 1.x
-
-The `[features]` table is no longer read. Everything it switched is now an
-option on the segment it belongs to, or a matter of which segments you place.
-The old file still renders (as the classic layout) and `doctor` lists each
-legacy key with its replacement. To rewrite it:
+## Make it yours
 
 ```sh
-python3 ~/.claude/statusline.py migrate ~/.config/claude-statusline/config.toml --write
+python3 ~/.claude/statusline.py configure      # or `claude-statusline configure`, or no arguments in a terminal
 ```
 
-It backs the file up and prints every mapping it applied.
+The configurator shows your bar at the top, drawn with a sample (or the last
+real payload it received), and changes it as you move:
 
-## The layout
+| page | what you change |
+|------|-----------------|
+| Look | theme, style and icons; the configurator itself wears the theme you are on |
+| Layout | presets, and every line: add, remove, reorder segments, move them between lines and sides |
+| Segments | each segment's options, format, icon, colour and priority |
+| Bars | bar style, width, fill and track, with sample bars |
+| Quest | Claude Quest on or off, where its line goes, the pet picture |
+| More | colour depth, margins, thresholds, git, the heartbeat tick, clock, directory style |
 
-Everything lives in `~/.config/claude-statusline/config.toml` (or
-`~/.claude/statusline.toml`, or wherever `$CLAUDE_STATUSLINE_CONFIG` points).
-Every key is optional and merges over the defaults, so this is a complete
-config:
+`s` saves (with a backup of your old file); the bar picks it up within a
+second. From a shell, or for scripts:
 
-```toml
-preset = "dashboard"
-
-[segment.heartbeat]
-frames = "◐◓◑◒"
+```sh
+statusline.py set theme catppuccin
+statusline.py set style powerline
+statusline.py set segment.dir.mode base
+statusline.py themes          # every theme drawn with your own layout (also: styles, icons, bars)
+statusline.py preview --width 80,120,160
 ```
 
-A **preset** supplies the lines: `classic` (two lines, the default),
-`minimal` (one line) or `dashboard` (three lines, bars on the left).
-`statusline.py presets` shows them. Declare your own with `[[line]]` tables,
-each with a `left` group that flows from the left edge and a `right` group
-pushed against the right edge:
+## The config
+
+`~/.config/claude-statusline/config.toml`. Every key is optional:
 
 ```toml
+theme = "midnight"      # colours
+style = "capsules"      # minimal, classic, dots, chips, capsules, pills, powerline, slant
+icons = "nerd"          # nerd, unicode, emoji, none
+preset = "classic"      # classic, compact, dashboard, focus, minimal
+
+[[line]]                # your own lines replace the preset's
+left = ["model", "dir", "git", "pr", "cost"]
+
 [[line]]
-left = ["model", "dir", "git", "pr"]
-right = ["session", "heartbeat"]
-gap = 1                       # minimum columns between the groups
+left = ["context"]
+right = ["limit_5h", "limit_7d"]
 
-[[line]]
-left = ["context", "limit_5h", "limit_7d"]
-```
-
-A **segment** is tuned with a `[segment.<name>]` table. Every segment takes
-`format` and `priority`; the rest are listed by `statusline.py segments
-<name>`. A table with `type` names an instance, so the same segment can appear
-twice:
-
-```toml
 [segment.dir]
-depth = 2
+mode = "base"
 
-[segment.greeting]
-type = "text"
-text = "hello"
-format = "<gold>{text}</gold>"
+[bar]
+style = "slim"
+fill = "gradient"
 ```
 
-Full schema: [schema.md](skills/design/reference/schema.md). Whole layouts to
-copy: [examples.md](skills/design/reference/examples.md).
+**Styles.** `minimal`, `classic` and `dots` are coloured text. `chips` sets
+each segment on a soft surface with a coloured icon block and works in any
+font; `capsules` is the same with rounded ends, `pills` makes each segment a
+rounded pill of its own colour, and `powerline` and `slant` join coloured
+segments with arrows or slants. Those four need a Nerd Font, or a terminal
+that bundles the symbols: kitty, WezTerm and Ghostty do, so `auto` picks
+capsules there and chips elsewhere.
 
-### Segments
+**Themes.** claude, claude-light, midnight, catppuccin, catppuccin-latte,
+tokyo-night, nord, dracula, gruvbox, rose-pine, kanagawa, everforest,
+one-dark, solarized-dark, solarized-light, synthwave, mono, `terminal` (your
+terminal's own 16 colours) and `classic` (the 2.x palette). Override any
+colour in `[colors]`.
+
+**Segments.**
 
 | segment | shows |
 |---------|-------|
-| `model` | model name, effort level, `⚡` in fast mode |
-| `dir` | working directory, compacted |
-| `git` | branch, `↑↓` ahead/behind, `∅` no upstream, `+staged ~dirty ?untracked !conflicts ⚑stashes`, `⏱` since the last commit once a dirty tree goes stale |
-| `pr` | pull or merge request number, review state, checks |
-| `worktree` | worktree name and branch |
-| `context` | context-window bar, percentage, tokens |
-| `limit_5h`, `limit_7d`, `limit_7d_model`, `limit_spend` | rate-limit bars with burn-rate projection (`⇢103%` means "at this pace you will exhaust the window") and reset countdown |
-| `cost`, `duration`, `diff` | dollars, wall time, lines changed, together or apart |
-| `cache` | prompt-cache warning, only when it is costing money |
-| `env`, `host` | virtualenv, hostname over SSH or in a container |
-| `session`, `output_style`, `version`, `agent`, `vim` | what the host says about the session |
-| `text`, `clock` | a label; the time |
-| `heartbeat` | a tick that proves the bar is still refreshing |
+| `model` | model, effort, fast mode |
+| `dir` | working directory, abbreviated (fish, compact, full, base or project-relative) |
+| `git` | branch, ahead/behind, staged/modified/untracked, conflicts, stashes, rebase/merge state, a nudge when a dirty tree goes stale |
+| `pr`, `worktree` | the pull request and its review state; the worktree |
+| `context` | context window: bar, percentage, tokens |
+| `limit_5h`, `limit_7d`, `limit_7d_model`, `limit_spend` | rate-limit windows with a pace projection (`→94%`: where you will be at the reset) and the reset countdown |
+| `cost`, `duration`, `diff`, `burn`, `tokens` | spend, wall time, lines changed, $/hour, tokens in and out |
+| `cache` | the prompt cache, only while it is costing you |
+| `env`, `host`, `session`, `agent`, `vim`, `output_style`, `version`, `clock` | the rest of what the host knows |
+| `text` | your own label; place several with `type = "text"` |
+| `heartbeat` | a tick that moves while the bar refreshes (off unless placed: a debugging aid) |
+| `quest`, `quest_boss`, `quest_daily`, `quest_buffs`, `quest_event`, `quest_streak`, `quest_gold`, `quest_pet` | Claude Quest |
 
-The complete list, with every option, field and colour, is
-[catalog.md](skills/design/reference/catalog.md), generated from the code.
+`statusline.py segments <name>` lists a segment's options, fields and colours;
+[catalog.md](skills/design/reference/catalog.md) has all of them, and
+[schema.md](skills/design/reference/schema.md) the format language
+(`{field}`, `[optional]`, `<colour>`, `<bold>`, `<link>`).
 
-The projection has two modes. `pace_mode = "average"` (the default) divides
-usage so far by the fraction of the window gone; it is stateless and drifts
-down only slowly after you ease off. `pace_mode = "recent"` measures the
-rate over the last `pace_lookback` of the window (a tenth, so 30 minutes of
-a 5h window) from a small history kept in the cache dir, so it follows a
-change of pace within minutes. Until that much history exists it shows the
-average.
+**How a line fits.** When a line is too wide, every segment on it gives up
+detail together (the reset clock, then the pace and token counts, then bars
+at half width, then no bars) and only then does the lowest-priority segment
+drop. Give what you care about a higher `priority`.
 
-### Templates
-
-A segment's `format` is text with `{field}` placeholders, `[optional groups]`
-that vanish when a field inside is empty, `<colour>…</colour>` spans naming a
-key of `[colors]`, and `<link>…</link>` for an OSC-8 hyperlink:
-
-```toml
-[segment.model]
-format = "<model>{name}</model><dim>[ · {effort}]</dim>"
-
-[segment.limit_5h]
-format = "<gray>5h</gray> {bar}[ <dim>{reset}</dim>]"    # bar and countdown, no percentage
-```
-
-### How a line fits
-
-The engine measures every line against the usable width. When a line is too
-wide, every segment on it steps down one detail level together: the reset
-clock goes, then the pace projection, then bars shrink to half width, then
-bars disappear. Only when the leanest rendering still overflows does the
-lowest-priority segment drop, after which the richest level that fits is
-chosen again. Bars on one line therefore always share a width, and the thing
-you care about survives if you give it a higher `priority`.
-
-`statusline.py preview --width 80,120,160` shows the layout at each width
-and annotates every line with its level and anything dropped.
-
-### The heartbeat
-
-Each refresh is a separate process with no memory of the previous one, so
-the tick's frame is derived from the wall clock rather than a counter. That is
-what makes it trustworthy: a status line that has stopped being invoked
-freezes on whatever frame it last drew instead of continuing to animate.
-Motion is evidence, not decoration. Leave `heartbeat` out of the line to turn
-it off, or pick different frames:
-
-```toml
-[segment.heartbeat]
-frames = "◐◓◑◒"    # or "▘▝▗▖", "▁▂▃▄▅▆▇▆▅▄▃▂", "⠁⠂⠄⡀⢀⠠⠐⠈"
-period = 1.0       # seconds per frame; match refreshInterval
-```
-
-### Bars
-
-Bars carry sub-cell resolution, so a 2% window does not render identically to
-an empty one. The default width of 13 is chosen, not taste: the host reports
-whole-number percentages, so there are 101 possible inputs, and 13 cells at 8
-sub-steps per cell is the narrowest bar that renders every one of them
-distinctly.
-
-Three choices are independent: the **style** (glyph set), the **fill** (how
-the filled cells are coloured) and the **track** (the colour of the empty
-cells). `python3 statusline.py bars` draws every style side by side.
-
-```toml
-[bar]
-style = "shade"          # block · shade · thin · dots · pips · ascii
-fill = "gradient"        # level · gradient · a [colors] key · "cyan,purple"
-track = "dim"            # [colors] key for the empty cells
-cap_left = "▕"           # optional glyphs framing the bar
-cap_right = "▏"
-pulse = true             # past the red threshold, embolden on odd seconds
-
-[segment.context]
-style = "thin"           # any bar segment can pick its own style and fill
-fill = "cyan"
-```
-
-| style | fill on track | resolution |
-|-------|---------------|------------|
-| `block` | `█` on `█` | eighth of a cell (the default) |
-| `shade` | `█` on `░` | shaded boundary cell |
-| `thin` | `━` on `─` | half a cell |
-| `dots` | `●` on `○` | half a cell |
-| `pips` | `▰` on `▱` | whole cells |
-| `ascii` | `#` on `-` in `[ ]` | whole cells |
-
-`full`, `empty` and the caps override a style's glyphs when set; every glyph
-must be one cell wide. `partial_style = "auto"` picks a boundary-cell family
-that matches the track so a block bar never reads as notched. The heartbeat
-takes a named frame set too (`frames = "arc"`: dots, orbit, quadrants, arc,
-wave, pulse, bounce, line). See
-[statusline.example.toml](statusline.example.toml) for the annotated set.
-
-## Calibrating `right_margin`
-
-The host reserves some columns at the right edge before it truncates with an
-ellipsis, and the count is not discoverable from inside the script; Claude
-Code's fullscreen TUI takes about 4 beyond the `COLUMNS` it reports. If a line
-ends in `…`, or the right group stops short of the edge, calibrate:
+## Claude Quest
 
 ```sh
-python3 ~/.claude/statusline.py ruler
+statusline.py quest enable      # hooks, the /quest command, the quest line
+statusline.py quest disable     # all of it off again; your save is kept
 ```
 
-Temporarily point `statusLine.command` at that and look at the second row,
-which counts *down* to the right edge:
+Every tool Claude uses earns XP (your class is the school of tools you use
+most), commits and pushes pay gold, loot drops as replies land, and a failing
+test, build or lint run summons a boss with one HP per failure; fix it to win.
+Three daily quests and a weekly one, a shop that restocks every day, a forge,
+gear in five slots with set bonuses and titles, streaks, achievements, and a
+pet that evolves at levels 5, 15, 30 and 50.
 
-- The last digit you can see is how many columns are being clipped. Add it to
-  `layout.right_margin`.
-- If the row ends in `0` with no gap, `right_margin` is already correct.
-- If there is blank space after the `0`, reduce `right_margin` by that much.
+On the bar: your level, title and XP; today's quests; the boss's hearts; live
+buffs; news of the latest loot or level-up; your streak and gold; and the pet.
+In kitty the pet is an animated picture at the right edge, wearing your gear,
+running while tools fire, fighting bosses, celebrating loot and dozing when
+you step away; elsewhere it is a little text sprite.
 
-Then put `statusLine.command` back.
-
-Glyph width is the other cause of clipping. Some fonts render `⏱`, `⬢`, `⚑` or
-`⎇` two cells wide even though Unicode calls them narrow, which pushes the row
-over by one column each. List the offenders and the layout will account for
-them:
-
-```toml
-[layout]
-wide_glyphs = ["⏱", "⬢"]
-```
+Play with `/quest` inside Claude Code or `claude-quest` in a terminal: `sheet`,
+`bag`, `equip`, `use`, `sell`, `forge`, `shop`, `buy`, `quests`, `boss`, `pet`,
+`titles`, `achievements`, `log`, `guide`.
 
 ## Performance
 
-The script runs on every refresh, once a second by default. Git state is
-cached in `$XDG_RUNTIME_DIR/claude-statusline/`, keyed on the mtimes of
-`index`, `HEAD` and the merge/rebase markers so a commit or checkout
-invalidates it immediately, with a TTL (default 2s) as the real freshness
-bound. A repo whose `git status` exceeds `slow_threshold` gets exponentially
-backed off, so a monorepo that takes 800 ms to stat is polled every 8 seconds
-instead of stalling every refresh. Set `git.enabled = false` to opt out.
+The bar runs once a second in every session, so it is built to be cheap:
 
-Typical cost on a small repo is ~18 ms, half of it interpreter startup.
-`install.sh` writes a shim rather than a symlink so CPython can cache the
-engine's bytecode; `--symlink` and `--copy` are there if you prefer.
+- the payload is parsed with the C JSON scanner directly (importing `json`
+  and `re` would cost more than drawing the whole bar);
+- the config is compiled once and cached; a refresh is a stat and a read;
+- segment modules load only when placed;
+- git runs in a detached background process that refreshes a cache, so a
+  slow repository slows nothing; the branch comes straight from `HEAD`.
 
-The catalog is closed on purpose. A user-supplied shell command in a segment
-would run once a second with no cache, and nothing about the bar's cost could
-be promised any more.
+`statusline.py bench` measures it on your machine.
 
 ## Troubleshooting
 
 ```sh
-python3 ~/.claude/statusline.py doctor      # config path, preset, lines, problems, width
-python3 ~/.claude/statusline.py validate    # every problem in the config, with hints
-python3 ~/.claude/statusline.py preview     # the layout at 100, 140 and 200 columns
-make test                                   # full suite
+statusline.py doctor      # what is installed, detected and in force
+statusline.py validate    # every problem in the config, with suggestions
+statusline.py preview     # the bar at several widths, with notes on what gave way
 ```
 
-**The bar is blank.** The script never exits non-zero and always prints
-something; a blank bar means Claude Code is not running it. Check
-`statusLine.command` in `settings.json`.
+**Boxes instead of icons.** Your font lacks Nerd Font symbols:
+`statusline.py set icons unicode` and `set style chips`.
 
-**A segment is missing.** Run `validate`. A misspelt segment or option is
-reported with a suggestion and skipped, so the rest of the bar still renders.
+**A line ends in `…` or the right side stops short.** Claude Code keeps a few
+columns at the right edge. Run `statusline.py ruler` as the status line
+command, read the last digit visible on the second row, and add it to
+`layout.right_margin`. A glyph your font draws double-width does the same;
+list it in `layout.wide_glyphs`.
 
-**It shows only model and directory.** That is the fallback: rendering raised.
-Reproduce with the real payload:
+**It only shows the model and directory.** That is the fallback: something
+raised. `CLAUDE_STATUSLINE_DEBUG=1 statusline.py render --sample busy` prints
+the traceback.
 
-```sh
-CLAUDE_STATUSLINE_DUMP=~/payload.json  # add to settings env, reload, then:
-CLAUDE_STATUSLINE_DEBUG=1 python3 ~/.claude/statusline.py < ~/payload.json
-```
-
-`CLAUDE_STATUSLINE_DEBUG=1` prints the traceback to stderr instead of
-swallowing it. Payload capture is off by default so the script is not writing
-to disk once a second.
-
-**Limits show `—`.** The host is not sending that `rate_limits` window. The
-parser handles snake_case, camelCase, list-shaped and nested variants; if
-yours differs, capture a payload as above and open an issue.
+**Upgrading from 2.x.** 2.x configs still render. `statusline.py migrate --write`
+tidies one (hand-placed avatar rows become automatic placement, bar glyph
+overrides become bar styles) and keeps a backup. The new default look is
+`auto`; `set style classic` and `set theme classic` bring back the 2.x look.
 
 ## Development
 
 ```sh
-make test       # unit suite + install.sh tests, stdlib unittest
-make lint       # byte-compile; example config and skill catalog in sync
-make catalog    # regenerate skills/design/reference/catalog.md from the code
+make test       # unit tests and installer tests
+make catalog    # regenerate the skill's segment catalog
+make gallery    # redraw docs/gallery.png (needs pycairo)
 ```
 
-The suite renders every preset and every example layout from the skill
-against every fixture at eight terminal widths and asserts no line ever
-exceeds its budget; that invariant is the whole point of the layout, so it is
-checked exhaustively rather than by eye. A golden file pins the classic
-layout's exact output so refactors cannot move it by a column, and
-`hostile.json` feeds deliberately wrong types through every field to keep the
-"never crash" guarantee honest.
+The suite renders every preset in every style, icon set and theme against
+sample, empty and deliberately malformed payloads at many widths and checks
+that no line ever exceeds its budget, drives the configurator both headless
+and in a real pty, and runs the installer against throwaway home directories.
 
 ## License
 

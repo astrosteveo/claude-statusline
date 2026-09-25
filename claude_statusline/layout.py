@@ -1,6 +1,8 @@
-"""The layout schema: lines of segments, resolved against a preset and validated.
+"""Compile a config into what the renderer needs: lines of resolved segments.
 
     preset = "classic"                 # supplies the lines when none are declared
+    theme  = "catppuccin"
+    style  = "capsules"
 
     [[line]]
     left  = ["model", "dir", "git"]    # flows from the left edge
@@ -9,97 +11,42 @@
 
     [segment.dir]                      # options for a catalog segment...
     depth = 2
-    priority = 95
 
     [segment.greeting]                 # ...or a named instance of one
     type = "text"
     text = "hello"
 
-Nothing here raises. Problems are collected with a path, and rendering skips
-whatever it could not understand, so a typo in the config never blanks the bar.
+Nothing here raises. Problems are collected with the path they concern, and
+whatever could not be understood is skipped, so a typo never blanks the bar.
+The result is plain data (dicts, lists, tuples) so it can be cached.
 """
 from __future__ import annotations
 
 import os
 
-from .config import CFG
-from .fit import Placed
-from .segments import REGISTRY
-from .template import Template, TemplateError
-from .util import deep_merge
+from . import segments as catalog
+from .bar import ALIASES as BAR_ALIASES, FILLS, STYLES as BAR_STYLES
+from .color import MODES, parse as parse_color
+from .config import DEFAULTS, ICONSETS, PKG, PLACEMENTS, RETIRED, STYLES, deep_merge
+from .template import TemplateError, compile_template, fields_of, known_tag, tags_of
+from .themes import THEMES, palette
 
-PRESET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "presets")
+PRESET_DIR = os.path.join(PKG, "presets")
+
 LEGACY_FEATURES = {
     "pace": "segment.limit_5h.pace / segment.limit_7d.pace",
-    "pace_min_elapsed": "segment.limit_5h.pace_min_elapsed",
     "reset_clock": "segment.limit_5h.clock / segment.limit_7d.clock",
     "last_commit": "segment.git.last_commit",
-    "last_commit_nudge_min": "segment.git.nudge_min",
     "context_tokens": "segment.context.tokens",
-    "context_size": "segment.context.size",
-    "prompt_cache": "leave `cache` out of the line to hide it",
-    "prompt_cache_min_ratio": "segment.cache.min_ratio",
-    "model_window": "leave `limit_7d_model` out of the line to hide it",
-    "repo_links": "segment.git.links / segment.pr.links",
-    "fast_mode": "segment.model.fast",
     "heartbeat": "leave `heartbeat` out of the line to hide it",
-    "heartbeat_color": "segment.heartbeat.color",
-    "heartbeat_period": "segment.heartbeat.period",
 }
 
-
-class Problem:
-    __slots__ = ("level", "path", "message")
-
-    def __init__(self, level, path, message):
-        self.level = level        # "error" | "warning"
-        self.path = path
-        self.message = message
-
-    def __str__(self):
-        return f"{self.level}: {self.path}: {self.message}"
+QUEST_LINE = {"left": ["quest", "quest_daily", "quest_boss", "quest_buffs", "quest_event"],
+              "right": ["quest_pet", "quest_streak", "quest_gold"]}
 
 
-class SegmentSpec:
-    __slots__ = ("name", "type", "segment", "opts")
-
-    def __init__(self, name, type_, segment, opts):
-        self.name = name          # the name used in the line
-        self.type = type_         # catalog key
-        self.segment = segment    # Segment instance from the catalog
-        self.opts = opts          # fully resolved options
-
-    def place(self, ctx) -> Placed:
-        seg, opts = self.segment, self.opts
-        return Placed(self.name, opts["priority"],
-                      lambda level: seg.render(ctx, opts, level))
-
-
-class LineSpec:
-    __slots__ = ("left", "right", "gap")
-
-    def __init__(self, left, right, gap):
-        self.left = left
-        self.right = right
-        self.gap = gap
-
-
-class Layout:
-    def __init__(self, lines, problems, preset):
-        self.lines = lines
-        self.problems = problems
-        self.preset = preset
-
-    @property
-    def errors(self):
-        return [p for p in self.problems if p.level == "error"]
-
-    @property
-    def warnings(self):
-        return [p for p in self.problems if p.level == "warning"]
-
-    def segment_names(self):
-        return [s.name for line in self.lines for s in line.left + line.right]
+def problem(level, where, message):
+    return (level, where, message)
 
 
 def list_presets():
@@ -110,90 +57,27 @@ def list_presets():
 
 
 def load_preset(name):
-    """The preset's raw tables, or None."""
-    if not name or not isinstance(name, str) or "/" in name or name.startswith("."):
+    if not isinstance(name, str) or not name or "/" in name or name.startswith("."):
         return None
-    path = os.path.join(PRESET_DIR, f"{name}.toml")
     try:
         import tomllib
-        with open(path, "rb") as fh:
+        with open(os.path.join(PRESET_DIR, f"{name}.toml"), "rb") as fh:
             return tomllib.load(fh)
     except Exception:
         return None
 
 
-def _coerce(value, opt, path, problems):
-    """Type-check one option value; return the value to use."""
-    want = opt.type
-    if want is bool:
-        if isinstance(value, bool):
-            return value
-    elif want is int:
-        if isinstance(value, int) and not isinstance(value, bool):
-            return value
-        if isinstance(value, float) and value.is_integer():
-            return int(value)
-    elif want is float:
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return float(value)
-    elif want is str:
-        if isinstance(value, str):
-            return value
-    problems.append(Problem("error", path,
-                            f"expected {want.__name__}, got {type(value).__name__} {value!r}"))
-    return opt.default
+def preset_summary(name) -> str:
+    try:
+        with open(os.path.join(PRESET_DIR, f"{name}.toml")) as fh:
+            return fh.readline().lstrip("# ").strip()
+    except OSError:
+        return ""
 
 
-def _resolve_segment(name, tables, problems, seen, colors=None):
-    """Turn a name from a line into a SegmentSpec, or None."""
-    table = tables.get(name)
-    if not isinstance(table, dict):
-        table = {}
-        if name in tables:
-            problems.append(Problem("error", f"segment.{name}", "must be a table"))
-    type_ = table.get("type", name)
-    seg = REGISTRY.get(type_) if isinstance(type_, str) else None
-    if seg is None:
-        hint = _closest(str(type_), REGISTRY)
-        where = f"segment.{name}.type" if "type" in table else f"line.{name}"
-        problems.append(Problem("error", where,
-                                f"unknown segment {type_!r}" + (f" (did you mean {hint!r}?)" if hint else "")))
-        return None
-    if type_ != name and name in REGISTRY and name not in seen:
-        problems.append(Problem("warning", f"segment.{name}",
-                                f"named after catalog segment {name!r} but has type {type_!r}"))
-    schema = seg.all_options()
-    opts = {key: opt.default for key, opt in schema.items()}
-    for key, value in table.items():
-        if key == "type":
-            continue
-        if key not in schema:
-            hint = _closest(key, schema)
-            problems.append(Problem("error", f"segment.{name}.{key}",
-                                    f"unknown option" + (f" (did you mean {hint!r}?)" if hint else "")))
-            continue
-        opts[key] = _coerce(value, schema[key], f"segment.{name}.{key}", problems)
-    for key in ("format", "missing"):
-        if key in opts and isinstance(opts[key], str) and opts[key]:
-            try:
-                tpl = Template(opts[key])
-            except TemplateError as exc:
-                problems.append(Problem("error", f"segment.{name}.{key}", str(exc)))
-                opts[key] = schema[key].default
-                continue
-            for field in sorted(tpl.fields - set(seg.fields) - {"url"}):
-                problems.append(Problem("warning", f"segment.{name}.{key}",
-                                        f"{{{field}}} is not a field of {type_!r}"))
-            known = set(colors if colors is not None else CFG["colors"]) | set(seg.colors)
-            for color in sorted(tpl.colors - known):
-                problems.append(Problem("warning", f"segment.{name}.{key}",
-                                        f"<{color}> is not a colour"))
-    seen.add(name)
-    return SegmentSpec(name, type_, seg, opts)
-
-
-def _closest(word, candidates):
-    """Cheap did-you-mean: shared prefix or one edit away."""
+def closest(word, candidates):
+    """Cheap did-you-mean: a shared prefix, or one edit away."""
+    word = str(word)
     best, score = None, 0
     for cand in candidates:
         common = os.path.commonprefix([word, cand])
@@ -205,76 +89,287 @@ def _closest(word, candidates):
     return best
 
 
-def build_layout(cfg=None) -> Layout:
-    cfg = CFG if cfg is None else cfg
-    problems = []
+def _hint(word, candidates):
+    h = closest(word, candidates)
+    return f" (did you mean {h!r}?)" if h else ""
 
-    preset_name = cfg.get("preset", "classic")
+
+def coerce(value, opt, where, problems):
+    """Type-check one option value; returns the value to use."""
+    want = opt.type
+    ok = None
+    if want is bool and isinstance(value, bool):
+        ok = value
+    elif want is int and isinstance(value, int) and not isinstance(value, bool):
+        ok = value
+    elif want is int and isinstance(value, float) and value.is_integer():
+        ok = int(value)
+    elif want is float and isinstance(value, (int, float)) and not isinstance(value, bool):
+        ok = float(value)
+    elif want is str and isinstance(value, str):
+        ok = value
+    if ok is None:
+        problems.append(problem("error", where, f"expected {want.__name__}, got {type(value).__name__} {value!r}"))
+        return opt.default
+    if opt.choices and ok not in opt.choices:
+        problems.append(problem("error", where, f"{ok!r} is not one of {', '.join(map(str, opt.choices))}"
+                                + _hint(ok, opt.choices)))
+        return opt.default
+    return ok
+
+
+def resolve_segment(name, tables, problems, pal, seen, where_line):
+    """A name placed on a line -> a compiled spec dict, or None."""
+    table = tables.get(name)
+    if table is not None and not isinstance(table, dict):
+        problems.append(problem("error", f"segment.{name}", "must be a table"))
+        table = None
+    table = table or {}
+    type_ = table.get("type", name)
+    seg = catalog.get(type_) if isinstance(type_, str) else None
+    if seg is None:
+        where = f"segment.{name}.type" if "type" in table else where_line
+        problems.append(problem("error", where, f"unknown segment {type_!r}"
+                                + _hint(type_, catalog.CATALOG)))
+        return None
+    if type_ != name and name in catalog.CATALOG and name not in seen:
+        problems.append(problem("warning", f"segment.{name}",
+                                f"named after the {name!r} segment but has type {type_!r}"))
+    schema = seg.all_options()
+    opts = {key: o.default for key, o in schema.items()}
+    for key, value in table.items():
+        if key == "type":
+            continue
+        if key not in schema:
+            problems.append(problem("error", f"segment.{name}.{key}", "unknown option" + _hint(key, schema)))
+            continue
+        opts[key] = coerce(value, schema[key], f"segment.{name}.{key}", problems)
+    colors = set(pal) | set(seg.colors_doc)
+    trees = {}
+    for key in ("format", "missing"):
+        src = opts.get(key)
+        if not isinstance(src, str) or (key == "missing" and not src):
+            continue
+        try:
+            tree = compile_template(src)
+        except TemplateError as exc:
+            problems.append(problem("error", f"segment.{name}.{key}", str(exc)))
+            src = schema[key].default
+            tree = compile_template(src) if src else ()
+        for field in sorted(fields_of(tree) - set(seg.fields_doc) - {"url", "icon", "glyph"}):
+            problems.append(problem("warning", f"segment.{name}.{key}", f"{{{field}}} is not a field of {type_!r}"))
+        for tag in sorted(tags_of(tree)):
+            if tag != "link" and not known_tag(tag, colors):
+                problems.append(problem("warning", f"segment.{name}.{key}", f"<{tag}> is not a colour"))
+        trees[key] = tree
+    tone = opts.get("color") or seg.tone
+    if opts.get("color") and not (opts["color"] in pal or parse_color(opts["color"])):
+        problems.append(problem("error", f"segment.{name}.color", f"unknown colour {opts['color']!r}"))
+        tone = seg.tone
+    # Bar options every bar segment shares.
+    for key in ("style", "fill"):
+        val = opts.get(key)
+        if key in seg.options and isinstance(val, str) and val:
+            if key == "style" and val not in BAR_STYLES and val not in BAR_ALIASES:
+                problems.append(problem("error", f"segment.{name}.style",
+                                        f"unknown bar style {val!r}" + _hint(val, BAR_STYLES)))
+            if key == "fill":
+                for m in check_fill(val, pal):
+                    problems.append(problem("error", f"segment.{name}.fill", m))
+    seen.add(name)
+    tpl = trees.get("format", ())
+    own_icon = bool(fields_of(tpl) & {"icon", "glyph"})
+    return {"name": name, "type": type_, "mod": catalog.CATALOG[type_],
+            "prio": opts.get("priority") if opts.get("priority") is not None else seg.priority,
+            "opts": {k: v for k, v in opts.items() if k not in ("format", "missing")},
+            "tpl": tpl, "missing": trees.get("missing"), "icon": opts.get("icon"),
+            "tone": tone, "own_icon": own_icon, "bare": seg.bare, "quest": seg.quest}
+
+
+def check_fill(fill, pal):
+    if not isinstance(fill, str) or not fill:
+        return ["fill must be a string"]
+    if fill in FILLS:
+        return []
+    bad = [k for k in (x.strip() for x in fill.split(",")) if k and k not in pal and parse_color(k) is None]
+    if bad:
+        return [f"unknown colour(s) {', '.join(map(repr, bad))}; use level, gradient, tone, "
+                f"theme roles or #hex"]
+    return []
+
+
+def _check_section(cfg_raw, problems):
+    known = set(DEFAULTS) | {"features", "version"}
+    for section, body in cfg_raw.items():
+        if section not in known:
+            problems.append(problem("error", section, "unknown setting" + _hint(section, DEFAULTS)))
+            continue
+        default = DEFAULTS.get(section)
+        if isinstance(default, dict) and not isinstance(body, dict):
+            problems.append(problem("error", section, "must be a table"))
+            continue
+        if section in ("layout", "bar", "thresholds", "git", "quest"):
+            for key, val in body.items():
+                where = f"{section}.{key}"
+                if where in RETIRED:
+                    problems.append(problem("warning", where, f"no longer used: {RETIRED[where]}"))
+                elif key not in default:
+                    problems.append(problem("error", where, "unknown key" + _hint(key, default)))
+                elif where == "quest.avatar":
+                    continue
+                elif default[key] is not None and not isinstance(val, type(default[key])) and not (
+                        isinstance(default[key], float) and isinstance(val, int) and not isinstance(val, bool)):
+                    problems.append(problem("error", where, f"expected {type(default[key]).__name__}, "
+                                                            f"got {type(val).__name__} {val!r}"))
+    feats = cfg_raw.get("features")
+    if isinstance(feats, dict):
+        for key in feats:
+            problems.append(problem("warning", f"features.{key}",
+                                    f"no longer read; use {LEGACY_FEATURES.get(key, 'the segment options')} "
+                                    f"(`statusline migrate` rewrites the file)"))
+
+
+def _choice(cfg, key, choices, problems, default):
+    val = cfg.get(key, default)
+    if val not in choices:
+        problems.append(problem("error", key, f"unknown {key} {val!r}; one of {', '.join(choices)}"
+                                + _hint(val, choices)))
+        return default
+    return val
+
+
+def compile_config(raw: dict, path=None, read_error=None) -> dict:
+    problems = []
+    if read_error:
+        problems.append(problem("error", "", read_error))
+    raw = raw if isinstance(raw, dict) else {}
+    _check_section(raw, problems)
+    safe = {k: v for k, v in raw.items() if not (isinstance(DEFAULTS.get(k), dict) and not isinstance(v, dict))}
+    cfg = deep_merge(DEFAULTS, safe)
+
+    theme = cfg.get("theme")
+    if theme not in THEMES:
+        problems.append(problem("error", "theme", f"unknown theme {theme!r}" + _hint(theme, THEMES)))
+        theme = DEFAULTS["theme"]
+    colors = cfg.get("colors") if isinstance(cfg.get("colors"), dict) else {}
+    for key, val in colors.items():
+        if key not in ("reset", "bold") and parse_color(val) is None:
+            problems.append(problem("error", f"colors.{key}", f"not a colour: {val!r} (use #rrggbb, an "
+                                                             f"xterm index, or 38;5;N)"))
+    pal = palette(theme, colors)
+    style = _choice(cfg, "style", STYLES, problems, "auto")
+    icons = _choice(cfg, "icons", ICONSETS, problems, "auto")
+    color = _choice(cfg, "color", MODES, problems, "auto")
+
+    bar = dict(cfg["bar"])
+    if bar.get("style") not in BAR_STYLES and bar.get("style") not in BAR_ALIASES:
+        problems.append(problem("error", "bar.style", f"unknown bar style {bar.get('style')!r}; one of "
+                                                      f"{', '.join(BAR_STYLES)}"))
+        bar["style"] = "smooth"
+    for m in check_fill(bar.get("fill"), pal):
+        problems.append(problem("error", "bar.fill", m))
+        bar["fill"] = "level"
+    if bar.get("track") not in pal and parse_color(bar.get("track")) is None:
+        problems.append(problem("error", "bar.track", f"unknown colour {bar.get('track')!r}"))
+        bar["track"] = "subtle"
+    for key in ("cap_left", "cap_right"):
+        if not isinstance(bar.get(key), str) or len(bar.get(key)) > 1:
+            problems.append(problem("error", f"bar.{key}", "must be a single glyph or empty"))
+            bar[key] = ""
+
+    preset_name = cfg.get("preset")
     preset = load_preset(preset_name)
     if preset is None:
-        problems.append(Problem("error", "preset",
-                                f"unknown preset {preset_name!r}; using 'classic'"))
-        preset_name = "classic"
-        preset = load_preset("classic") or {}
+        problems.append(problem("error", "preset", f"unknown preset {preset_name!r}; using 'classic'"
+                                + _hint(preset_name, list_presets())))
+        preset_name, preset = "classic", load_preset("classic") or {}
 
-    lines_raw = cfg.get("line")
+    lines_raw = raw.get("line", [])
     if not isinstance(lines_raw, list):
-        problems.append(Problem("error", "line", "must be an array of tables ([[line]])"))
+        problems.append(problem("error", "line", "must be an array of tables ([[line]])"))
         lines_raw = []
+    declared = bool(lines_raw)
     if not lines_raw:
         lines_raw = preset.get("line") or []
+    tables = deep_merge(preset.get("segment") or {}, cfg.get("segment") if isinstance(cfg.get("segment"), dict) else {})
 
-    tables = deep_merge(preset.get("segment") or {}, cfg.get("segment") or {})
-    if not isinstance(cfg.get("segment", {}), dict):
-        problems.append(Problem("error", "segment", "must be a table"))
-        tables = preset.get("segment") or {}
+    quest = dict(cfg["quest"])
+    if quest.get("placement") not in PLACEMENTS:
+        problems.append(problem("error", "quest.placement", f"one of {', '.join(PLACEMENTS)}"))
+        quest["placement"] = "line"
+    if quest.get("avatar") not in ("auto", "on", "off", True, False):
+        problems.append(problem("error", "quest.avatar", "one of auto, on, off"))
+        quest["avatar"] = "auto"
 
-    features = cfg.get("features")
-    if isinstance(features, dict):
-        for key in features:
-            problems.append(Problem("warning", f"features.{key}",
-                                    f"no longer read; use {LEGACY_FEATURES.get(key, 'the segment options')}"))
+    lines_raw = [dict(ln) if isinstance(ln, dict) else ln for ln in lines_raw]
+    placed = {n for ln in lines_raw if isinstance(ln, dict) for side in ("left", "right")
+              for n in (ln.get(side) or []) if isinstance(n, str)}
+    placed_types = {(tables.get(n) or {}).get("type", n) if isinstance(tables.get(n), dict) else n for n in placed}
+    if quest.get("enabled"):
+        has_quest = any(t in catalog.CATALOG and catalog.CATALOG[t] == "quest" and t not in ("avatar",)
+                        for t in placed_types)
+        if quest["placement"] == "line" and not has_quest:
+            lines_raw.append({"left": list(QUEST_LINE["left"]), "right": list(QUEST_LINE["right"]), "_auto": True})
+        elif quest["placement"] == "inline" and not has_quest and lines_raw and isinstance(lines_raw[0], dict):
+            first = dict(lines_raw[0])
+            first["right"] = ["quest"] + list(first.get("right") or [])
+            lines_raw[0] = first
 
-    colors = cfg.get("colors") if isinstance(cfg.get("colors"), dict) else {}
     seen = set()
     lines = []
-    for idx, raw in enumerate(lines_raw):
-        path = f"line[{idx}]"
-        if not isinstance(raw, dict):
-            problems.append(Problem("error", path, "must be a table"))
+    for idx, ln in enumerate(lines_raw):
+        where = f"line[{idx}]"
+        if not isinstance(ln, dict):
+            problems.append(problem("error", where, "must be a table"))
             continue
-        for key in raw:
-            if key not in ("left", "right", "gap"):
-                problems.append(Problem("error", f"{path}.{key}", "unknown key (left, right, gap)"))
+        for key in ln:
+            if key not in ("left", "right", "gap", "_auto"):
+                problems.append(problem("error", f"{where}.{key}", "unknown key (left, right, gap)"))
         groups = []
         for side in ("left", "right"):
-            names = raw.get(side, [])
+            names = ln.get(side, [])
             if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
-                problems.append(Problem("error", f"{path}.{side}", "must be a list of segment names"))
+                problems.append(problem("error", f"{where}.{side}", "must be a list of segment names"))
                 names = []
             specs = []
-            for name in names:
-                spec = _resolve_segment(name, tables, problems, seen, colors)
+            for n in names:
+                spec = resolve_segment(n, tables, problems, pal, seen, f"{where}.{side}")
                 if spec is not None:
                     specs.append(spec)
             groups.append(specs)
-        gap = raw.get("gap", 2)
+        gap = ln.get("gap", cfg["layout"].get("gap", 2))
         if not isinstance(gap, int) or isinstance(gap, bool) or gap < 0:
-            problems.append(Problem("error", f"{path}.gap", "must be a non-negative integer"))
+            problems.append(problem("error", f"{where}.gap", "must be a non-negative integer"))
             gap = 2
         if groups[0] or groups[1]:
-            lines.append(LineSpec(groups[0], groups[1], gap))
+            lines.append({"left": groups[0], "right": groups[1], "gap": gap, "auto": bool(ln.get("_auto"))})
         else:
-            problems.append(Problem("warning", path, "empty line"))
+            problems.append(problem("warning", where, "empty line"))
+    if len(lines) > 4:
+        problems.append(problem("warning", "line", f"{len(lines)} lines; the bar takes that many rows "
+                                                   f"from the conversation"))
 
-    for name in list(tables):
-        if name not in seen and isinstance(tables[name], dict):
-            if name in REGISTRY or "type" in tables[name]:
-                # Still resolve it, so a typo in its options is reported too.
-                _resolve_segment(name, tables, problems, set(), colors)
-                problems.append(Problem("warning", f"segment.{name}",
-                                        "configured but not placed on any line"))
-            else:
-                problems.append(Problem("error", f"segment.{name}", "unknown segment"))
+    for n, table in tables.items():
+        if n in seen or not isinstance(table, dict):
+            continue
+        type_ = table.get("type", n)
+        if type_ in catalog.CATALOG:
+            resolve_segment(n, tables, problems, pal, set(), f"segment.{n}")
+            if n in (cfg.get("segment") or {}) and not (catalog.CATALOG.get(type_) == "quest" and not quest.get("enabled")):
+                problems.append(problem("warning", f"segment.{n}", "configured but not placed on any line"))
+        else:
+            problems.append(problem("error", f"segment.{n}", f"unknown segment{_hint(type_, catalog.CATALOG)}"))
 
-    return Layout(lines, problems, preset_name)
+    wide = cfg["layout"].get("wide_glyphs") or []
+    if not isinstance(wide, list):
+        problems.append(problem("error", "layout.wide_glyphs", "must be a list of glyphs"))
+        wide = []
+
+    return {
+        "path": path, "problems": problems, "preset": preset_name, "declared": declared,
+        "theme": theme, "style": style, "icons": icons, "color": color, "palette": pal,
+        "layout": dict(cfg["layout"], wide_glyphs=[g for g in wide if isinstance(g, str)]),
+        "bar": bar, "thresholds": dict(cfg["thresholds"]), "git": dict(cfg["git"]),
+        "glyphs": dict(cfg["glyphs"]) if isinstance(cfg.get("glyphs"), dict) else {},
+        "quest": quest, "lines": lines,
+    }

@@ -1,124 +1,167 @@
 """Model, directory, session and the small static segments."""
 from __future__ import annotations
 
-import re
-from datetime import datetime
-
-from ..config import CFG, GLYPHS
-from ..util import compact_path, dig, home_path
+from ..fit import LEAN, LESS, NARROW
+from ..util import dig, home_path, split_path
 from . import Opt, Segment, register
+
+
+
+def strip_qualifier(name: str) -> str:
+    """"Opus 5 (1M context)" -> "Opus 5"; the host folds the context size into the name."""
+    text = name.rstrip()
+    if text.endswith(")"):
+        start = text.rfind("(")
+        if start > 0 and "(" not in text[start + 1:-1] and ")" not in text[start + 1:-1]:
+            return text[:start].rstrip() or name
+    return name
 
 
 @register
 class Model(Segment):
     name = "model"
-    doc = "Model name, effort level, and the fast-mode flag."
+    doc = "The model, its effort level, and the fast-mode flag."
     priority = 100
-    format = "<model>{glyph} {name}</model><yellow>{fast}</yellow><dim>[ · {effort}]</dim>"
-    options = {"fast": Opt(bool, True, "Show the fast-mode glyph when fast mode is on.")}
-    fields = {"glyph": "the model glyph", "name": "display name or id",
-              "short": "the name without a trailing qualifier like (1M context)",
-              "fast": "fast-mode glyph, or empty", "effort": "effort level, 'think', or empty"}
+    tone = "model"
+    format = "<model><bold>{name}</bold></model>[ <yellow>{fast}</yellow>][<muted> · {effort}</muted>]"
+    options = {
+        "fast": Opt(bool, True, "Show the fast-mode mark when fast mode is on."),
+        "full_name": Opt(bool, False, "Keep the qualifier the host adds, e.g. (1M context)."),
+    }
+    fields_doc = {"name": "the model name (without the qualifier unless full_name)",
+                  "full": "the display name as the host sends it", "short": "the name without its qualifier",
+                  "id": "the model id", "fast": "the fast-mode mark, or empty",
+                  "effort": "effort level, 'think', or empty"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
         data = ctx.data
-        name = str(dig(data, "model", "display_name") or dig(data, "model", "id") or "claude")
-        # The host folds the context size into the display name: "Opus 5 (1M
-        # context)". {short} drops that so the space can go to something else.
-        short = re.sub(r"\s*\([^()]*\)\s*$", "", name) or name
-        fast = GLYPHS["fast"] if data.get("fast_mode") and opts["fast"] else ""
+        full = str(dig(data, "model", "display_name") or dig(data, "model", "id") or "Claude")
+        short = strip_qualifier(full)
         effort = dig(data, "effort", "level")
-        if effort:
-            effort = str(effort)
-        elif dig(data, "thinking", "enabled"):
-            effort = "think"
-        else:
-            effort = ""
-        return {"glyph": GLYPHS["model"], "name": name, "short": short, "fast": fast, "effort": effort}
+        effort = str(effort) if effort else ("think" if dig(data, "thinking", "enabled") else "")
+        return {"name": full if opts["full_name"] and level < LEAN else short,
+                "full": full, "short": short, "id": str(dig(data, "model", "id") or ""),
+                "fast": ctx.mark("fast") if data.get("fast_mode") and opts["fast"] else "",
+                "effort": effort if level < NARROW else ""}
 
 
 @register
 class Dir(Segment):
     name = "dir"
-    doc = "Working directory, compacted to its last few components."
+    doc = "The working directory: parents abbreviated, the folder you are in picked out."
     priority = 90
-    format = "<dir>{glyph} {path}</dir>"
-    options = {"depth": Opt(int, 3, "Trailing path components to keep.")}
-    fields = {"glyph": "the directory glyph", "path": "compacted path",
-              "full": "the whole path with ~ for home", "base": "last component only"}
+    tone = "dir"
+    format = "<muted>{parent}</muted><dir><bold>{base}</bold></dir>"
+    options = {
+        "mode": Opt(str, "fish", "fish (~/P/project), compact (…/a/b/project), full, base, or project "
+                                 "(relative to the project root)",
+                    choices=("fish", "compact", "full", "base", "project")),
+        "depth": Opt(int, 1, "Trailing components kept whole (fish, compact)."),
+    }
+    fields_doc = {"path": "the whole display path", "parent": "everything before the last component",
+                  "base": "the last component", "full": "the full path with ~ for home",
+                  "project": "the project's folder name"}
 
-    def fields_at(self, ctx, opts, level):
-        full = home_path(ctx.cwd)
-        return {"glyph": GLYPHS["dir"], "path": compact_path(ctx.cwd, max(1, opts["depth"])),
-                "full": full, "base": full.rstrip("/").rsplit("/", 1)[-1] or full}
+    def fields(self, ctx, opts, level):
+        cwd = ctx.cwd
+        mode = opts["mode"]
+        project_dir = dig(ctx.data, "workspace", "project_dir")
+        project = ""
+        if isinstance(project_dir, str) and project_dir:
+            project = project_dir.rstrip("/").rsplit("/", 1)[-1]
+        if mode == "project" and project and (cwd == project_dir or cwd.startswith(project_dir.rstrip("/") + "/")):
+            rel = cwd[len(project_dir.rstrip("/")):].strip("/")
+            parent, base = (project + "/" + rel.rsplit("/", 1)[0] + "/", rel.rsplit("/", 1)[-1]) \
+                if "/" in rel else ((project + "/", rel) if rel else ("", project))
+        else:
+            if mode == "project":
+                mode = "fish"
+            if level >= LEAN and mode in ("full", "compact"):
+                mode = "fish"
+            parent, base = split_path(cwd, max(1, opts["depth"]), mode, ctx.home)
+        if level >= NARROW:
+            parent = ""
+        return {"path": parent + base, "parent": parent, "base": base,
+                "full": home_path(cwd, ctx.home), "project": project}
 
 
 @register
 class Session(Segment):
     name = "session"
-    doc = "The session name, when one has been set."
+    doc = "The session name, once one is set (/rename)."
     priority = 40
-    format = "<gray>{name}</gray>"
-    fields = {"name": "session name"}
+    tone = "pink"
+    format = "<subtext>{name}</subtext>"
+    options = {"max": Opt(int, 32, "Longest name shown; longer ones end in …")}
+    fields_doc = {"name": "the session name"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
+        from ..width import clip
         name = ctx.data.get("session_name")
-        return {"name": str(name)} if name else None
+        if not name:
+            return None
+        cap = opts["max"] if level < LEAN else max(8, opts["max"] // 2)
+        return {"name": clip(str(name), max(4, cap))}
 
 
 @register
 class OutputStyle(Segment):
     name = "output_style"
-    doc = "The active output style, unless it is the default."
+    doc = "The output style, unless it is the default."
     priority = 30
-    format = "<dim>{style}</dim>"
-    fields = {"style": "output style name"}
+    tone = "purple"
+    format = "<muted>{style}</muted>"
+    fields_doc = {"style": "the output style's name"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
         style = dig(ctx.data, "output_style", "name")
-        return {"style": str(style)} if style and style != "default" else None
+        return {"style": str(style)} if style and str(style).lower() != "default" else None
 
 
 @register
-class Text(Segment):
+class TextSeg(Segment):
     name = "text"
-    doc = "A fixed label. Set `text`, and colour it in `format`."
+    doc = "Your own label. Set `text` (and colour it in `format`); several can be placed with `type`."
     priority = 10
-    format = "<dim>{text}</dim>"
+    tone = "subtext"
+    format = "<subtext>{text}</subtext>"
     options = {"text": Opt(str, "", "The text to show.")}
-    fields = {"text": "the configured text"}
+    fields_doc = {"text": "the configured text"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
         return {"text": opts["text"]} if opts["text"] else None
 
 
 @register
 class Clock(Segment):
     name = "clock"
-    doc = "Wall-clock time."
+    doc = "The time of day."
     priority = 20
-    format = "<dim>{time}</dim>"
-    options = {"strftime": Opt(str, "%H:%M", "strftime pattern for `time`.")}
-    fields = {"time": "formatted local time", "date": "ISO date"}
+    tone = "subtext"
+    format = "<subtext>{time}</subtext>"
+    options = {"strftime": Opt(str, "%H:%M", "strftime pattern for {time}.")}
+    fields_doc = {"time": "the formatted time", "date": "ISO date", "weekday": "Mon, Tue…"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
+        from datetime import datetime
         dt = datetime.fromtimestamp(ctx.now)
         try:
             text = dt.strftime(opts["strftime"])
         except Exception:
             text = dt.strftime("%H:%M")
-        return {"time": text, "date": dt.strftime("%Y-%m-%d")}
+        return {"time": text, "date": dt.strftime("%Y-%m-%d"), "weekday": dt.strftime("%a")}
 
 
 @register
 class Version(Segment):
     name = "version"
-    doc = "The Claude Code version the host reports."
+    doc = "The Claude Code version."
     priority = 15
-    format = "<dim>v{version}</dim>"
-    fields = {"version": "host version string"}
+    tone = "muted"
+    format = "<muted>v{version}</muted>"
+    fields_doc = {"version": "the version string"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
         v = ctx.data.get("version")
         return {"version": str(v)} if v else None
 
@@ -126,30 +169,37 @@ class Version(Segment):
 @register
 class Vim(Segment):
     name = "vim"
-    doc = "Vim mode, when vim keybindings are on. Pair with hideVimModeIndicator in settings."
+    doc = "The vim mode, when vim keybindings are on (pair with hideVimModeIndicator)."
     priority = 35
-    format = "<vimmode>-- {mode} --</vimmode>"
-    fields = {"mode": "NORMAL, INSERT, VISUAL or VISUAL LINE"}
-    colors = {"vimmode": "green in INSERT, yellow in VISUAL, gray otherwise"}
+    tone = "green"
+    format = "<vimmode><bold>{mode}</bold></vimmode>"
+    fields_doc = {"mode": "NORMAL, INSERT, VISUAL or VISUAL LINE"}
+    colors_doc = {"vimmode": "green in INSERT, yellow in VISUAL, blue in NORMAL"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
         mode = dig(ctx.data, "vim", "mode")
         return {"mode": str(mode)} if mode else None
 
-    def colors_at(self, ctx, opts, fields):
-        mode = fields["mode"]
-        tone = "green" if mode == "INSERT" else ("yellow" if mode.startswith("VISUAL") else "gray")
-        return {"vimmode": CFG["colors"][tone]}
+    def _role(self, f):
+        mode = f["mode"]
+        return "green" if mode == "INSERT" else ("yellow" if mode.startswith("VISUAL") else "blue")
+
+    def colors(self, ctx, opts, f):
+        return {"vimmode": self._role(f)}
+
+    def tone_at(self, ctx, opts, f):
+        return self._role(f)
 
 
 @register
 class Agent(Segment):
     name = "agent"
-    doc = "The agent name when Claude Code runs with --agent."
+    doc = "The agent, when Claude Code runs with --agent."
     priority = 38
-    format = "<purple>@{name}</purple>"
-    fields = {"name": "agent name"}
+    tone = "purple"
+    format = "<purple>{name}</purple>"
+    fields_doc = {"name": "the agent's name"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
         name = dig(ctx.data, "agent", "name")
         return {"name": str(name)} if name else None

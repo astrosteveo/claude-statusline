@@ -5,8 +5,8 @@
     {
       "name": "claude-statusline",
       "displayName": "Claude Statusline",
-      "description": "A status line engine for Claude Code: compose your own bar from a catalog of segments, and let Claude design it with you.",
-      "version": "2.1.0",
+      "description": "A fast, themeable status line for Claude Code: 19 themes, 8 styles, an interactive configurator, and Claude Quest.",
+      "version": "3.0.0",
       "source": {"source": "github", "repo": "astrosteveo/claude-statusline"}
     }
   ]

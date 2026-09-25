@@ -1,110 +1,178 @@
-"""Terminal cell-width accounting, including the glyphs fonts get wrong."""
+"""Terminal cell widths, measured the way Claude Code measures them.
+
+Claude Code draws the status line with Ink, which sizes text with the
+`string-width` package: East Asian Wide and Fullwidth characters (every
+emoji with emoji presentation among them) take two cells, combining marks
+and format characters take none, a text-style emoji followed by VS16 is
+promoted to two, and everything else takes one. Measuring identically is
+what keeps a right-aligned group exactly on the host's right edge.
+
+`WIDE` holds glyphs the user's font draws two cells wide although Unicode
+calls them narrow; the config fills it from `layout.wide_glyphs`.
+"""
 from __future__ import annotations
 
 import unicodedata
 
-from .config import WIDE
+WIDE: set = set()
 
-
-_ZERO_WIDTH = frozenset(
-    {0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2060, 0xFEFF}
-)
-
-# Codepoints with Emoji_Presentation=Yes render two cells even though their
-# East_Asian_Width is Neutral. Abridged to the ranges that actually occur in
-# terminal UI text.
-_EMOJI_WIDE = (
-    (0x231A, 0x231B), (0x23E9, 0x23EC), (0x23F0, 0x23F0), (0x23F3, 0x23F3),
-    (0x25FD, 0x25FE), (0x2614, 0x2615), (0x2648, 0x2653), (0x267F, 0x267F),
-    (0x2693, 0x2693), (0x26A1, 0x26A1), (0x26AA, 0x26AB), (0x26BD, 0x26BE),
-    (0x26C4, 0x26C5), (0x26CE, 0x26CE), (0x26D4, 0x26D4), (0x26EA, 0x26EA),
-    (0x26F2, 0x26F3), (0x26F5, 0x26F5), (0x26FA, 0x26FA), (0x26FD, 0x26FD),
-    (0x2705, 0x2705), (0x270A, 0x270B), (0x2728, 0x2728), (0x274C, 0x274C),
-    (0x274E, 0x274E), (0x2753, 0x2755), (0x2757, 0x2757), (0x2795, 0x2797),
-    (0x27B0, 0x27B0), (0x27BF, 0x27BF), (0x2B1B, 0x2B1C), (0x2B50, 0x2B50),
-    (0x2B55, 0x2B55), (0x1F004, 0x1F004), (0x1F0CF, 0x1F0CF),
-    (0x1F18E, 0x1F18E), (0x1F191, 0x1F19A), (0x1F1E6, 0x1F1FF),
-    (0x1F201, 0x1F202), (0x1F21A, 0x1F21A), (0x1F22F, 0x1F22F),
-    (0x1F232, 0x1F236), (0x1F238, 0x1F23A), (0x1F250, 0x1F251),
-    (0x1F300, 0x1F320), (0x1F32D, 0x1F335), (0x1F337, 0x1F37C),
-    (0x1F37E, 0x1F393), (0x1F3A0, 0x1F3CA), (0x1F3CF, 0x1F3D3),
-    (0x1F3E0, 0x1F3F0), (0x1F3F4, 0x1F3F4), (0x1F3F8, 0x1F43E),
-    (0x1F440, 0x1F440), (0x1F442, 0x1F4FC), (0x1F4FF, 0x1F53D),
-    (0x1F54B, 0x1F54E), (0x1F550, 0x1F567), (0x1F5A4, 0x1F5A4),
-    (0x1F5FB, 0x1F64F), (0x1F680, 0x1F6C5), (0x1F6CC, 0x1F6CC),
-    (0x1F6D0, 0x1F6D2), (0x1F6D5, 0x1F6D7), (0x1F6EB, 0x1F6EC),
-    (0x1F6F4, 0x1F6FC), (0x1F7E0, 0x1F7EB), (0x1F90C, 0x1F93A),
-    (0x1F93C, 0x1F945), (0x1F947, 0x1F978), (0x1F97A, 0x1F9CB),
-    (0x1F9CD, 0x1F9FF), (0x1FA70, 0x1FA74), (0x1FA78, 0x1FA7A),
-    (0x1FA80, 0x1FA86), (0x1FA90, 0x1FAA8), (0x1FAB0, 0x1FAB6),
-    (0x1FAC0, 0x1FAC2), (0x1FAD0, 0x1FAD6),
+# Emoji=Yes code points that are narrow by default and become a two-cell
+# emoji when followed by VS16 (U+FE0F). From Unicode 16 emoji-data.txt.
+_VS16_RANGES = (
+    (0x23, 0x23), (0x2A, 0x2A), (0x30, 0x39), (0xA9, 0xA9), (0xAE, 0xAE), (0x203C, 0x203C),
+    (0x2049, 0x2049), (0x2122, 0x2122), (0x2139, 0x2139), (0x2194, 0x2199), (0x21A9, 0x21AA),
+    (0x2328, 0x2328), (0x23CF, 0x23CF), (0x23ED, 0x23EF), (0x23F1, 0x23F2), (0x23F8, 0x23FA),
+    (0x24C2, 0x24C2), (0x25AA, 0x25AB), (0x25B6, 0x25B6), (0x25C0, 0x25C0), (0x25FB, 0x25FC),
+    (0x2600, 0x2604), (0x260E, 0x260E), (0x2611, 0x2611), (0x2618, 0x2618), (0x261D, 0x261D),
+    (0x2620, 0x2620), (0x2622, 0x2623), (0x2626, 0x2626), (0x262A, 0x262A), (0x262E, 0x262F),
+    (0x2638, 0x263A), (0x2640, 0x2640), (0x2642, 0x2642), (0x265F, 0x2660), (0x2663, 0x2663),
+    (0x2665, 0x2666), (0x2668, 0x2668), (0x267B, 0x267B), (0x267E, 0x267E), (0x2692, 0x2692),
+    (0x2694, 0x2697), (0x2699, 0x2699), (0x269B, 0x269C), (0x26A0, 0x26A0), (0x26A7, 0x26A7),
+    (0x26B0, 0x26B1), (0x26C8, 0x26C8), (0x26CF, 0x26CF), (0x26D1, 0x26D1), (0x26D3, 0x26D3),
+    (0x26E9, 0x26E9), (0x26F0, 0x26F1), (0x26F4, 0x26F4), (0x26F7, 0x26F9), (0x2702, 0x2702),
+    (0x2708, 0x2709), (0x270C, 0x270D), (0x270F, 0x270F), (0x2712, 0x2712), (0x2714, 0x2714),
+    (0x2716, 0x2716), (0x271D, 0x271D), (0x2721, 0x2721), (0x2733, 0x2734), (0x2744, 0x2744),
+    (0x2747, 0x2747), (0x2763, 0x2764), (0x27A1, 0x27A1), (0x2934, 0x2935), (0x2B05, 0x2B07),
+    (0x1F170, 0x1F171), (0x1F17E, 0x1F17F), (0x1F321, 0x1F321), (0x1F324, 0x1F32C),
+    (0x1F336, 0x1F336), (0x1F37D, 0x1F37D), (0x1F396, 0x1F397), (0x1F399, 0x1F39B),
+    (0x1F39E, 0x1F39F), (0x1F3CB, 0x1F3CE), (0x1F3D4, 0x1F3DF), (0x1F3F3, 0x1F3F3),
+    (0x1F3F5, 0x1F3F5), (0x1F3F7, 0x1F3F7), (0x1F43F, 0x1F43F), (0x1F441, 0x1F441),
+    (0x1F4FD, 0x1F4FD), (0x1F549, 0x1F54A), (0x1F56F, 0x1F570), (0x1F573, 0x1F579),
+    (0x1F587, 0x1F587), (0x1F58A, 0x1F58D), (0x1F590, 0x1F590), (0x1F5A5, 0x1F5A5),
+    (0x1F5A8, 0x1F5A8), (0x1F5B1, 0x1F5B2), (0x1F5BC, 0x1F5BC), (0x1F5C2, 0x1F5C4),
+    (0x1F5D1, 0x1F5D3), (0x1F5DC, 0x1F5DE), (0x1F5E1, 0x1F5E1), (0x1F5E3, 0x1F5E3),
+    (0x1F5E8, 0x1F5E8), (0x1F5EF, 0x1F5EF), (0x1F5F3, 0x1F5F3), (0x1F5FA, 0x1F5FA),
+    (0x1F6CB, 0x1F6CB), (0x1F6CD, 0x1F6CF), (0x1F6E0, 0x1F6E5), (0x1F6E9, 0x1F6E9),
+    (0x1F6F0, 0x1F6F0), (0x1F6F3, 0x1F6F3),
 )
 
 
-def _emoji_wide(cp: int) -> bool:
-    lo, hi = 0, len(_EMOJI_WIDE) - 1
+def _promotable(cp: int) -> bool:
+    lo, hi = 0, len(_VS16_RANGES) - 1
     while lo <= hi:
-        mid = (lo + hi) // 2
-        start, end = _EMOJI_WIDE[mid]
-        if cp < start:
+        mid = (lo + hi) >> 1
+        a, b = _VS16_RANGES[mid]
+        if cp < a:
             hi = mid - 1
-        elif cp > end:
+        elif cp > b:
             lo = mid + 1
         else:
             return True
     return False
 
 
-def cell_width(ch: str) -> int:
-    """Terminal cells one character occupies."""
-    if ch in WIDE:
-        return 2
+_CHAR: dict = {}
+
+
+def char_width(ch: str) -> int:
+    """Cells one code point takes on its own."""
+    w = _CHAR.get(ch)
+    if w is not None:
+        return w
     cp = ord(ch)
-    if cp < 32 or 0x7F <= cp < 0xA0:
-        return 0
-    if cp in _ZERO_WIDTH or unicodedata.combining(ch):
-        return 0
-    if unicodedata.east_asian_width(ch) in ("W", "F"):
-        return 2
-    if _emoji_wide(cp):
-        return 2
-    return 1
+    if ch in WIDE:
+        w = 2
+    elif cp < 0x20 or 0x7F <= cp < 0xA0:
+        w = 0
+    elif unicodedata.category(ch) in ("Mn", "Me", "Cf"):
+        w = 0
+    elif unicodedata.east_asian_width(ch) in ("W", "F"):
+        w = 2
+    else:
+        w = 1
+    _CHAR[ch] = w
+    return w
 
 
-def display_width(s: str) -> int:
-    """Visible cell width, skipping ANSI SGR and OSC-8 hyperlink sequences."""
-    width = 0
-    last = 0
-    i = 0
-    n = len(s)
+_STR: dict = {}
+
+
+def width(s: str) -> int:
+    """Cells a run of plain text (no escape sequences) takes."""
+    if s.isascii():
+        if s.isprintable():
+            return len(s)
+        return sum(1 for ch in s if " " <= ch <= "~")
+    w = _STR.get(s)
+    if w is not None:
+        return w
+    total = 0
+    prev_cp = -1
+    prev_w = 0
+    joined = False
+    for ch in s:
+        cp = ord(ch)
+        if cp == 0xFE0F:                         # VS16: emoji presentation
+            if prev_w == 1 and _promotable(prev_cp):
+                total += 1
+                prev_w = 2
+            continue
+        if cp == 0x200D:                         # ZWJ glues the next glyph on
+            joined = True
+            continue
+        if joined:
+            joined = False
+            continue
+        if 0x1F3FB <= cp <= 0x1F3FF and prev_w == 2:
+            continue                             # skin tone modifies the emoji before it
+        cw = char_width(ch)
+        total += cw
+        if cw:
+            prev_cp, prev_w = cp, cw
+    if len(_STR) < 4096:
+        _STR[s] = total
+    return total
+
+
+def ansi_width(s: str) -> int:
+    """Width of text that may carry SGR and OSC-8 sequences."""
+    if "\033" not in s:
+        return width(s)
+    return width(strip_ansi(s))
+
+
+def strip_ansi(s: str) -> str:
+    out = []
+    i, n = 0, len(s)
     while i < n:
         ch = s[i]
-        if ch == "\033":
-            if s.startswith("\033]", i):                    # OSC ... ST | BEL
-                end = s.find("\033\\", i)
-                if end != -1:
-                    i = end + 2
-                else:
-                    bel = s.find("\a", i)
-                    i = n if bel == -1 else bel + 1
-            elif s.startswith("\033[", i):                   # CSI ... final
-                j = i + 2
-                while j < n and not ("@" <= s[j] <= "~"):
-                    j += 1
-                i = min(j + 1, n)
+        if ch != "\033":
+            j = s.find("\033", i)
+            if j == -1:
+                out.append(s[i:])
+                break
+            out.append(s[i:j])
+            i = j
+            continue
+        if s.startswith("\033]", i):             # OSC ... ST | BEL
+            end = s.find("\033\\", i)
+            bel = s.find("\a", i)
+            if end == -1 or (bel != -1 and bel < end):
+                i = n if bel == -1 else bel + 1
             else:
-                i += 2
-            continue
-        if ch == "\ufe0f":        # VS16 promotes the previous glyph to emoji
-            if last == 1:
-                width += 1
-                last = 2
-            i += 1
-            continue
-        if ch == "\ufe0e":        # VS15 forces text presentation
-            i += 1
-            continue
-        last = cell_width(ch)
-        width += last
-        i += 1
-    return width
+                i = end + 2
+        elif s.startswith("\033[", i):           # CSI ... final byte
+            j = i + 2
+            while j < n and not ("@" <= s[j] <= "~"):
+                j += 1
+            i = j + 1
+        else:
+            i += 2
+    return "".join(out)
+
+
+def clip(s: str, cells: int, ellipsis: str = "…") -> str:
+    """Plain text cut to at most `cells` cells, ending in `ellipsis` if cut."""
+    if width(s) <= cells:
+        return s
+    if cells <= 0:
+        return ""
+    room = cells - width(ellipsis)
+    out, used = [], 0
+    for ch in s:
+        cw = char_width(ch)
+        if used + cw > room:
+            break
+        out.append(ch)
+        used += cw
+    return "".join(out).rstrip() + ellipsis if room > 0 else ellipsis[:cells]

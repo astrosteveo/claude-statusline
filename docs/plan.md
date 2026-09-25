@@ -1,122 +1,66 @@
-# Statusline engine
+# claude-statusline 3
 
 ## Problem
 
-claude-statusline renders one very good status line. Its knowledge of the host
-(right-edge accounting, wide glyphs, tolerant payload parsing, the stateless
-heartbeat, git caching, the never-blank fallback) is exactly what anyone
-building a Claude Code status line needs, but the layout itself is hardcoded in
-two build functions. Users can restyle it; they cannot recompose it. The goal
-is to turn the project into an engine that lets people, and Claude on their
-behalf, design their own bars while the engine guarantees they fit and refresh
-cheaply.
+Version 2 made the bar composable: lines of named segments, a closed catalog,
+one fit algorithm, a design skill. Three things held it back. Its look was
+fixed (one palette of 256-colour codes, `│` separators, a handful of glyphs),
+so "make it prettier" meant hand-editing SGR codes. Configuring it meant
+editing TOML blind and running `preview`. And Claude Quest, the RPG grown
+around the bar, lived in a separate, unversioned project wired in by hand,
+with its segments half-added to this repo.
 
-## Approach
+## What 3 is
 
-Make the layout data. A config declares lines, each with a left and right
-group of named segments drawn from a built-in catalog; the engine keeps doing
-the fitting, dropping and edge maths. Ship the repo as a Claude Code plugin
-whose skill teaches Claude the catalog, the host constraints and the schema,
-and gives it subcommands to validate, preview and install a layout. Today's
-bar becomes the default layout, so a config with no `[[line]]` renders what it
-renders now.
+A rewrite of the engine around styled text, with the same guarantees (never
+blank, never too wide, never slow) and:
 
-Rejected: more toggles on the fixed layout (does not become an engine);
-user-authored shell or Python segments (uncached subprocesses on a once-a-second
-refresh, so the engine can no longer promise anything about cost; revisit when
-someone needs data the payload does not carry); width-tiered layouts and
-`when` conditions (nobody has asked yet; the schema leaves room for both).
-
-## Scope
-
-In:
-
-- A `statusline/` package replacing the single file, with a thin `statusline.py`
-  entry so the existing shim keeps working. `install.sh --copy` copies the
-  package directory.
-- Layout schema in the existing TOML config: `[[line]]` tables with `left` and
-  `right` lists of segment names, `[segment.<name>]` tables for per-segment
-  format, colour, priority and options.
-- Segment catalog covering everything rendered today: `model`, `dir`, `git`,
-  `pr`, `cache`, `cost`, `duration`, `diff`, `env`, `host`, `session`,
-  `output_style`, `context`, `limit_5h`, `limit_7d`, `limit_7d_model`,
-  `heartbeat`, plus `text` (a static label) and `clock` (wall time) because
-  they cost nothing and are what people reach for first when designing.
-- Three presets in `statusline/presets/`: `classic` (today's bar), `minimal`
-  (one line), `dashboard` (three lines, bars on the left).
-- Subcommands: `render` (default when stdin is a payload), `segments
-  [--json]`, `validate [path]`, `preview [--layout path] [--preset name]
-  [--width 100,140,200] [--fixture name]`, `migrate [path]`, `doctor`, `ruler`,
-  `dump-config`. The old `--flag` forms keep working as aliases for one release.
-- Plugin manifest and a `statusline-design` skill with reference files for
-  the schema, the catalog and the host constraints, and a workflow that ends
-  in a validated, previewed, installed config.
-- Tests: golden snapshots of today's output captured before the refactor and
-  asserted against the default layout; the width invariant over every preset,
-  fixture and width; schema validation errors; `migrate` on the current
-  example config.
-
-Out:
-
-- User-authored segments of any kind.
-- Layouts that vary by terminal width, `when` conditions, separate theme files.
-- A payload recorder beyond the existing `CLAUDE_STATUSLINE_DUMP`.
-- Rewriting `install.sh` in Python. It stays, gains nothing but the package
-  copy, and the skill calls it.
+- **Looks as data.** Themes are palettes of roles (text, subtext, muted,
+  subtle, surface, accent, hues). Segments name roles, never codes, so a
+  theme recolours everything. Styles dress segments: plain text looks,
+  soft chips, capsules, pills, powerline, slant. Icon sets: Nerd Font,
+  Unicode (only glyphs JetBrains Mono and DejaVu both carry), emoji, none.
+- **Styled text, serialised last.** Segments render to runs of
+  (text, style); widths are measured on the text alone and ANSI is produced
+  once, at the end. That is what makes backgrounds under whole segments,
+  per-look recolouring, and exact widths possible.
+- **An interactive configurator** with a live preview, drawn directly on the
+  terminal (raw mode, synchronized updates), wearing the theme you browse.
+- **Claude Quest inside**: the game, its hooks, its CLI and its art in
+  `claude_statusline/quest`, switched on and off by `[quest] enabled` (the
+  hooks check it) and `statusline.py quest enable|disable` (which manages the
+  hooks, `/quest` and `claude-quest`). Saves from every earlier version load.
+- **Faster**: ~10 ms a refresh against v2's ~21 ms.
 
 ## Key decisions
 
-- **Declarative layout, built-in segments only.** Creative freedom means
-  arrangement, anchoring, format and colour, not code. Keeps every layout
-  checkable and keeps the refresh budget owned by the engine.
-- **Plugin with a design skill.** The constraint knowledge should reach users
-  through Claude, not only through the README. The skill drives subcommands;
-  it never reads the engine source.
-- **Clean break on `[features]`.** Its toggles become options on the segment
-  they belong to. `[layout]`, `[bar]`, `[thresholds]`, `[glyphs]`, `[colors]`
-  and `[git]` stay as global style and behaviour. The engine renders an old
-  file without crashing, ignores legacy keys, and `doctor` lists each one
-  with the replacement; `migrate` rewrites the file.
-- **One fit algorithm for every line.** Each segment offers renderings from
-  richest to cheapest (a bar with pace and clock, then without clock, then a
-  narrower bar, then just the percentage). While a line overflows, the engine
-  steps the lowest-priority segment that still has a cheaper rendering down
-  one notch; when nothing can step down, it drops the lowest-priority segment.
-  This replaces both today's drop loop on line 1 and the ladder on line 2.
-- **Format strings are small.** `{field}` placeholders from the segment's
-  documented fields, `[colorname]…[/]` spans using `[colors]` names, and
-  nothing else. A segment declares which fields it requires; if one is
-  missing the segment renders nothing. Missing optional fields render empty
-  and adjacent whitespace collapses.
-- **Right groups are anchored, left groups flow.** The gap between them is
-  padding, minimum two columns when both sides are present. Empty lines are
-  omitted from output.
-- **Goldens before refactor.** The current output for every fixture at every
-  test width is captured first and becomes the default layout's acceptance
-  test, so the package split cannot drift the bar by a column.
+- **Measure like the host.** Widths follow `string-width` (Claude Code's
+  measure): East Asian wide and emoji-presentation characters are two cells,
+  VS16 promotes text-style emoji, ZWJ sequences and skin tones join.
+- **Nothing on the hot path that is not drawing.** No `json`/`re`/`tomllib`/
+  `subprocess` imports on a refresh: the payload goes through `_json`'s
+  scanner, the config through a marshal cache keyed on file and source
+  mtimes, git through a stale-while-revalidate cache refreshed by a detached
+  process. Segment modules load only when placed.
+- **Bars on chips take the chip's hue** (a deep fill on a track a shade darker
+  than the chip) instead of their usual colours, so they read inside any tone.
+  Runs a look must not recolour carry a KEEP flag.
+- **Previews never have side effects.** A `live` render may start git
+  refreshes and kitty uploads; previews, the configurator and tests never do.
+- **The quest line is automatic.** Enabling Quest appends its line (or the
+  hero badge, inline) unless quest segments are already placed. The kitty
+  pet is pinned to the right edge of the first lines, replacing v2's
+  hand-placed avatar rows.
+- **Compatibility over purity.** v2 configs render unchanged: SGR colour
+  strings parse, `{glyph}` is the icon, v2 colour names are theme aliases.
+  `migrate` tidies them rather than being required.
 
-## Edge cases & failure modes
+## Rejected
 
-- Unknown segment or option in a layout: `validate` fails with the table and
-  key; `render` skips the segment and keeps going, so a typo never blanks the
-  bar. `doctor` reports the same list.
-- A layout no width can satisfy (too many high-priority segments): the fit
-  algorithm ends by dropping everything but the highest priority segment on
-  each line, which then truncates with an ellipsis. `preview` shows the
-  narrowest width at which nothing was dropped.
-- Segment name used twice in one layout: allowed, rendered twice, since
-  `text` needs it; `validate` warns for data segments.
-- Payload missing whole sections: segments requiring them render nothing and
-  their separators vanish, as today.
-- Fallback on render exception is unchanged: model and directory, never blank.
-- Legacy config with `[features]` and no `[[line]]`: default layout, legacy
-  keys ignored and reported, never honoured.
-
-## Open questions
-
-- ~~Whether a plugin manifest can register the `statusLine` command itself.~~
-  Resolved: it cannot (plugin `settings.json` supports only `agent` and
-  `subagentStatusLine`), so `install.sh` keeps patching `settings.json` and
-  the skill runs it when needed.
-- Whether `limit_7d_model` should stay a separate segment or become an option
-  on `limit_7d`. Separate for now because it has its own priority.
+- A compiled client talking to a daemon: ~2 ms instead of ~10 ms, at the cost
+  of a build step and a process to babysit. Not worth it at once a second.
+- curses for the configurator: its colour model cannot show truecolor
+  previews faithfully.
+- Plugin hooks for Quest: they would fire for everyone who installs the
+  plugin, and double up with settings.json hooks for install.sh users.
+- User-authored segments: unchanged from v2, the refresh budget forbids them.

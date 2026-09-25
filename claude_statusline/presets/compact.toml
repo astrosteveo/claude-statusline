@@ -1,0 +1,20 @@
+# compact — one line, the meters pinned to the right edge.
+
+[[line]]
+left = ["model", "dir", "git", "pr", "cost"]
+right = ["context", "limit_5h", "limit_7d"]
+gap = 2
+
+[segment.context]
+label = ""
+tokens = false
+width = 8
+
+[segment.limit_5h]
+width = 8
+clock = false
+
+[segment.limit_7d]
+width = 8
+pace = false
+clock = false

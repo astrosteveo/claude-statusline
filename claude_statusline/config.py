@@ -1,102 +1,111 @@
-"""Defaults, config discovery and the mutable engine state."""
+"""Defaults, config discovery, and the compiled-config cache.
+
+The config is TOML, but parsing TOML and validating a layout costs more than
+drawing the bar, so the engine compiles the config once (layout.py) and keeps
+the result in a marshal file in the runtime directory. Every refresh after
+that is a stat of the config file, a stat of the engine's own sources, and
+one read: the cache is rebuilt whenever either changes.
+"""
 from __future__ import annotations
 
+import marshal
 import os
-import sys
 
-from .util import deep_merge
-
+from . import __version__
 
 CONFIG_ENV = "CLAUDE_STATUSLINE_CONFIG"
-DUMP_ENV = "CLAUDE_STATUSLINE_DUMP"      # set to a path to capture raw payloads
-DEBUG_ENV = "CLAUDE_STATUSLINE_DEBUG"    # set to surface tracebacks on stderr
+DEBUG_ENV = "CLAUDE_STATUSLINE_DEBUG"
+NOCACHE_ENV = "CLAUDE_STATUSLINE_NOCACHE"
 
 CONFIG_SEARCH = (
     "~/.config/claude-statusline/config.toml",
     "~/.claude/statusline.toml",
 )
+DEFAULT_PATH = CONFIG_SEARCH[0]
 
-FIVE_HOUR = 5 * 3600
-SEVEN_DAY = 7 * 86400
+PKG = os.path.dirname(os.path.abspath(__file__))
 
-# ---------------------------------------------------------------- defaults ---
+STYLES = ("auto", "minimal", "classic", "dots", "powerline", "slant", "pills", "capsules", "chips")
+ICONSETS = ("auto", "nerd", "unicode", "emoji", "none")
+PLACEMENTS = ("line", "inline", "manual")
+
 DEFAULTS = {
-    # Which preset supplies the lines when the config declares none.
     "preset": "classic",
-    # Lines, richest first; each has `left` and `right` lists of segment
-    # names and an optional `gap` (minimum columns between the groups).
+    "theme": "claude",
+    "style": "auto",
+    "icons": "auto",
+    "color": "auto",
     "line": [],
-    # Per-segment overrides: [segment.<name>] with format, priority, options.
     "segment": {},
     "layout": {
-        # Columns the host TUI reserves at the right edge. Claude Code's
-        # fullscreen TUI consumes ~4 beyond the COLUMNS it reports (frame and
-        # padding) and then truncates with an ellipsis; 4 reserved + 1 wrap
-        # gap = 5. Run `--ruler` to calibrate for your terminal.
+        # Columns the host keeps at the right edge before it cuts a line.
+        # Claude Code's fullscreen TUI takes about 4 beyond the COLUMNS it
+        # reports; one more keeps clear of the wrap. `ruler` calibrates it.
         "right_margin": 5,
-        "separator": " │ ",
+        "gap": 2,
         "fallback_columns": 200,
-        # Glyphs your font renders double-width even though Unicode calls them
-        # narrow. Purely cosmetic elsewhere, but they push the line over budget.
+        # Glyphs your font draws two cells wide though Unicode says one.
         "wide_glyphs": [],
+        # The separator of the classic and dots styles; "" for the style's own.
+        "separator": "",
     },
     "bar": {
-        # 13 cells x 8 sub-steps = 104 >= the 101 integer percentages the host
-        # sends, so every distinct input renders distinctly. Narrower collides;
-        # wider adds columns without adding information.
+        # 13 cells x 8 steps = 104 >= the 101 whole percentages the host
+        # sends, so every value renders distinctly.
         "width": 13,
-        # A named glyph set: block, shade, thin, dots, pips, ascii. The keys
-        # below override the style's glyphs when set; "" means "from the style".
-        "style": "block",
-        "full": "",
-        "empty": "",
+        "style": "smooth",
+        "fill": "level",
+        "track": "subtle",
+        "pulse": False,
+        "min_sliver": True,
         "cap_left": "",
         "cap_right": "",
-        # How the filled cells are coloured: "level" (one colour by threshold),
-        # "gradient" (each cell by its own position), a [colors] key, or a
-        # comma-separated list of keys spread along the bar.
-        "fill": "level",
-        "track": "dim",           # [colors] key for the empty cells and caps
-        "partial": True,          # sub-cell resolution for the boundary cell
-        "partial_style": "auto",  # "auto" | "eighth" (▏▎▍) | "shade" (░▒▓) | "off"
-        "min_sliver": True,       # any usage > 0 shows at least a sliver
-        "pulse": False,           # past the red threshold, embolden on odd seconds
     },
     "thresholds": {"yellow": 50, "orange": 75, "red": 90},
     "git": {
         "enabled": True,
+        "cache_ttl": 2.0,
         "timeout": 2.0,
-        "cache_ttl": 2.0,       # seconds a cached git read stays fresh
-        "slow_threshold": 0.35, # a read slower than this triggers backoff
-        "slow_backoff": 10.0,   # ttl = max(cache_ttl, duration * slow_backoff)
+        "slow_threshold": 0.35,
+        "slow_backoff": 10.0,
     },
-    "glyphs": {
-        "model": "◆", "dir": "▸", "git": "⎇", "reset": "↻",
-        "stash": "⚑", "ahead": "↑", "behind": "↓",
-        "pace": "⇢", "clock": "⏱", "pr": "⇄", "host": "⌂",
-        "env": "⬢", "fast": "⚡", "cache": "⌗",
-        # One character per frame, cycled in order by the heartbeat segment.
-        "heartbeat_frames": "⠋⠙⠹⠸⠼⠴⠦⠧",
-    },
-    "colors": {
-        "reset": "0", "dim": "38;5;240", "gray": "38;5;245",
-        "model": "38;5;141", "dir": "38;5;39", "cyan": "38;5;80",
-        "green": "38;5;114", "yellow": "38;5;221", "orange": "38;5;208",
-        "red": "38;5;203", "gold": "38;5;179", "purple": "38;5;176",
-        "bold": "1",
+    "glyphs": {},
+    "colors": {},
+    "quest": {
+        "enabled": False,
+        # line: a line of its own at the bottom; inline: the hero badge on
+        # line 1; manual: only where you place quest segments yourself.
+        "placement": "line",
+        # The pet as an animated picture in kitty; "auto" draws it when
+        # Claude Code runs in kitty.
+        "avatar": "auto",
+        "avatar_cols": 8,
+        # Seconds the latest event (loot, level-up, quest) stays on the bar.
+        "event_seconds": 30.0,
     },
 }
 
-# Mutable module state, rebound in place by apply_config().
-CFG: dict = {}
-GENERATION = 0        # bumps on every apply_config, so caches can notice
-C: dict = {}
-GLYPHS: dict = {}
-WIDE: set = set()
+# Keys v2 read that v3 ignores, with what replaced them.
+RETIRED = {
+    "bar.full": "bar styles carry their own glyphs; pick one with bar.style",
+    "bar.empty": "bar styles carry their own glyphs; pick one with bar.style",
+    "bar.partial": "every bar style has its own sub-cell precision",
+    "bar.partial_style": "every bar style has its own sub-cell precision",
+}
 
 
-def config_path() -> str | None:
-    """First existing config file, or None."""
+def deep_merge(base: dict, over: dict) -> dict:
+    out = dict(base)
+    for key, val in (over or {}).items():
+        if isinstance(val, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], val)
+        else:
+            out[key] = val
+    return out
+
+
+def config_path():
+    """The config file in use, or None when there is none."""
     explicit = os.environ.get(CONFIG_ENV)
     if explicit:
         path = os.path.expanduser(explicit)
@@ -108,46 +117,88 @@ def config_path() -> str | None:
     return None
 
 
-def load_config(path: str | None = None) -> dict:
-    """DEFAULTS merged with the user's TOML. Never raises."""
-    path = path if path is not None else config_path()
+def write_path():
+    """Where a new config should be written."""
+    explicit = os.environ.get(CONFIG_ENV)
+    return os.path.expanduser(explicit) if explicit else (config_path() or os.path.expanduser(DEFAULT_PATH))
+
+
+def read_toml(path):
+    """(dict, error message or None). Never raises."""
     if not path:
-        return deep_merge(DEFAULTS, {})
+        return {}, None
     try:
         import tomllib
         with open(path, "rb") as fh:
-            return deep_merge(DEFAULTS, tomllib.load(fh))
-    except Exception:
-        # A broken config must not take the status line down with it.
-        if os.environ.get(DEBUG_ENV):
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-        return deep_merge(DEFAULTS, {})
-
-def apply_config(cfg: dict) -> None:
-    """Rebind the engine state in place, so `from .config import CFG` stays live."""
-    CFG.clear()
-    CFG.update(cfg)
-    C.clear()
-    C.update({k: f"\033[{v}m" for k, v in cfg["colors"].items()})
-    GLYPHS.clear()
-    GLYPHS.update(cfg["glyphs"])
-    WIDE.clear()
-    WIDE.update(cfg["layout"].get("wide_glyphs") or ())
-    global GENERATION
-    GENERATION += 1
+            return tomllib.load(fh), None
+    except FileNotFoundError:
+        return {}, None
+    except Exception as exc:                   # a broken file must not blank the bar
+        return {}, f"not valid TOML: {exc}"
 
 
-def usable_width(cols=None) -> int:
-    """Columns the bar may use: the terminal width minus the host's margin."""
-    lay = CFG["layout"]
-    if cols is None:
+def runtime_dir() -> str:
+    base = os.environ.get("XDG_RUNTIME_DIR")
+    if not base or not os.path.isdir(base):
+        base = os.path.join("/tmp", f"claude-statusline-{os.getuid()}") if hasattr(os, "getuid") else "/tmp"
+        path = base
+    else:
+        path = os.path.join(base, "claude-statusline")
+    try:
+        os.makedirs(path, mode=0o700, exist_ok=True)
+    except OSError:
+        pass
+    return path
+
+
+def _code_stamp() -> int:
+    """Changes whenever the engine's sources or presets change."""
+    newest = 0
+    for sub in ("", "segments", "presets"):
         try:
-            cols = int(os.environ.get("COLUMNS") or 0)
-        except ValueError:
-            cols = 0
-        cols = cols or lay["fallback_columns"]
-    return max(20, cols - max(0, lay["right_margin"]))
+            with os.scandir(os.path.join(PKG, sub) if sub else PKG) as it:
+                for entry in it:
+                    if entry.name.endswith((".py", ".toml")):
+                        m = entry.stat().st_mtime_ns
+                        if m > newest:
+                            newest = m
+        except OSError:
+            pass
+    return newest
 
 
-apply_config(deep_merge(DEFAULTS, {}))
+def _crc(text: str) -> str:
+    import zlib
+    return "%08x" % zlib.crc32(text.encode("utf-8", "replace"))
+
+
+def compiled(path=None, use_cache=True) -> dict:
+    """The compiled config for `path` (default: the one in use)."""
+    path = config_path() if path is None else path
+    try:
+        st = os.stat(path) if path else None
+    except OSError:
+        st = None
+    key = [__version__, path or "", st.st_mtime_ns if st else 0, st.st_size if st else 0, _code_stamp()]
+    use_cache = use_cache and not os.environ.get(NOCACHE_ENV)
+    cache = os.path.join(runtime_dir(), f"compiled-{_crc(path or '-')}.bin")
+    if use_cache:
+        try:
+            with open(cache, "rb") as fh:
+                blob = marshal.load(fh)
+            if blob.get("key") == key:
+                return blob["compiled"]
+        except Exception:
+            pass
+    from .layout import compile_config
+    raw, err = read_toml(path)
+    comp = compile_config(raw, path=path, read_error=err)
+    if use_cache:
+        try:
+            tmp = f"{cache}.{os.getpid()}"
+            with open(tmp, "wb") as fh:
+                marshal.dump({"key": key, "compiled": comp}, fh)
+            os.replace(tmp, cache)
+        except Exception:
+            pass
+    return comp

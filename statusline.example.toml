@@ -1,193 +1,119 @@
-# claude-statusline configuration
+# claude-statusline — an annotated config.
 #
-# Copy to ~/.config/claude-statusline/config.toml and edit. Every key is
-# optional — anything you omit falls back to the built-in default. Run
-# `statusline.py dump-config` to see the fully resolved values, `validate`
-# to check a file, `preview` to see it at several widths, and `segments`
-# for the catalog of segments and their options.
+# Copy to ~/.config/claude-statusline/config.toml and trim: every key is
+# optional and anything you leave out keeps its default. Easier still:
+#
+#   statusline.py configure        change everything with a live preview
+#   statusline.py set theme nord   change one thing from the shell
+#   statusline.py themes           see every theme (also: styles, icons, bars)
 
-# Which preset supplies the lines when this file declares none of its own:
-# "classic" (two lines, the default), "minimal" (one line) or "dashboard"
-# (three lines, bars on the left). A [[line]] below replaces the preset's
-# lines entirely; [segment.*] tables merge over the preset's.
+# --- the look ------------------------------------------------------------------
+theme = "claude"         # claude, claude-light, midnight, catppuccin, catppuccin-latte, tokyo-night,
+                         # nord, dracula, gruvbox, rose-pine, kanagawa, everforest, one-dark,
+                         # solarized-dark, solarized-light, synthwave, mono, terminal, classic
+style = "auto"           # minimal, classic, dots, chips, capsules, pills, powerline, slant
+                         # (auto: capsules where the terminal has Nerd Font symbols, else chips)
+icons = "auto"           # nerd, unicode, emoji, none
+color = "auto"           # truecolor, 256, 16, none (auto reads COLORTERM; NO_COLOR turns it off)
+
+# --- the lines -------------------------------------------------------------------
+# A preset supplies the lines until you declare your own: classic (two lines,
+# the default), compact and minimal (one), focus (one, quiet), dashboard (three).
 preset = "classic"
 
-# --- lines -------------------------------------------------------------------
-# Each [[line]] has a `left` group that flows from the left edge and a
-# `right` group pushed against the right edge; `gap` is the minimum number
-# of columns between them (default 2). When a line is too narrow, every
-# segment on it steps down a detail level together (reset clock, then pace,
-# then narrower bars, then no bars) before the lowest-priority segment is
-# dropped. These two lines are the classic preset, written out.
+# Declaring lines replaces the preset's. `left` flows from the left edge,
+# `right` is pushed against the right edge, `gap` is the least space between.
+# When a line is too narrow, every segment on it gives up detail together
+# (reset clock, then pace, then half bars, then no bars) before the
+# lowest-priority segment is dropped. These two are the classic preset.
 
 [[line]]
-left = ["model", "dir", "git", "pr", "cache", "cost", "env", "session", "output_style"]
-right = ["heartbeat"]
+left = ["model", "dir", "git", "pr", "worktree", "cache", "cost", "env", "session", "agent", "output_style"]
 gap = 1
 
 [[line]]
 left = ["context"]
-right = ["limit_5h", "limit_7d", "limit_7d_model"]
+right = ["limit_5h", "limit_7d", "limit_7d_model", "limit_spend"]
 
-# --- segments ----------------------------------------------------------------
-# [segment.<name>] tunes a segment placed above. Every segment accepts
-# `format` (a template: {field}, [optional group], <colour>...</colour>,
-# <link>...</link>) and `priority` (higher survives longer when the line is
-# too narrow); the rest are listed by `statusline.py segments`. A table may
-# also name an instance of a segment with `type`, e.g.
-#
-#   [segment.greeting]
-#   type = "text"
-#   text = "hello"
-#   format = "<gold>{text}</gold>"
+# --- segments --------------------------------------------------------------------
+# [segment.<name>] tunes a placed segment. Every segment takes `format` (its
+# template), `priority`, `icon` ("" hides it) and `color` (a theme role for
+# its icon and chip); `statusline.py segments <name>` lists the rest.
 
 [segment.model]
-fast = true                  # show ⚡ when fast mode is on
+fast = true              # the fast-mode mark
+full_name = false        # keep "(1M context)" in the name
 
 [segment.dir]
-depth = 3                    # trailing path components to keep
+mode = "fish"            # fish ~/P/project · compact …/a/project · full · base · project
+depth = 1                # components kept whole
 
 [segment.git]
-links = true                 # OSC-8 hyperlink on the branch
-last_commit = true           # read the last commit time when the tree is dirty
-nudge_min = 45               # minutes before ⏱ appears on a dirty tree
-
-[segment.cache]
-min_ratio = 0.90             # warn below this prompt-cache hit ratio
+links = true             # the branch links to the repository
+nudge_min = 45           # minutes without a commit before a dirty tree shows its age
 
 [segment.context]
-tokens = true                # token count beside the percentage
-size = true                  # ...and the window size, e.g. (380k/1.0M)
+label = "ctx"
+tokens = true            # 279k beside the percentage
+size = true              # ...as 279k/1.0M
 
 [segment.limit_5h]
-pace = true                  # ⇢ projected usage at reset
-pace_mode = "average"        # average: usage so far over the window gone; recent: the last stretch's rate
-pace_min_elapsed = 0.10      # don't extrapolate an average from under 10% of a window
-pace_lookback = 0.10         # recent measures over this fraction of the window (30 min of 5h)
-clock = true                 # wall-clock time of the reset
+pace = true              # → where usage will be at the reset, at the current pace
+pace_mode = "recent"     # recent: the last stretch's rate · average: the whole window's
+reset = true             # ↻ time until the reset
+clock = true             # ...and the time of day it happens
 
-[segment.limit_7d]
-pace = true
-clock = true
+# The heartbeat, a tick that moves on every refresh, is a debugging aid and is
+# off unless you place "heartbeat" on a line:
+# [segment.heartbeat]
+# frames = "dots"        # dots, orbit, quadrants, arc, wave, pulse, bounce, line, moon, grow, star
 
-[segment.heartbeat]
-period = 1.0                 # seconds per frame; match refreshInterval
-color = "dim"                # any key from [colors]
+# A segment can be placed twice under different names with `type`:
+#
+# [segment.label]
+# type = "text"
+# text = "prod"
+# color = "red"
 
-# --- style -------------------------------------------------------------------
-
-[layout]
-# Columns the host TUI reserves at the right edge before it truncates.
-# Claude Code's fullscreen TUI eats ~4 beyond the COLUMNS it reports, so the
-# default is 4 reserved + 1 wrap gap. To calibrate precisely, see the
-# "Calibrating right_margin" section of the README.
-right_margin = 5
-
-separator = " │ "
-
-# Used when the host does not export COLUMNS.
-fallback_columns = 200
-
-# Glyphs your font renders double-width even though Unicode calls them narrow.
-# Symptom: the right-anchored bars get clipped by exactly the number of these
-# on screen. Check yours with `ruler`.
-wide_glyphs = []
-
+# --- bars -------------------------------------------------------------------------
 [bar]
-# The host sends whole-number percentages, so there are 101 possible inputs.
-# At 8 sub-steps per cell, 13 cells (104 steps) is the narrowest bar that
-# renders every one of them distinctly; 12 collides on 1/2, 25/26, 50/51 and
-# 75/76, and anything above 13 spends columns without adding information.
-width = 13
+style = "smooth"         # smooth, shade, line, slim, dots, pips, braille, ascii
+width = 13               # 13 cells show every whole percentage distinctly
+fill = "level"           # level (by threshold), gradient, tone, a role, or "cyan,purple" blended
+track = "subtle"         # the empty part
+pulse = false            # flash when past the red threshold
+min_sliver = true        # anything above 0% shows a sliver
 
-# The glyph set. `statusline.py bars` draws every style side by side.
-#   "block"  █ on █   eighth-cell resolution (the default)
-#   "shade"  █ on ░   shaded boundary cell
-#   "thin"   ━ on ─   half-cell resolution
-#   "dots"   ● on ○   half-cell resolution
-#   "pips"   ▰ on ▱   whole cells
-#   "ascii"  # on -   in [brackets], for fonts without block glyphs
-# A bar segment can pick its own: [segment.context] style = "thin".
-style = "block"
-
-# Override the style's glyphs; "" means "from the style". Every glyph must be
-# one cell wide. The track: "█" solid, "░" textured, " " blank.
-full = ""
-empty = ""
-cap_left = ""       # glyphs framing the bar, e.g. "▕" and "▏" or "[" and "]"
-cap_right = ""
-
-# How the filled cells are coloured:
-#   "level"     one colour for the whole fill, by [thresholds] (the default)
-#   "gradient"  each cell by its own position, so a full bar walks
-#               green → yellow → orange → red
-#   a [colors] key, e.g. "cyan", for a fixed colour
-#   a comma-separated list of keys, e.g. "cyan,purple", spread along the bar
-fill = "level"
-track = "dim"       # [colors] key for the empty cells and the caps
-
-partial = true      # give the boundary cell sub-cell resolution
-min_sliver = true   # any usage above 0 shows at least a sliver
-pulse = false       # past the red threshold, embolden the fill on odd seconds
-
-# How the boundary cell between filled and empty is drawn:
-#   "auto"    match the family to the track (recommended). A solid or blank
-#             track gets eighth-blocks; a textured ░ track gets shades.
-#   "eighth"  ▏▎▍ — 8 steps per cell. Inks only the left fraction, so the
-#             remainder is painted in the track colour when the track is
-#             solid. Against a textured ░ track that is impossible and the
-#             cell reads as a notch, which is why "auto" avoids the pairing.
-#   "shade"   ░▒▓ — 3 steps per cell. Varies density and inks the whole cell,
-#             so it stays continuous on a textured track.
-#   "off"     no partial cell; the bar rounds to whole cells.
-partial_style = "auto"
-
-[thresholds]
+[thresholds]             # where bars and percentages turn yellow, orange and red
 yellow = 50
 orange = 75
 red = 90
 
+# --- Claude Quest -----------------------------------------------------------------
+# An RPG that plays itself while you work. `statusline.py quest enable` turns
+# it on (and registers its hooks); this switch then shows or hides it.
+[quest]
+enabled = false
+placement = "line"       # line: its own line · inline: the hero on line 1 · manual
+avatar = "auto"          # the animated pet in kitty: auto, on, off
+avatar_cols = 8
+event_seconds = 30.0     # how long loot and level-ups stay on the bar
+
+# --- the finer points ---------------------------------------------------------------
+[layout]
+right_margin = 5         # columns Claude Code keeps at the right edge (statusline.py ruler)
+gap = 2
+fallback_columns = 200   # when COLUMNS is not set
+wide_glyphs = []         # glyphs your font draws two cells wide, e.g. ["⏱"]
+separator = ""           # for the classic and dots styles
+
 [git]
 enabled = true
-timeout = 2.0
-cache_ttl = 2.0        # seconds a cached git read stays fresh
-slow_threshold = 0.35  # a read slower than this triggers backoff
-slow_backoff = 10.0    # ttl = max(cache_ttl, duration * slow_backoff)
+cache_ttl = 2.0          # seconds between background refreshes
 
-[glyphs]
-model = "◆"
-dir = "▸"
-git = "⎇"
-reset = "↻"
-stash = "⚑"
-ahead = "↑"
-behind = "↓"
-pace = "⇢"
-clock = "⏱"
-pr = "⇄"
-host = "⌂"
-env = "⬢"
-fast = "⚡"
-cache = "⌗"
+[colors]                 # override any theme role: accent, text, subtext, muted, subtle,
+                         # surface, blue, cyan, teal, green, yellow, orange, red, pink, purple, gold
+# accent = "#ff8800"
 
-# One character per frame, cycled in order by the heartbeat segment. Must be
-# single-width glyphs. [segment.heartbeat] frames = "<name>" picks a bundled
-# set instead: dots, orbit, quadrants, arc, wave, pulse, bounce, line.
-heartbeat_frames = "⠋⠙⠹⠸⠼⠴⠦⠧"
-
-[colors]
-# Raw SGR parameters. 256-color ("38;5;N") or truecolor ("38;2;R;G;B").
-# Templates refer to these by name: <model>...</model>, <dim>...</dim>.
-reset = "0"
-dim = "38;5;240"
-gray = "38;5;245"
-model = "38;5;141"
-dir = "38;5;39"
-cyan = "38;5;80"
-green = "38;5;114"
-yellow = "38;5;221"
-orange = "38;5;208"
-red = "38;5;203"
-gold = "38;5;179"
-purple = "38;5;176"
-bold = "1"
+[glyphs]                 # override the small marks: ahead, behind, stash, pace, reset, fast, age
+# ahead = "⇡"

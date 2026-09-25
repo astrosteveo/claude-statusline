@@ -1,0 +1,11 @@
+# focus — one quiet line: where you are and how full the context is.
+
+[[line]]
+left = ["dir", "git"]
+right = ["context"]
+gap = 2
+
+[segment.context]
+label = ""
+tokens = false
+width = 10

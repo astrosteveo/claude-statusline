@@ -1,16 +1,13 @@
-# dashboard — three lines, bars on the left.
-#
-# Identity on top, every usage bar in a row underneath, spend and
-# environment on the bottom with the clock in the corner.
+# dashboard — three lines: identity, every meter, then spend and environment.
 
 [[line]]
-left = ["model", "dir", "git", "pr"]
-right = ["session", "heartbeat"]
+left = ["model", "dir", "git", "pr", "worktree"]
+right = ["session"]
 gap = 1
 
 [[line]]
-left = ["context", "limit_5h", "limit_7d", "limit_7d_model"]
+left = ["context", "limit_5h", "limit_7d", "limit_7d_model", "limit_spend"]
 
 [[line]]
-left = ["cost", "cache", "env"]
+left = ["cost", "burn", "tokens", "cache", "env", "agent", "output_style"]
 right = ["clock"]

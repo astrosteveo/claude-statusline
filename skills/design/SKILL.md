@@ -1,106 +1,83 @@
 ---
 name: design
-description: Design, change, preview and install a Claude Code status line with the claude-statusline engine. Use when the user wants a new status line, wants to change what their status line shows (segments, lines, order, colours, bars, formats), asks why their status line is clipped or truncated, or wants to migrate an old claude-statusline config.
-argument-hint: [what you want the bar to show]
-allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/statusline.py *) Bash(${CLAUDE_PLUGIN_ROOT}/install.sh *) Bash(tput cols) Read Write Edit
+description: Design, restyle, preview and install a Claude Code status line with the claude-statusline engine, and switch Claude Quest on or off. Use when the user wants a new status line, a different look (theme, style, icons, bars), different contents (segments, lines, order, formats), asks why the bar is clipped, or wants Claude Quest.
+argument-hint: [what you want the bar to show or look like]
+allowed-tools: Bash(python3 -S ${CLAUDE_PLUGIN_ROOT}/statusline.py *) Bash(python3 ${CLAUDE_PLUGIN_ROOT}/statusline.py *) Bash(${CLAUDE_PLUGIN_ROOT}/install.sh *) Read Write Edit
 ---
 
 # Designing a status line
 
-You are driving the claude-statusline engine. It renders a bar from a TOML
-layout: lines of named segments, each with a format string, a priority and
-options. You never write rendering code; you write the layout and let the
-engine prove it fits. Everything the engine knows is one command away:
+You drive the claude-statusline engine. It draws the bar from a small TOML
+config: a theme (colours), a style (how segments are dressed), an icon set,
+and lines of named segments. You never write rendering code: you change the
+config and let the engine prove the result fits. Everything is one command away:
 
 ```
-ENGINE="python3 ${CLAUDE_PLUGIN_ROOT}/statusline.py"
-$ENGINE doctor                      # config path, preset, lines, problems, usable width
-$ENGINE segments [name] [--json]    # the catalog: options, fields, colours
-$ENGINE presets                     # classic, minimal, dashboard
-$ENGINE bars [--width N]            # every bar style and fill, side by side
-$ENGINE validate <config>           # errors with did-you-mean; exit 1 on errors
-$ENGINE preview --config <config> --width 80,120,<cols> --plain
-$ENGINE migrate <config> [--write]  # fold a pre-2.0 [features] table into segment options
-$ENGINE ruler                       # calibrate layout.right_margin
+SL="python3 -S ${CLAUDE_PLUGIN_ROOT}/statusline.py"
+$SL doctor                          # what is installed and in force; problems
+$SL preview --width 80,120,<cols> --plain       # the bar at several widths, with notes
+$SL themes --plain | styles --plain | icons | bars   # every choice, drawn with the user's layout
+$SL segments [name]                 # the catalog: options, fields, colours
+$SL presets                         # ready-made layouts
+$SL set <key> <value>               # one change, validated; comments in the file survive
+$SL get <key> | unset <key>
+$SL validate                        # every problem, with did-you-mean; exit 1 on errors
+$SL quest enable | disable | status # Claude Quest on or off
+$SL migrate --write                 # tidy a config from an earlier version
 ```
 
-Read `reference/schema.md` before writing a layout, and `reference/constraints.md`
-before promising anything about what the bar can do. `reference/catalog.md` is
-the segment list; `reference/examples.md` has whole layouts to start from.
+Read `reference/schema.md` before writing config by hand and
+`reference/constraints.md` before promising anything. `reference/catalog.md`
+is the segment list; `reference/examples.md` has whole configs to start from.
 
 ## The loop
 
-1. **Find the ground.** Run `doctor`. Note the config path (default
-   `~/.config/claude-statusline/config.toml`), the preset in force, and any
-   problems. If it lists `features.*` warnings, the config predates the engine:
-   offer `migrate --write` first, and show the user the diff it prints.
-   If the status line is not installed at all (`doctor` will not even run
-   from Claude Code's settings), run `${CLAUDE_PLUGIN_ROOT}/install.sh`; it
-   backs up whatever it replaces and tells the user what it did.
+1. **Find the ground.** Run `doctor`. If `statusLine` is not set, run
+   `${CLAUDE_PLUGIN_ROOT}/install.sh` (it backs up whatever it replaces).
+   Note the config path and any problems.
+2. **Learn the width.** The payload's terminal is not yours; ask the user for
+   their terminal width if it matters, or preview at 80, 120 and 160.
+3. **Get the intent, not a spec.** Offer what is possible rather than asking
+   them to enumerate: "a one-line bar with the meters on the right", "the
+   powerline look in Catppuccin". Lead with a recommendation.
+4. **Change it with `set`.** One key at a time: `set theme catppuccin`,
+   `set style powerline`, `set segment.dir.mode base`. `set` refuses changes
+   that add errors. Write `[[line]]` tables by hand (Edit the config file)
+   only when the arrangement itself changes; prefer a preset when one is close.
+5. **Preview.** `preview --width 80,120,<cols> --plain` and read the `↳`
+   notes: `level less/lean/narrow/text` means a line degraded at that width,
+   `dropped x` means a segment went. At the user's width aim for no drops of
+   things they care about; raise a segment's `priority` rather than cutting
+   others. Show them the plain preview.
+6. **Finish.** The bar reads its config on every refresh: the change is live
+   within a second. Tell them about `statusline.py configure`, the interactive
+   configurator with a live preview, for fine-tuning themselves.
 
-2. **Learn the terminal width.** `tput cols` gives the width of the terminal
-   Claude Code is running in. Always preview at that width, and at something
-   narrower (say 100 and 80) so the user sees how the bar degrades.
-
-3. **Get the intent, not a spec.** Ask at most one question if the request is
-   vague, and lead with a recommendation: which preset is the closest start,
-   which segments they seem to care about, one or two lines. People rarely
-   know the catalog; you do. Offer what is possible ("the five-hour bar can
-   carry a projection of where it will land") rather than asking them to
-   enumerate.
-
-4. **Write the layout.** Start from a preset when one is close (`preset =
-   "dashboard"` plus a few `[segment.*]` tweaks beats a hand-written `[[line]]`
-   list). Declare `[[line]]` tables only when the arrangement itself is new.
-   Keep the file small: every key is optional and merges over the defaults.
-   Write it to the config path; keep a copy of the previous file if you are
-   changing one that exists (`cp config.toml config.toml.bak`).
-
-5. **Validate, then preview.** `validate` must exit 0 with no warnings; fix
-   every message it prints. Then `preview --config <path> --width 80,100,<cols>
-   --plain` and read the `↳` notes: `level less/lean/narrow/text` means the
-   line degraded at that width, `dropped x, y` means segments went, `OVERFLOWS`
-   means the highest-priority segment alone does not fit. At the user's real
-   width the goal is level `full` with nothing dropped. Show the user the plain
-   preview at their width; it is what they will see.
-
-6. **Tune priorities before cutting content.** If something they care about
-   drops at their width, raise its `priority` rather than removing other
-   segments; the engine drops lowest priority first and steps bars down before
-   dropping anything.
-
-7. **Finish.** The engine reads its config on every refresh, so the change is
-   live the moment the file is written; no restart. Tell the user what they
-   are looking at, and how to change one thing later (`[segment.x] option =`).
-
-## What the user can ask for, and how it maps
+## What people ask for
 
 | They say | You do |
 |----------|--------|
-| "one line" / "less noise" | `preset = "minimal"`, or a single `[[line]]` with 4–6 segments |
-| "put X on the right" | move it into the line's `right` list; the engine anchors it to the edge |
-| "I want to see cost/time/lines separately" | `cost` is the trio; `duration` and `diff` are the separate pieces |
-| "bars look wrong / clipped at the edge" | `layout.right_margin` needs calibrating; walk them through `ruler` (constraints.md) |
-| "different colour for X" | a `<colour>` tag in that segment's `format`; add new names under `[colors]` |
-| "a label / a divider / my name" | `text` segments, one `[segment.<name>] type = "text"` per instance |
-| "no percentage, just the bar" | `format` without `{pct}`; keep `{bar}` |
-| "prettier bars" / "a different bar look" | `[bar] style =` one of block, shade, thin, dots, pips, ascii; show them with `bars` |
-| "rainbow bar" / "colour the bar by usage" | `[bar] fill = "gradient"`; a fixed colour is `fill = "cyan"`, a spread is `"cyan,purple"` |
-| "brackets around the bar" | `[bar] cap_left = "▕"` and `cap_right = "▏"` (or `[` `]`); caps sit outside `width` |
-| "make it obvious when I'm nearly out" | `[bar] pulse = true`; the fill emboldens every other second past the red threshold |
-| "one bar different from the others" | `style` and `fill` on that segment: `[segment.context] style = "thin"` |
-| "a different spinner" | `[segment.heartbeat] frames = "arc"` (dots, orbit, quadrants, arc, wave, pulse, bounce, line) or a string of glyphs |
-| "hide when idle / only show when dirty" | not expressible yet: segments hide only when they have nothing to show |
-| "run my own script in the bar" | not supported, by design (constraints.md explains the refresh budget) |
+| "make it prettier" / "a different look" | show `styles` and `themes`; `set style capsules`, `set theme …` |
+| "I don't have Nerd Fonts" / boxes instead of icons | `set icons unicode` and `set style chips` (or minimal/classic) |
+| "match my terminal theme" | pick the matching theme; `terminal` uses the terminal's own 16 colours |
+| "one line" / "less noise" | `set preset minimal` or `compact`; or a single `[[line]]` |
+| "put X on the right" | move it to that line's `right` list |
+| "hide X" | take it off the line (`preset` lines: copy them into `[[line]]` first) |
+| "just the bar, no percentage" | `set segment.context.format "{bar}"` |
+| "a rainbow / gradient bar" | `set bar.fill gradient`; blends: `set bar.fill "cyan,purple"` |
+| "a slimmer bar" | `set bar.style slim` (or line, dots, braille, pips) |
+| "my own label" | a `[segment.<name>]` table with `type = "text"` and `text = "…"`, placed on a line |
+| "the RPG" / "Claude Quest" | `quest enable`; its line appears at the bottom; `/quest` plays |
+| "no pet picture" | `set quest.avatar off` (the text pet shows instead) |
+| "run my own script in the bar" | not supported by design (constraints.md: the refresh budget) |
 
 ## Rules
 
-- Never hand-edit `~/.claude/settings.json` for the status line; `install.sh`
-  does that and backs it up.
-- Never claim a layout fits without a `preview` at the user's width.
-- Colours are SGR parameters, not names: `"38;5;141"` or `"38;2;R;G;B"`.
-  Templates then use the *key* from `[colors]`.
-- Glyphs must be single-cell. If the user picks an emoji or a glyph their font
-  draws wide, the right edge will clip; add it to `layout.wide_glyphs`.
-- Keep the whole bar to three lines or fewer; each line is a row taken from
-  the conversation.
+- Never hand-edit `~/.claude/settings.json`; `install.sh` and `quest enable`
+  do that, with backups.
+- Never claim a layout fits without a `preview`.
+- Colours in `[colors]` are theme roles overridden with `#rrggbb` (or an
+  xterm index). Templates name roles: `<accent>`, `<muted>`, `<green>`.
+- Glyphs must be one cell (emoji are two and are counted correctly). If a
+  font draws a glyph wider than Unicode says, add it to `layout.wide_glyphs`.
+- Keep the bar to three or four lines: each is a row taken from the conversation.

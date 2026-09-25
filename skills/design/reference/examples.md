@@ -1,47 +1,58 @@
-# Worked layouts
+# Worked configs
 
-Every block below is a complete, valid config. Tests validate each one and
-render it at every width, so what you copy is known to fit.
+Every block below is a complete config. The test suite validates each one and
+renders it at many widths, so what you copy is known to work.
 
-## A preset with two tweaks
+## A look, not a layout
 
-The cheapest good result. Start here whenever a preset is close.
+The cheapest good result: keep the default lines, change the dress.
 
 ```toml
-preset = "dashboard"
+theme = "catppuccin"
+style = "powerline"
+icons = "nerd"
+```
 
-[segment.context]
-size = false           # tokens without the window size
+## For any font
 
-[segment.heartbeat]
-frames = "◐◓◑◒"
-color = "purple"
+No Nerd Font needed: Unicode icons and square chips.
+
+```toml
+theme = "nord"
+style = "chips"
+icons = "unicode"
 ```
 
 ## One quiet line
 
-Identity on the left, the two numbers that matter on the right.
+Identity on the left, the numbers that matter on the right.
 
 ```toml
+theme = "tokyo-night"
+style = "minimal"
+
 [[line]]
 left = ["model", "dir", "git"]
-right = ["context", "limit_5h", "heartbeat"]
+right = ["context", "limit_5h"]
 gap = 2
 
 [segment.context]
-format = "<gray>ctx</gray> {bar} <level>{pct}%</level>"
+label = ""
 tokens = false
+width = 8
 
 [segment.limit_5h]
-pace = false
 clock = false
+width = 8
 ```
 
 ## Bars only
 
-No labels, no percentages: three bars and their reset times.
+Three bars and when they reset; no labels or percentages.
 
 ```toml
+style = "classic"
+
 [[line]]
 left = ["context", "limit_5h", "limit_7d"]
 
@@ -49,119 +60,70 @@ left = ["context", "limit_5h", "limit_7d"]
 format = "{bar}"
 
 [segment.limit_5h]
-format = "{bar}[ <dim>{reset}</dim>]"
+format = "{bar}[ <muted>{reset}</muted>]"
 
 [segment.limit_7d]
-format = "{bar}[ <dim>{reset}</dim>]"
+format = "{bar}[ <muted>{reset}</muted>]"
 ```
 
-## Labelled sections with text segments
+## Your own labels
 
-The same segment type placed twice under different names.
+The text segment placed twice under different names.
 
 ```toml
+style = "capsules"
+
 [[line]]
-left = ["where", "dir", "git", "what", "cost"]
-right = ["clock"]
+left = ["env_label", "model", "dir", "git"]
+right = ["note", "clock"]
 
-[segment.where]
+[segment.env_label]
 type = "text"
-text = "repo"
-format = "<bold>{text}</bold>"
+text = "prod"
+color = "red"
+format = "<red><bold>{text}</bold></red>"
 
-[segment.what]
+[segment.note]
 type = "text"
-text = "spend"
-format = "<bold>{text}</bold>"
-
-[segment.cost]
-format = "<gold>${usd}</gold>[ <gray>{duration}</gray>]"
+text = "pairing with Claude"
+icon = ""
 ```
 
-## Custom formats and colours
+## A gradient dashboard
 
-A trimmed model name, the directory as its last component only, a truecolor
-palette, and a wider bar with a textured track.
+Three lines, bars coloured along their length.
 
 ```toml
-[[line]]
-left = ["model", "dir", "git", "pr"]
-right = ["session", "heartbeat"]
-gap = 1
-
-[[line]]
-left = ["context"]
-right = ["limit_5h", "limit_7d"]
-
-[segment.model]
-format = "<accent>{name}</accent>"
-
-[segment.dir]
-format = "<dir>{base}</dir>"
-
-[segment.git]
-format = "<gitstate>{branch}</gitstate>[ <yellow>{dirty}</yellow>][ <green>{staged}</green>]"
+preset = "dashboard"
+theme = "synthwave"
+style = "pills"
 
 [bar]
-width = 16
-empty = "░"
-
-[colors]
-accent = "38;2;255;176;0"
-dir = "38;2;120;180;255"
+fill = "cyan,purple"
+style = "slim"
 ```
 
-## The old bar, minus the things you never look at
+## Claude Quest
 
-Classic lines, written out, with the cache warning and output style gone and
-the per-model window kept.
+The RPG's line at the bottom, the kitty pet at the right edge.
 
 ```toml
-[[line]]
-left = ["model", "dir", "git", "pr", "cost", "env", "session"]
-right = ["heartbeat"]
-gap = 1
+theme = "midnight"
+style = "capsules"
 
-[[line]]
-left = ["context"]
-right = ["limit_5h", "limit_7d", "limit_7d_model"]
-
-[segment.limit_7d]
-clock = false
+[quest]
+enabled = true
+avatar = "auto"
 ```
 
-## Styled bars
+## Claude Quest, inline
 
-The classic layout with textured, gradient-coloured bars in brackets, a thin
-cyan context bar, and an arc spinner.
+Just the hero badge on the first line.
 
 ```toml
-preset = "classic"
+preset = "minimal"
 
-[bar]
-style = "shade"
-fill = "gradient"
-cap_left = "▕"
-cap_right = "▏"
-
-[segment.context]
-style = "thin"
-fill = "cyan"
-
-[segment.heartbeat]
-frames = "arc"
-color = "purple"
+[quest]
+enabled = true
+placement = "inline"
 ```
-
-## Migrating a 1.x config
-
-If `doctor` or `validate` prints `features.* : no longer read`, run
-
-```
-python3 statusline.py migrate ~/.config/claude-statusline/config.toml          # show
-python3 statusline.py migrate ~/.config/claude-statusline/config.toml --write  # apply, with backup
-```
-
-`features.heartbeat = false` becomes lines without `heartbeat`;
-`features.pace = false` becomes `pace = false` on both limit segments; and so on.
-The command prints every mapping it applied.

@@ -1,151 +1,161 @@
-"""Git state and the pull-request badge."""
+"""Git state, the pull request, and the worktree."""
 from __future__ import annotations
 
-from ..config import CFG, GLYPHS
-from ..payload import repo_url
+from ..fit import LEAN, LESS, NARROW, TEXT
+from ..payload import find_pr, repo_url
 from ..util import dur
+from ..width import clip
 from . import Opt, Segment, register
 
 
 @register
 class Git(Segment):
     name = "git"
-    doc = "Branch, ahead/behind, staged/dirty/untracked counts, stashes, and a nudge when a dirty tree goes stale."
+    doc = ("Branch, ahead/behind, staged/modified/untracked counts, stashes, conflicts, and a "
+           "nudge when a dirty tree has gone a while without a commit.")
     priority = 85
-    format = ("<dim>{glyph} </dim><link><gitstate>{branch}</gitstate></link>"
-              "[ <red>{state}</red>][ <cyan>{ahead}</cyan>][ <cyan>{behind}</cyan>]"
-              "[ <dim>{noupstream}</dim>][ <green>{staged}</green>][ <yellow>{dirty}</yellow>]"
-              "[ <gray>{untracked}</gray>][ <red>{conflict}</red>][ <gray>{stash}</gray>]"
-              "[ <agecolor>{age}</agecolor>][ <dim>{wt}</dim>]")
+    tone = "green"
+    format = ("<link><gitstate><bold>{branch}</bold></gitstate></link>[ <red><bold>{state}</bold></red>]"
+              "[ <cyan>{sync}</cyan>][ <muted>{noupstream}</muted>][ <green>{staged}</green>]"
+              "[ <yellow>{dirty}</yellow>][ <subtext>{untracked}</subtext>][ <red>{conflict}</red>]"
+              "[ <subtext>{stash}</subtext>][ <agecolor>{age}</agecolor>]")
     options = {
-        "links": Opt(bool, True, "OSC-8 hyperlink on the branch when the host names the repo."),
-        "last_commit": Opt(bool, True, "Read the last commit time (one more git call when dirty)."),
-        "nudge_min": Opt(int, 45, "Minutes since the last commit before `age` appears on a dirty tree."),
+        "links": Opt(bool, True, "Make the branch a link when the host names the repository."),
+        "last_commit": Opt(bool, True, "Read the last commit's time, for the {age} nudge."),
+        "nudge_min": Opt(int, 45, "Minutes without a commit before {age} appears on a dirty tree."),
+        "max_branch": Opt(int, 32, "Longest branch name shown; longer ones end in …"),
     }
-    fields = {"glyph": "the git glyph", "branch": "branch, @sha when detached", "url": "branch URL",
-              "state": "REBASE, MERGE, CHERRY-PICK, REVERT or BISECT", "ahead": "↑n", "behind": "↓n",
-              "noupstream": "∅ when the branch has no upstream", "staged": "+n", "dirty": "~n",
-              "untracked": "?n", "conflict": "!n", "stash": "⚑n",
-              "age": "⏱ time since last commit, once a dirty tree goes stale",
-              "wt": "'wt' inside a linked worktree"}
-    colors = {"gitstate": "green when clean, orange when dirty",
-              "agecolor": "gray, then yellow past 2h, orange past 4h"}
+    fields_doc = {"branch": "the branch, or @sha when detached", "url": "the branch's web URL",
+                  "state": "REBASE, MERGE, CHERRY-PICK, REVERT or BISECT", "sync": "⇡ahead ⇣behind",
+                  "ahead": "commits ahead", "behind": "commits behind",
+                  "noupstream": "∅ when the branch has no upstream", "staged": "+staged",
+                  "dirty": "~modified", "untracked": "?untracked", "conflict": "!conflicted",
+                  "stash": "stash count", "age": "time since the last commit, once a dirty tree goes stale",
+                  "changes": "all local changes as one count", "clean": "✓ when nothing is changed"}
+    colors_doc = {"gitstate": "green when clean, orange with changes, red with conflicts",
+                  "agecolor": "subtext, yellow past 2h, orange past 4h"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
         g = ctx.git(opts["last_commit"])
         if not g:
             return None
-        branch = g["branch"] or (f"@{g['sha']}" if g["sha"] else "?")
-        clean = not (g["staged"] or g["dirty"] or g["untracked"] or g["conflict"])
+        m = ctx.mark
+        branch = g.get("branch") or (f"@{g['sha']}" if g.get("sha") else "HEAD")
+        cap = opts["max_branch"] if level < LEAN else (20 if level < NARROW else 14)
+        branch = clip(branch, max(6, cap))
+        staged, dirty = g.get("staged", 0), g.get("dirty", 0)
+        untracked, conflict = g.get("untracked", 0), g.get("conflict", 0)
+        changes = staged + dirty + untracked + conflict
+        ahead, behind = g.get("ahead", 0), g.get("behind", 0)
+        sync = (f"{m('ahead')}{ahead}" if ahead else "") + (f"{m('behind')}{behind}" if behind else "")
         base = repo_url(ctx.data) if opts["links"] else None
-        f = {
-            "glyph": GLYPHS["git"], "branch": branch,
-            "url": f"{base}/tree/{g['branch']}" if base and g["branch"] else "",
-            "state": g["state"] or "",
-            "ahead": f"{GLYPHS['ahead']}{g['ahead']}" if g["ahead"] else "",
-            "behind": f"{GLYPHS['behind']}{g['behind']}" if g["behind"] else "",
-            "noupstream": "∅" if (not g["behind"] and not g["upstream"] and g["branch"]) else "",
-            "staged": f"+{g['staged']}" if g["staged"] else "",
-            "dirty": f"~{g['dirty']}" if g["dirty"] else "",
-            "untracked": f"?{g['untracked']}" if g["untracked"] else "",
-            "conflict": f"!{g['conflict']}" if g["conflict"] else "",
-            "stash": f"{GLYPHS['stash']}{g['stash']}" if g["stash"] else "",
-            "age": "", "wt": "wt" if ctx.worktree else "",
-            "_gitstate": "green" if clean else "orange", "_agecolor": "gray",
-        }
-        if g["last_commit"]:
-            age = ctx.now - g["last_commit"]
+        f = {"branch": branch, "url": f"{base}/tree/{g['branch']}" if base and g.get("branch") else "",
+             "state": g.get("state") or "", "sync": sync, "ahead": str(ahead) if ahead else "",
+             "behind": str(behind) if behind else "",
+             "noupstream": m("noupstream") if (not g.get("pending") and not g.get("upstream")
+                                                and g.get("branch") and level < LESS) else "",
+             "staged": f"{m('staged')}{staged}" if staged else "",
+             "dirty": f"{m('dirty')}{dirty}" if dirty else "",
+             "untracked": f"{m('untracked')}{untracked}" if untracked and level < LEAN else "",
+             "conflict": f"{m('conflict')}{conflict}" if conflict else "",
+             "stash": f"{m('stash')}{g['stash']}" if g.get("stash") and level < LESS else "",
+             "age": "", "changes": str(changes) if changes else "",
+             "clean": m("ok") if not changes and not g.get("pending") else "",
+             "_tone": "red" if conflict else ("orange" if changes else "green"), "_age": "subtext"}
+        if level >= NARROW:
+            # One mark for "there are changes" instead of every count.
+            f.update(staged="", untracked="", stash="", sync="",
+                     dirty=f"{m('dirty')}{changes}" if changes else "")
+        if level >= TEXT:
+            f["noupstream"] = ""
+        last = g.get("last_commit")
+        if last and changes and level < LESS:
+            age = ctx.now - last
             if age >= opts["nudge_min"] * 60:
-                f["age"] = f"{GLYPHS['clock']}{dur(age)}"
-                f["_agecolor"] = "gray" if age < 7200 else ("yellow" if age < 14400 else "orange")
+                f["age"] = f"{m('age')}{dur(age)}"
+                f["_age"] = "subtext" if age < 7200 else ("yellow" if age < 14400 else "orange")
         return f
 
-    def colors_at(self, ctx, opts, fields):
-        return {"gitstate": CFG["colors"][fields["_gitstate"]],
-                "agecolor": CFG["colors"][fields["_agecolor"]]}
+    def colors(self, ctx, opts, f):
+        return {"gitstate": f["_tone"], "agecolor": f["_age"]}
+
+    def tone_at(self, ctx, opts, f):
+        return f["_tone"]
 
 
-PR_STATE_COLOR = {"open": "green", "draft": "gray", "merged": "purple",
-                  "closed": "red", "mr": "green", "approved": "green",
-                  "changes_requested": "orange", "review_required": "yellow",
-                  "pending": "yellow"}
-
-
-def _hunt(n, depth=0):
-    if depth > 3 or not isinstance(n, dict):
-        return None
-    number = n.get("number") or n.get("pr_number") or n.get("prNumber") or n.get("id")
-    if isinstance(number, int) and not isinstance(number, bool):
-        return n
-    for v in n.values():
-        if isinstance(v, dict):
-            got = _hunt(v, depth + 1)
-            if got:
-                return got
-    return None
+REVIEW = {"approved": ("green", "approved"), "changes_requested": ("orange", "changes"),
+          "pending": ("yellow", "review"), "review_required": ("yellow", "review"),
+          "draft": ("muted", "draft"), "merged": ("purple", "merged"), "closed": ("red", "closed"),
+          "open": ("green", "")}
 
 
 @register
 class PR(Segment):
     name = "pr"
-    doc = "Pull or merge request number, state and check status, when the host supplies one."
+    doc = "The pull or merge request for this branch, its review state and checks."
     priority = 70
-    format = "<link><prstate>{glyph} {sigil}{number}[ {checks}]</prstate></link>"
-    options = {"links": Opt(bool, True, "OSC-8 hyperlink to the PR.")}
-    fields = {"glyph": "the PR glyph", "sigil": "# for GitHub, ! for GitLab", "number": "PR number",
-              "state": "open, draft, merged, closed, or the review state",
-              "checks": "✓ ✗ or ● for the check status", "kind": "github or gitlab", "url": "PR URL"}
-    colors = {"prstate": "green open/approved, gray draft, purple merged, red closed, "
-                         "orange changes requested, yellow awaiting review"}
+    tone = "purple"
+    format = "<link><prstate><bold>{sigil}{number}</bold></prstate></link>[ <muted>{review}</muted>][ {checks}]"
+    options = {"links": Opt(bool, True, "Link the number to the pull request.")}
+    fields_doc = {"sigil": "# for GitHub, ! for GitLab", "number": "the number", "url": "its URL",
+                  "state": "approved, pending, changes_requested, draft…", "review": "a word for the state",
+                  "checks": "✓ ✗ or ● for the checks", "kind": "github or gitlab"}
+    colors_doc = {"prstate": "green approved/open, yellow awaiting review, orange changes requested, "
+                             "grey draft, purple merged, red closed"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
         data = ctx.data
-        # The host documents a top-level `pr` object (number, url, review_state,
-        # kind); older and third-party shapes nest it under github/gitlab.
-        node = (data.get("pr") or data.get("github") or data.get("gitlab")
-                or data.get("pull_request"))
-        pr = _hunt(node) if isinstance(node, dict) else None
+        pr = find_pr(data)
         if not pr:
             return None
         number = pr.get("number") or pr.get("pr_number") or pr.get("prNumber") or pr.get("id")
-        state = str(pr.get("state") or pr.get("status") or pr.get("review_state") or "open").lower()
+        state = str(pr.get("review_state") or pr.get("state") or pr.get("status") or "open").lower()
         if pr.get("draft") or pr.get("is_draft"):
             state = "draft"
         checks = str(pr.get("checks") or pr.get("check_status") or "").lower()
-        mark = {"failure": "✗", "failing": "✗", "error": "✗", "success": "✓", "passing": "✓",
-                "pending": "●", "running": "●"}.get(checks, "")
+        m = ctx.mark
+        mark = {"failure": ("fail", "red"), "failing": ("fail", "red"), "error": ("fail", "red"),
+                "success": ("ok", "green"), "passing": ("ok", "green"),
+                "pending": ("wait", "yellow"), "running": ("wait", "yellow")}.get(checks)
         kind = str(pr.get("kind") or ("gitlab" if "gitlab" in data else "github")).lower()
         url = pr.get("url") or pr.get("html_url") or ""
         if not url:
             base = repo_url(data)
             url = f"{base}/pull/{number}" if base else ""
-        return {"glyph": GLYPHS["pr"], "sigil": "!" if "gitlab" in kind or kind == "mr" else "#",
-                "number": str(number), "state": state, "checks": mark, "kind": kind,
-                "url": url if opts["links"] else "",
-                "_color": PR_STATE_COLOR.get(state, "cyan")}
+        role, word = REVIEW.get(state, ("purple", state))
+        from ..text import Text
+        return {"sigil": "!" if kind in ("gitlab", "mr") else "#", "number": str(number), "state": state,
+                "review": word if level < LEAN else "", "kind": kind,
+                "checks": Text.of(m(mark[0]), (ctx.color(mark[1]), None, 0, None)) if mark else "",
+                "url": url if opts["links"] else "", "_role": role}
 
-    def colors_at(self, ctx, opts, fields):
-        return {"prstate": CFG["colors"][fields["_color"]]}
+    def colors(self, ctx, opts, f):
+        return {"prstate": f["_role"]}
+
+    def tone_at(self, ctx, opts, f):
+        return f["_role"]
 
 
 @register
 class Worktree(Segment):
     name = "worktree"
-    doc = "The worktree session the host reports (name and branch)."
+    doc = "The worktree this session runs in, and its branch."
     priority = 62
-    format = "<cyan>{glyph} {name}</cyan><dim>[ {branch}]</dim>"
-    fields = {"glyph": "the worktree glyph (⎇)", "name": "worktree name",
-              "branch": "worktree branch", "original_branch": "branch the worktree was cut from"}
+    tone = "teal"
+    format = "<teal>{name}</teal>[ <muted>{branch}</muted>]"
+    fields_doc = {"name": "the worktree's name", "branch": "its branch",
+                  "original_branch": "the branch it was cut from"}
 
-    def fields_at(self, ctx, opts, level):
+    def fields(self, ctx, opts, level):
+        from ..util import dig
         wt = ctx.data.get("worktree")
         if not isinstance(wt, dict):
-            name = ctx.worktree
+            name = dig(ctx.data, "workspace", "git_worktree")
             if not name:
                 return None
             wt = {"name": name}
         name = wt.get("name") or ""
         if not name:
             return None
-        return {"glyph": GLYPHS["git"], "name": str(name), "branch": str(wt.get("branch") or ""),
+        return {"name": str(name), "branch": str(wt.get("branch") or "") if level < LEAN else "",
                 "original_branch": str(wt.get("original_branch") or "")}

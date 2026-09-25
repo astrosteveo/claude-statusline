@@ -1,12 +1,7 @@
-# minimal — one line, the essentials.
-#
-# Model, directory, git, then the context bar and the five-hour window.
-# Token counts and reset clocks are off so it stays short.
+# minimal — one line with the essentials.
 
 [[line]]
 left = ["model", "dir", "git", "context", "limit_5h"]
-right = ["heartbeat"]
-gap = 1
 
 [segment.context]
 tokens = false

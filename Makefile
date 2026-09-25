@@ -1,44 +1,44 @@
-.PHONY: help test test-unit test-install lint install uninstall demo doctor ruler catalog validate preview clean
+.PHONY: help test test-unit test-install lint install uninstall configure preview doctor bench catalog gallery clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 test: test-unit test-install  ## Run every test
 
-test-unit:  ## Run the Python test suite
-	python3 -m unittest discover -s tests -v
+test-unit:  ## The Python suite
+	python3 -m unittest discover -s tests
 
-test-install:  ## Run the install.sh bootstrap tests (isolated $$HOME)
+test-install:  ## install.sh against throwaway homes
 	bash tests/test_install.sh
 
-lint:  ## Byte-compile; check the example config and skill catalog stay in sync
-	python3 -m compileall -q claude_statusline statusline.py
-	python3 -m unittest tests.test_statusline.ConfigTests tests.test_skill -v
+lint:  ## Byte-compile everything; check the catalog and docs are in sync
+	python3 -m compileall -q claude_statusline statusline.py tools
+	python3 -m unittest tests.test_docs tests.test_system.CliTests.test_catalog_in_sync
 
-install:  ## Symlink into ~/.claude and patch settings.json
+install:  ## Install into ~/.claude (a shim that runs this checkout)
 	./install.sh
 
-uninstall:  ## Restore the previous statusline
+uninstall:  ## Put the previous status line back
 	./install.sh --uninstall
 
-demo:  ## Render a sample payload
-	@python3 statusline.py --demo
+configure:  ## The interactive configurator
+	@python3 statusline.py configure
+
+preview:  ## Your config at three widths
+	@python3 statusline.py preview --width 80,120,$${COLUMNS:-160}
+
+doctor:  ## What is installed and in force
+	@python3 statusline.py doctor
+
+bench:  ## How long a refresh takes
+	@python3 statusline.py bench
 
 catalog:  ## Regenerate the skill's segment catalog from the code
 	@python3 statusline.py segments --markdown > skills/design/reference/catalog.md
 
-validate:  ## Validate the config file in use
-	@python3 statusline.py validate
-
-preview:  ## Preview the config in use at three widths
-	@python3 statusline.py preview --width 80,120,$${COLUMNS:-160}
-
-doctor:  ## Report resolved config and detected width
-	@python3 statusline.py --doctor
-
-ruler:  ## Print calibration rulers
-	@python3 statusline.py --ruler
+gallery:  ## Redraw docs/gallery.png (needs pycairo)
+	@python3 tools/gallery.py
 
 clean:  ## Remove caches
-	rm -rf __pycache__ tests/__pycache__ .pytest_cache
+	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 	rm -rf "$${XDG_RUNTIME_DIR:-/tmp}/claude-statusline"
