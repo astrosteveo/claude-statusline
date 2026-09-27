@@ -27,7 +27,7 @@ PKG = os.path.dirname(os.path.abspath(__file__))
 
 STYLES = ("auto", "minimal", "classic", "dots", "powerline", "slant", "pills", "capsules", "chips")
 ICONSETS = ("auto", "nerd", "unicode", "emoji", "none")
-PLACEMENTS = ("line", "inline", "manual")
+PLACEMENTS = ("line", "inline", "manual", "game")
 
 DEFAULTS = {
     "preset": "classic",
@@ -74,8 +74,16 @@ DEFAULTS = {
     "quest": {
         "enabled": False,
         # line: a line of its own at the bottom; inline: the hero badge on
-        # line 1; manual: only where you place quest segments yourself.
+        # line 1; manual: only where you place quest segments yourself;
+        # game: the whole bar becomes the game, an animated scene with a
+        # few gauges beside it.
         "placement": "line",
+        # Game mode: rows of scene under the quest ticker, the gauges beside
+        # it (one per row), and the columns kept for them ("auto": as many
+        # as the widest gauge takes, 0: no gauges).
+        "game_rows": 3,
+        "game_hud": ["context", "limit_5h", "limit_7d"],
+        "game_hud_width": "auto",
         # The pet as an animated picture in kitty; "auto" draws it when
         # Claude Code runs in kitty.
         "avatar": "auto",

@@ -13,6 +13,8 @@
     claude-quest quests               daily and weekly quests
     claude-quest reroll <n>           swap a daily quest (once a day)
     claude-quest boss                 the monster you are fighting, if any
+    claude-quest dungeons             open pull requests, as dungeons to clear
+    claude-quest raid                 this week's tech-debt raid bosses
     claude-quest pet [name <name>]    your companion
     claude-quest titles | title <t>   earned titles; wear one
     claude-quest achievements         every achievement, earned or not
@@ -27,7 +29,7 @@ import time
 from datetime import datetime
 
 from . import boss as bosses
-from . import effects, items, quests, rules
+from . import dungeon, effects, items, quests, raid, rules
 from . import state as store
 from .game import ACHIEVEMENTS, Game, GameError
 from .ui import bar, c, item_line, rarity
@@ -181,16 +183,61 @@ def show_boss(g):
                    f"It flees after 24 hours."))
 
 
+def show_dungeons(g):
+    ds = sorted(g.s["dungeons"].values(), key=lambda d: -d["opened"])
+    if not ds:
+        print(f"{dungeon.ICON} No dungeons open. `gh pr create` opens one; merging it clears it.")
+        return
+    print(c("bold", f"{dungeon.ICON} Open dungeons"))
+    for d in ds:
+        age = round((g.now - d["opened"]) / 86400, 1)
+        trap = c("red", f"  🪤 {d['failing']} checks failing") if d.get("failing") else ""
+        xp, gold, _ = dungeon.rewards(d, g.level())
+        print(f"  #{d['number']:<5} {c('bold', d['name'])} in {d['project']}: {d['rooms']} rooms, "
+              f"{d['traps']} traps, {age} days{trap}")
+        print(c("dim", f"         clear it now for about {xp} XP, {gold} gold and a guaranteed drop"))
+    print(c("dim", "  Each push is a room, each failing `gh pr checks` a trap; `gh pr merge` clears it. "
+                   "Unmerged dungeons crumble after 14 days."))
+
+
+def show_raid(g):
+    rs = g.s["raids"]
+    if not rs:
+        print(f"{raid.ICON} No raid this week yet. Your next commit counts the TODO, FIXME, XXX and HACK "
+              "markers in the project and summons its boss.")
+        return
+    print(c("bold", f"{raid.ICON} Tech-debt raids") + c("dim", "  (new ones each week)"))
+    for project, r in sorted(rs.items()):
+        if r["defeated"]:
+            print(f"  {project:<20} {c('green', '✓ ' + r['name'] + ' slain, debt-free this week')}")
+            continue
+        xp, gold, _ = raid.rewards(r, g.level())
+        print(f"  {project:<20} {c('bold', r['name'])}  {bar(r['hp'] / max(1, r['max_hp']), 12)} "
+              f"{r['hp']}/{r['max_hp']}  {c('dim', f'slay it for {xp} XP, {gold} gold')}")
+    print(c("dim", "  Commits that remove markers strike it (15 XP each); zero markers slays it."))
+
+
 def show_pet(g):
     s = g.s
     level = g.level()
-    stage, desc = rules.stage_for(level)
     tier, tier_name = rules.bond_level(s["pet"].get("bond", 0))
     name = s["pet"].get("name")
-    print(f"🐾 {c('bold', name or 'Your pet')}, {desc}")
+    form = rules.form_of(s)
+    print(f"🐾 {c('bold', name or 'Your pet')}, {rules.pet_description(s)}" + (f" {form[1]}" if form else ""))
+    if form:
+        print("  Gift: " + "; ".join(items.fx_lines(rules.form_fx(s))))
     nxt = [(need, key, d) for need, key, d in rules.PET_STAGES if need > level]
     if nxt:
         print(f"  Evolves into {nxt[0][2]} at level {nxt[0][0]}.")
+    if not form and nxt and nxt[0][1] in rules.FORM_STAGES:
+        top = rules.top_school(s.get("school"))
+        if top:
+            key, icon, fx = rules.FORMS[top]
+            print(f"  Heading for the {icon} {key} form, from your top school ({rules.SCHOOLS[top][0]}): "
+                  + "; ".join(items.fx_lines(fx)) + ".")
+        print(c("dim", "  The form is fixed by the school you use most when it evolves. Other forms: "
+                       + ", ".join(f"{f[1]} {f[0]} ({rules.SCHOOLS[k][0]})"
+                                   for k, f in rules.FORMS.items() if k != top) + "."))
     bond = s["pet"].get("bond", 0)
     levels = rules.BOND_LEVELS
     if tier + 1 < len(levels):
@@ -266,16 +313,21 @@ def show_guide(g):
     print("\n" + c("bold", "Quests") + ": three daily quests and one weekly. One free reroll a day.")
     print("\n" + c("bold", "Bosses") + ": a failing test, build or lint run summons a monster with one HP per "
           "failure. Runs with fewer failures hit it; a clean run defeats it for XP, gold and a guaranteed drop.")
+    print("\n" + c("bold", "PR dungeons") + ": `gh pr create` opens one. Each push is a room, each "
+          "failing `gh pr checks` a trap; `gh pr merge` clears it, paying more the deeper it went.")
+    print("\n" + c("bold", "Tech-debt raids") + ": your first commit of the week in a project summons a boss "
+          "with one HP per TODO, FIXME, XXX or HACK. Commits that remove them strike it.")
     print("\n" + c("bold", "Your pet") + " evolves at levels " +
           ", ".join(f"{need} ({d.split()[-1]})" for need, _, d in rules.PET_STAGES[1:]) +
-          ", wears your gear, and bonds with you over time.")
+          ", wears your gear, and bonds with you over time. As a drake it takes the form of your top "
+          "school, with a gift to match; a wyrm's gift is doubled.")
     print("\n" + c("dim", "Commands: claude-quest help"))
 
 
 # ------------------------------------------------------------------ dispatch
 
 READS = {"sheet", "bag", "loot", "inv", "inventory", "inspect", "quests", "shop", "boss", "titles",
-         "achievements", "log", "guide", "pet"}
+         "achievements", "log", "guide", "pet", "dungeons", "dungeon", "raid", "raids"}
 
 
 def main(argv):
@@ -349,6 +401,10 @@ def main(argv):
                 g.reroll(int(args[0]) - 1)
             elif cmd == "boss":
                 show_boss(g)
+            elif cmd in ("dungeons", "dungeon"):
+                show_dungeons(g)
+            elif cmd in ("raid", "raids"):
+                show_raid(g)
             elif cmd == "pet":
                 if args[:1] == ["name"]:
                     g.name_pet(" ".join(args[1:]))

@@ -45,6 +45,18 @@ PET_STAGES = [
     (30, "drake", "a young stack drake"),
     (50, "wyrm", "an elder kernel wyrm"),
 ]
+# From the drake on, the pet takes the form of your top school at the moment
+# it evolves, and keeps it. A wyrm doubles its form's gift.
+FORM_STAGES = ("drake", "wyrm")
+FORMS = {
+    # school: (form, emoji, the gift's fx)
+    "shell": ("ember", "🔥", {"xp_shell": 0.10, "test_xp": 5}),
+    "edit": ("forge", "⚒️", {"xp_edit": 0.10, "commit_xp": 10}),
+    "read": ("lore", "📚", {"xp_read": 0.10, "luck": 0.10}),
+    "agent": ("arcane", "🔮", {"xp_agent": 0.10, "quest": 0.10}),
+    "web": ("storm", "⚡", {"xp_web": 0.10, "gold": 0.05}),
+}
+FORM_BY_KEY = {f[0]: school for school, f in FORMS.items()}
 BOND_LEVELS = [(0, "Curious"), (10, "Friendly"), (30, "Loyal"), (60, "Devoted"), (100, "Soulbound")]
 
 
@@ -64,6 +76,42 @@ def stage_for(level):
     """(key, description) of the pet at this level."""
     need, key, name = [s for s in PET_STAGES if level >= s[0]][-1]
     return key, name
+
+
+def top_school(school):
+    return max(school, key=school.get) if school else None
+
+
+def form_for(school):
+    """The form key your top school would give, or None before any tool use."""
+    return FORMS[school][0] if school in FORMS else None
+
+
+def form_of(state):
+    """(form, emoji, fx) of the pet's form, or None while it has none."""
+    school = FORM_BY_KEY.get((state.get("pet") or {}).get("form"))
+    if not school or stage_for(level_for(state.get("xp", 0)))[0] not in FORM_STAGES:
+        return None
+    return FORMS[school]
+
+
+def form_fx(state):
+    """The form's gift, doubled for a wyrm."""
+    form = form_of(state)
+    if not form:
+        return {}
+    mult = 2 if stage_for(level_for(state.get("xp", 0)))[0] == "wyrm" else 1
+    return {k: v * mult for k, v in form[2].items()}
+
+
+def pet_description(state):
+    """'a young ember drake', or the stage's plain description."""
+    key, desc = stage_for(level_for(state.get("xp", 0)))
+    form = form_of(state)
+    if not form:
+        return desc
+    words = desc.split()       # "a young stack drake" -> "a young ember drake"
+    return " ".join(words[:-2] + [form[0], words[-1]])
 
 
 def bond_level(bond):

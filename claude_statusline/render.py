@@ -5,7 +5,7 @@ import os
 
 from . import decor, segments
 from .context import Context
-from .fit import Placed, fit_line
+from .fit import Fit, Placed, fit_line
 from .icons import icon_for
 from .template import render as render_template
 from .text import Text
@@ -54,6 +54,9 @@ def render_lines(data, comp, cols=None, now=None, env=None, sync_git=False, ctx=
     ctx = ctx or Context(data, comp, cols=cols, now=now, env=env, sync_git=sync_git)
     lines = comp["lines"]
     pins = [None] * len(lines)
+    game = ctx.quest_cfg.get("enabled") and ctx.quest_cfg.get("placement") == "game"
+    if game:
+        return _game_lines(ctx, lines)
     if ctx.live and ctx.quest_cfg.get("enabled") and ctx.quest_cfg.get("avatar") not in ("off", False):
         try:
             from .segments.quest import avatar_pins
@@ -82,9 +85,55 @@ def render_lines(data, comp, cols=None, now=None, env=None, sync_git=False, ctx=
     return fits
 
 
+def _game_lines(ctx, lines):
+    """Game mode: the ticker line as usual, then the scene with a gauge beside each row."""
+    from .gamemode import scene_rows
+
+    def group(segs, side):
+        return decor.group(segs, ctx, side)
+
+    scene = [ln for ln in lines if ln.get("scene") is not None]
+    hud_w = ctx.quest_cfg.get("game_hud_width", "auto")
+    if hud_w == "auto":
+        # As wide as the widest gauge in full, rounded up so a percentage gaining
+        # a digit doesn't resize the scene (and re-draw the kitty picture).
+        widest = max((fit_line(_placed(ln["right"], ctx), [], ctx.avail, 0, group, decor.compose).text.width
+                      for ln in scene if ln["right"]), default=0)
+        hud_w = -(-widest // 4) * 4
+    hud_w = max(0, min(int(hud_w), ctx.avail // 3))
+    has_hud = hud_w > 0 and any(ln["right"] for ln in scene)
+    width = max(10, ctx.avail - (hud_w + 1 if has_hud else 0))
+    rows = scene_rows(ctx, width, len(scene)) if scene else []
+    fits = []
+    for line in lines:
+        if line.get("scene") is None:
+            fit = fit_line(_placed(line["left"], ctx), _placed(line["right"], ctx), ctx.avail,
+                           line.get("gap", 2), group, decor.compose)
+            fits.append(fit if fit.text else None)
+            continue
+        text = rows[line["scene"]]
+        if has_hud:
+            hud = fit_line([], _placed(line["right"], ctx), hud_w, 0, group, decor.compose)
+            pad = hud_w - hud.text.width
+            text = Text(text.spans + [(" " * (1 + max(0, pad)), (None, None, 0, None))] + hud.text.spans)
+        fit = Fit(text, 0, [], ctx.avail)
+        fits.append(fit)
+    return fits
+
+
 def render(data, comp, cols=None, now=None, env=None, sync_git=False, live=None) -> str:
     ctx = Context(data, comp, cols=cols, now=now, env=env, sync_git=sync_git, live=live)
-    return "\n".join(f.text.ansi(ctx.mode) for f in render_lines(data, comp, ctx=ctx) if f is not None)
+    return "\n".join(_anchor(f.text.ansi(ctx.mode), ctx.mode)
+                     for f in render_lines(data, comp, ctx=ctx) if f is not None)
+
+
+def _anchor(line, mode):
+    """Claude Code trims each line, so a line with an empty left group would lose
+    the padding that pushes its right group (and the pinned pet) to the edge.
+    A leading reset, or a blank braille cell without colour, is not whitespace."""
+    if not line.startswith(" "):
+        return line
+    return ("⠀" + line[1:]) if mode == "none" else "\033[0m" + line
 
 
 def fallback(data) -> str:

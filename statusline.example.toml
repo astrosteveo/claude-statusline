@@ -95,9 +95,13 @@ red = 90
 [quest]
 enabled = false
 placement = "line"       # line: its own line · inline: the hero on line 1 · manual
-avatar = "auto"          # the animated pet in kitty: auto, on, off
+                         # game: the whole bar becomes the game (see below)
+avatar = "auto"          # the animated pet (and game scene) in kitty: auto, on, off
 avatar_cols = 8
 event_seconds = 30.0     # how long loot and level-ups stay on the bar
+game_rows = 3            # game mode: rows of scene under the quest ticker
+game_hud = ["context", "limit_5h", "limit_7d"]   # a gauge beside each row
+game_hud_width = "auto"  # columns kept for the gauges; 0 for none
 
 # --- the finer points ---------------------------------------------------------------
 [layout]

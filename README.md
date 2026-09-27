@@ -126,7 +126,7 @@ colour in `[colors]`.
 | `env`, `host`, `session`, `agent`, `vim`, `output_style`, `version`, `clock` | the rest of what the host knows |
 | `text` | your own label; place several with `type = "text"` |
 | `heartbeat` | a tick that moves while the bar refreshes (off unless placed: a debugging aid) |
-| `quest`, `quest_boss`, `quest_daily`, `quest_buffs`, `quest_event`, `quest_streak`, `quest_gold`, `quest_pet` | Claude Quest |
+| `quest`, `quest_boss`, `quest_raid`, `quest_dungeon`, `quest_daily`, `quest_buffs`, `quest_event`, `quest_streak`, `quest_gold`, `quest_pet` | Claude Quest |
 
 `statusline.py segments <name>` lists a segment's options, fields and colours;
 [catalog.md](skills/design/reference/catalog.md) has all of them, and
@@ -150,16 +150,43 @@ most), commits and pushes pay gold, loot drops as replies land, and a failing
 test, build or lint run summons a boss with one HP per failure; fix it to win.
 Three daily quests and a weekly one, a shop that restocks every day, a forge,
 gear in five slots with set bonuses and titles, streaks, achievements, and a
-pet that evolves at levels 5, 15, 30 and 50.
+pet that evolves at levels 5, 15, 30 and 50. At 30 it takes the form of the
+school you use most (ember, forge, lore, arcane or storm), with a bonus
+to match; a wyrm doubles it.
 
-On the bar: your level, title and XP; today's quests; the boss's hearts; live
-buffs; news of the latest loot or level-up; your streak and gold; and the pet.
+A pull request opened with `gh pr create` is a dungeon: every push is a room,
+failing `gh pr checks` spring traps, and `gh pr merge` clears it, paying more
+the deeper it went. Each week your first commit in a project summons a
+tech-debt raid boss with one HP per TODO, FIXME, XXX or HACK; commits that
+remove them strike it.
+
+On the bar: your level, title and XP; today's quests; the boss's hearts; this
+project's raid boss and dungeon; live buffs; news of the latest loot or
+level-up; your streak and gold; and the pet.
 In kitty the pet is an animated picture at the right edge, wearing your gear,
 running while tools fire, fighting bosses, celebrating loot and dozing when
 you step away; elsewhere it is a little text sprite.
 
+### Game mode
+
+```toml
+[quest]
+enabled = true
+placement = "game"
+```
+
+The whole bar becomes the game. The top line is the quest ticker; below it
+a scene spans the width: your pet wanders, runs while tools fire, charges
+the boss or the tech-debt kraken, throws confetti at loot, waits for you
+after a reply and sleeps when you step away, with a castle on the hill while
+a PR dungeon is open. In kitty it is an animated picture (drawn once per
+situation and looped by kitty itself, so it moves smoothly between
+refreshes); elsewhere it is a little text world. Beside each row sits one
+gauge from `game_hud`, compact: context, 5h and 7d by default. `game_rows`
+sets the height.
+
 Play with `/quest` inside Claude Code or `claude-quest` in a terminal: `sheet`,
-`bag`, `equip`, `use`, `sell`, `forge`, `shop`, `buy`, `quests`, `boss`, `pet`,
+`bag`, `equip`, `use`, `sell`, `forge`, `shop`, `buy`, `quests`, `boss`, `dungeons`, `raid`, `pet`,
 `titles`, `achievements`, `log`, `guide`.
 
 ## Performance

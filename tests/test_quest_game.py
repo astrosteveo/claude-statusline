@@ -16,7 +16,7 @@ QUEST_HOME = os.environ["CLAUDE_QUEST_HOME"] = tempfile.mkdtemp(prefix="quest-te
 def setUpModule():
     os.environ["CLAUDE_QUEST_HOME"] = QUEST_HOME     # other test modules point it elsewhere
 
-from claude_statusline.quest import boss, effects, items, quests, rules, state, view  # noqa: E402
+from claude_statusline.quest import boss, dungeon, effects, items, quests, raid, rules, state, view  # noqa: E402
 from claude_statusline.quest.game import Game, GameError, git_subcommands, streak_of  # noqa: E402
 
 NOON = datetime(2026, 9, 25, 12, 0).timestamp()
@@ -158,6 +158,171 @@ class ProgressionTests(unittest.TestCase):
         self.assertEqual(g.s["xp"] - before, rules.XP_BY_TOOL["Bash"] + rules.COMMIT_XP)
         g.tool(bash("git commit -m 'nothing'", failed=True, out="nothing to commit"), failed=True)
         self.assertEqual(g.s["counters"]["commits"], 1)
+
+
+class FormTests(unittest.TestCase):
+    def test_drake_takes_the_top_school(self):
+        s = new_state(xp=rules.xp_for_level(30) - 1, school={"shell": 50, "edit": 10})
+        g = game(s)
+        self.assertIsNone(rules.form_of(s))
+        g.gain_xp(5)
+        self.assertEqual(s["pet"]["form"], "ember")
+        self.assertIn("young ember drake", "\n".join(g.msgs))
+        self.assertAlmostEqual(g.fx["xp_shell"], 0.10)
+        self.assertIn("evolved", s["achievements"])
+        s["school"]["edit"] = 999                          # the form, once taken, stays
+        self.assertEqual(view.build(s, NOON)["form"], "ember")
+        s["xp"] = rules.xp_for_level(50)
+        self.assertAlmostEqual(game(s).fx["xp_shell"], 0.20)  # a wyrm doubles the gift
+        self.assertEqual(rules.pet_description(s), "an elder ember wyrm")
+
+    def test_saves_already_past_thirty_settle_on_tick(self):
+        s = new_state(xp=rules.xp_for_level(35), school={"read": 5})
+        game(s)
+        self.assertEqual(s["pet"]["form"], "lore")
+
+    def test_no_form_before_the_drake(self):
+        s = new_state(xp=rules.xp_for_level(25), school={"web": 5})
+        g = game(s)
+        self.assertNotIn("form", s["pet"])
+        self.assertEqual(g.fx.get("xp_web", 0), 0)
+        self.assertIsNone(view.build(s, NOON)["form"])
+
+    def test_form_changes_the_look_signature(self):
+        s = new_state(xp=rules.xp_for_level(31), school={"agent": 5})
+        before = view.build(s, NOON)["gear_sig"]
+        game(s)
+        self.assertNotEqual(view.build(s, NOON)["gear_sig"], before)
+
+
+class DungeonTests(unittest.TestCase):
+    URL = "https://github.com/me/proj/pull/42\n"
+
+    def test_parsing(self):
+        self.assertEqual(list(dungeon.commands(boss.segments("git push && gh pr create --fill"))),
+                         [("create", " --fill")])
+        self.assertEqual(dungeon.number_in("https://github.com/a/b/pull/7"), 7)
+        quoted = 'g.tool(bash("git push && gh pr merge 42", out="Ran 53 tests"))'
+        self.assertEqual(list(dungeon.commands(boss.segments(quoted))), [])
+        self.assertEqual(list(dungeon.commands(["gh pr merge 3 --subject 'Fix it' --squash"])),
+                         [("merge", " 3 --subject 'Fix it' --squash")])
+        self.assertEqual(dungeon.number_in(" 12 --squash"), 12)
+        self.assertEqual(dungeon.number_in(" #12"), 12)
+        self.assertIsNone(dungeon.number_in(" --squash --delete-branch"))
+        self.assertEqual(dungeon.failing_checks("lint\tfail\t1m\thttps://x\ntest\tpass\t2m\thttps://y\n"), 1)
+
+    def test_crawl_and_clear(self):
+        g = game()
+        g.tool(bash("gh pr create --fill", out=self.URL))
+        d = g.s["dungeons"]["proj#42"]
+        self.assertEqual(d["rooms"], 1)
+        g.tool(bash("git push"))
+        g.tool(bash("git push"))
+        self.assertEqual(d["rooms"], 3)
+        g.tool(bash("gh pr checks", failed=True, out="lint\tfail\t1m\thttps://x\n"), failed=True)
+        g.tool(bash("gh pr checks", failed=True, out="lint\tfail\t1m\thttps://x\n"), failed=True)
+        self.assertEqual(d["traps"], 1)                    # polling the same failure springs it once
+        g.tool(bash("gh pr checks", out="lint\tpass\t1m\thttps://x\n"))
+        self.assertEqual(d["failing"], 0)
+        xp, gold = g.s["xp"], g.s["gold"]
+        bag = len(g.s["bag"])
+        g.tool(bash("gh pr merge 42 --squash"))
+        self.assertEqual(g.s["dungeons"], {})
+        self.assertGreater(g.s["xp"] - xp, 200)
+        self.assertGreater(g.s["gold"], gold)
+        self.assertEqual(len(g.s["bag"]), bag + 1)
+        self.assertIn("delver", g.s["achievements"])
+        self.assertEqual(g.s["counters"]["dungeons"], 1)
+
+    def test_auto_merge_close_and_other_projects(self):
+        g = game()
+        g.tool(bash("gh pr create", out=self.URL))
+        g.tool(bash("git push", cwd="/home/me/other"))
+        self.assertEqual(g.s["dungeons"]["proj#42"]["rooms"], 1)
+        g.tool(bash("gh pr merge --auto --squash"))
+        self.assertIn("proj#42", g.s["dungeons"])
+        g.tool(bash("gh pr merge", failed=True, out="not mergeable"), failed=True)
+        self.assertIn("proj#42", g.s["dungeons"])
+        g.tool(bash("gh pr close 42"))
+        self.assertEqual(g.s["dungeons"], {})
+        self.assertEqual(g.s["counters"]["dungeons"], 0)
+
+    def test_create_needs_the_url(self):
+        g = game()
+        g.tool(bash('gh pr create --fill", out=x))', out="Ran 53 tests\nOK 0\n"))
+        self.assertEqual(g.s["dungeons"], {})
+
+    def test_merge_without_a_dungeon_still_pays(self):
+        g = game()
+        xp = g.s["xp"]
+        g.tool(bash("gh pr merge 7"))
+        self.assertGreater(g.s["xp"] - xp, 100)
+        self.assertEqual(g.s["counters"]["dungeons"], 1)
+
+    def test_collapse(self):
+        g = game()
+        g.tool(bash("gh pr create", out=self.URL))
+        g2 = game(g.s, now=NOON + dungeon.COLLAPSE_AFTER + 1)
+        self.assertEqual(g2.s["dungeons"], {})
+        self.assertIn("crumbled", "\n".join(g2.msgs))
+
+
+class RaidTests(unittest.TestCase):
+    def test_fight(self):
+        g = game()
+        g.raid_commit("proj", 10)
+        r = g.s["raids"]["proj"]
+        self.assertEqual((r["hp"], r["max_hp"]), (10, 10))
+        xp = g.s["xp"]
+        g.raid_commit("proj", 7)
+        self.assertEqual(g.s["xp"] - xp, 45)
+        self.assertIn("raider", g.s["achievements"])
+        xp = g.s["xp"]
+        g.raid_commit("proj", 9)                           # debt back: heals, pays nothing
+        g.raid_commit("proj", 7)                           # removing it again pays nothing twice
+        self.assertEqual(g.s["xp"], xp)
+        self.assertEqual(r["hp"], 7)
+        g.raid_commit("proj", 0)
+        self.assertTrue(r["defeated"])
+        self.assertIn("debt_free", g.s["achievements"])
+        xp = g.s["xp"]
+        g.raid_commit("proj", 0)
+        self.assertEqual(g.s["xp"], xp)
+
+    def test_clean_project_and_unknown_counts(self):
+        g = game()
+        g.raid_commit("proj", 0)
+        g.raid_commit("proj", None)
+        self.assertEqual(g.s["raids"], {})
+
+    def test_new_week_new_raid(self):
+        g = game()
+        g.raid_commit("proj", 5)
+        g2 = game(g.s, now=NOON + 7 * 86400)
+        self.assertEqual(g2.s["raids"], {})
+
+    def test_counts_markers_in_a_real_repo(self):
+        import subprocess
+        repo = tempfile.mkdtemp(prefix="quest-raid-")
+        os.makedirs(os.path.join(repo, "sub"))
+        with open(os.path.join(repo, "a.py"), "w") as fh:
+            fh.write("# TODO one\n# FIXME two\nx = 1  # nothing to do\n")
+        with open(os.path.join(repo, "sub", "b.py"), "w") as fh:
+            fh.write("# HACK three\n")
+        subprocess.run(["git", "init", "-q", repo], check=True)
+        subprocess.run(["git", "-C", repo, "add", "."], check=True)
+        self.assertEqual(raid.count_debt(os.path.join(repo, "sub")), 3)
+        self.assertIsNone(raid.count_debt(tempfile.mkdtemp()))
+
+    def test_commit_hook_summons(self):
+        g = game()
+        orig = raid.count_debt
+        raid.count_debt = lambda cwd: 4
+        try:
+            g.tool(bash("git commit -m wip"))
+        finally:
+            raid.count_debt = orig
+        self.assertEqual(g.s["raids"]["proj"]["hp"], 4)
 
 
 class QuestTests(unittest.TestCase):

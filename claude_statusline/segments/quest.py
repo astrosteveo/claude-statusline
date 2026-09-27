@@ -31,7 +31,7 @@ TITLES = [(1, "Wandering Prompter"), (5, "Apprentice"), (10, "Journeyman"), (15,
 CLASS_ICONS = {"shell": "🧙", "edit": "🔨", "read": "📜", "agent": "🔮", "web": "🏹"}
 EVENT_TONE = {"levelup": "gold", "victory": "gold", "boss": "red", "hit": "red", "quest": "green",
               "achievement": "purple", "loot": "cyan", "chest": "gold", "eat": "pink", "strut": "pink",
-              "use": "purple", "escape": "muted"}
+              "use": "purple", "escape": "muted", "dungeon": "purple", "raid": "orange"}
 
 
 def load_state(ctx):
@@ -157,6 +157,65 @@ class Boss(QuestSegment):
         return {"name": str(b.get("name") or "") if level < LEAN else "", "hearts": hearts,
                 "hp": str(hp), "max_hp": str(top), "emoji": str(b.get("icon") or ""),
                 "project": str(b.get("project") or "")}
+
+
+def _project(ctx):
+    return ctx.cwd.rstrip("/").rsplit("/", 1)[-1] or "?"
+
+
+@register
+class Dungeon(QuestSegment):
+    name = "quest_dungeon"
+    doc = ("The PR dungeon of this project: opened by `gh pr create`, a room per push, a trap when "
+           "checks fail, cleared by merging.")
+    priority = 46
+    tone = "purple"
+    format = "<purple><bold>#{number}</bold></purple>[ <muted>{name}</muted>] <subtext>{rooms}</subtext>[ {trap}]"
+    fields_doc = {"number": "the pull request's number", "name": "the dungeon's name (dropped when narrow)",
+                  "rooms": "rooms so far, one per push", "traps": "traps sprung by failing checks",
+                  "trap": "a warning while checks are failing", "project": "the project"}
+
+    def fields(self, ctx, opts, level):
+        _, v = self.view(ctx)
+        project = _project(ctx)
+        d = next((d for d in (v or {}).get("dungeons") or []
+                  if isinstance(d, dict) and d.get("project") == project), None)
+        if not d:
+            return None
+        rooms = int(num(d.get("rooms"), 1))
+        failing = int(num(d.get("failing"), 0))
+        trap = Text().add(ctx.mark("fail") + (f" {failing}" if level < LEAN else ""),
+                          (ctx.color("red"), None, 0, None)) if failing else ""
+        return {"number": str(d.get("number", "?")), "name": str(d.get("name") or "") if level < LEAN else "",
+                "rooms": f"room {rooms}" if level < NARROW else str(rooms), "traps": str(d.get("traps", 0)),
+                "trap": trap, "project": project}
+
+
+@register
+class Raid(QuestSegment):
+    name = "quest_raid"
+    doc = ("This week's tech-debt raid boss in this project: its HP is the TODO/FIXME/XXX/HACK markers, "
+           "counted at each commit.")
+    priority = 40
+    tone = "orange"
+    format = "[<orange><bold>{name}</bold></orange>][ {bar}][ <subtext>{hp}/{max_hp}</subtext>]"
+    options = {"width": Opt(int, 6, "HP bar cells; 0 hides the bar."),
+               "style": Opt(str, "", "Bar style; empty means [bar].style.")}
+    fields_doc = {"name": "the boss's name (dropped when narrow)", "bar": "HP left as a bar",
+                  "hp": "markers left", "max_hp": "markers at their most this week", "project": "the project"}
+
+    def fields(self, ctx, opts, level):
+        _, v = self.view(ctx)
+        project = _project(ctx)
+        r = ((v or {}).get("raids") or {}).get(project)
+        if not isinstance(r, dict) or r.get("defeated"):
+            return None
+        hp, top = int(num(r.get("hp"), 0)), max(1, int(num(r.get("max_hp"), 1)))
+        width = opts["width"] if level < NARROW else max(3, opts["width"] // 2)
+        bar = ctx.bar(100.0 * hp / top, width, opts["style"], "orange", tone="orange") \
+            if opts["width"] > 0 and level < TEXT else ""
+        return {"name": str(r.get("name") or "") if level < LEAN else "", "bar": bar,
+                "hp": str(hp) if level < LESS or not bar else "", "max_hp": str(top), "project": project}
 
 
 @register
@@ -287,7 +346,8 @@ class Pet(QuestSegment):
         "sleepy": Opt(float, 600.0, "Idle seconds before it falls asleep."),
     }
     fields_doc = {"yard": "the pet at its spot in the yard", "sprite": "the pet alone",
-                  "mood": "excited, working, idle or sleepy", "stage": "egg … wyrm"}
+                  "mood": "excited, working, idle or sleepy", "stage": "egg … wyrm",
+                  "form": "a drake's or wyrm's form: ember, forge, lore, arcane or storm"}
     colors_doc = {"petc": "green; gold while excited, muted asleep"}
 
     def fields(self, ctx, opts, level):
@@ -323,7 +383,7 @@ class Pet(QuestSegment):
             sprite += " " + "zZz"[:1 + tick % 3]
         pos = min(pos, max(0, yard - len(sprite)))
         yard_text = (" " * pos + sprite).ljust(yard) if yard else sprite
-        return {"yard": yard_text, "sprite": sprite, "mood": mood, "stage": stage}
+        return {"yard": yard_text, "sprite": sprite, "mood": mood, "stage": stage, "form": str(v.get("form") or "")}
 
     def colors(self, ctx, opts, f):
         return {"petc": {"excited": "gold", "sleepy": "muted"}.get(f["mood"], "green")}
@@ -354,7 +414,8 @@ IDLE_WEIGHTS = [("stand", 5), ("look", 3), ("lookaround", 2), ("walk", 2),
                 ("hop", 1), ("sleep", 1), ("strut", 1)]
 REACTIONS = {"levelup": "levelup", "achievement": "achievement", "loot": "loot", "chest": "loot",
              "quest": "quest", "victory": "victory", "boss": "battle", "hit": "battle",
-             "eat": "eat", "strut": "strut", "use": "strut", "escape": "lookaround"}
+             "eat": "eat", "strut": "strut", "use": "strut", "escape": "lookaround",
+             "dungeon": "perk", "raid": "battle"}
 TIMING = {"react": 8.0, "your_turn": 90.0, "idle_every": 8.0, "sleepy": 600.0, "refresh": 1800.0}
 
 

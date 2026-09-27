@@ -38,6 +38,7 @@ ICONS = {
         "agent": "⍟", "vim": "", "clock": "", "tokens": "≡", "burn": "∆",
         "quest": "†", "quest_boss": "Ω", "quest_daily": "✓", "quest_buffs": "▲",
         "quest_streak": "◆", "quest_pet": "♥", "quest_event": "◈", "quest_gold": "◎",
+        "quest_dungeon": "Π", "quest_raid": "Ψ",
         "text": "", "heartbeat": "",
     },
     "emoji": {
@@ -48,6 +49,7 @@ ICONS = {
         "agent": "🦾", "vim": "📟", "clock": "🕐", "tokens": "🔢", "burn": "🔥",
         "quest": "⚔️", "quest_boss": "👹", "quest_daily": "📜", "quest_buffs": "✨",
         "quest_streak": "🔥", "quest_pet": "🐾", "quest_event": "🔔", "quest_gold": "🪙",
+        "quest_dungeon": "🏰", "quest_raid": "🐙",
         "text": "", "heartbeat": "",
     },
     "none": {},

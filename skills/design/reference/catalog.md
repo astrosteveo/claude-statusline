@@ -34,8 +34,10 @@ Every segment also takes `format` (its body template), `priority`, `icon` ("" hi
 | `avatar` | 100 | One row of the kitty picture of your pet, for placing it by hand ([quest] placement = "manual"). With the default placement the picture is placed for you at the right edge. (Claude Quest) |
 | `quest_boss` | 60 | The boss you are fighting: a failing test, build or lint run, with its HP as hearts. (Claude Quest) |
 | `quest_event` | 50 | The latest thing that happened (loot, a level-up, a quest done), for a little while. (Claude Quest) |
+| `quest_dungeon` | 46 | The PR dungeon of this project: opened by `gh pr create`, a room per push, a trap when checks fail, cleared by merging. (Claude Quest) |
 | `quest_buffs` | 44 | Buffs in effect, each with the minutes it has left. (Claude Quest) |
 | `quest` | 42 | Your Claude Quest hero: level, title, class, and progress to the next level. (Claude Quest) |
+| `quest_raid` | 40 | This week's tech-debt raid boss in this project: its HP is the TODO/FIXME/XXX/HACK markers, counted at each commit. (Claude Quest) |
 | `quest_daily` | 36 | Today's quests done out of three, and the weekly quest's progress. (Claude Quest) |
 | `quest_gold` | 30 | Claude Quest gold, and the items in your bag. (Claude Quest) |
 | `quest_streak` | 26 | Days in a row you have played (from two days on). (Claude Quest) |
@@ -598,6 +600,21 @@ Tone: `gold`. Default format: `<eventc>{text}</eventc>`
 |--------|------|
 | `<eventc>` | by kind: gold level-ups and victories, cyan loot, green quests, red bosses |
 
+## quest_dungeon
+
+The PR dungeon of this project: opened by `gh pr create`, a room per push, a trap when checks fail, cleared by merging.
+
+Tone: `purple`. Default format: `<purple><bold>#{number}</bold></purple>[ <muted>{name}</muted>] <subtext>{rooms}</subtext>[ {trap}]`
+
+| field | holds |
+|-------|-------|
+| `{number}` | the pull request's number |
+| `{name}` | the dungeon's name (dropped when narrow) |
+| `{rooms}` | rooms so far, one per push |
+| `{traps}` | traps sprung by failing checks |
+| `{trap}` | a warning while checks are failing |
+| `{project}` | the project |
+
 ## quest_buffs
 
 Buffs in effect, each with the minutes it has left.
@@ -633,6 +650,25 @@ Tone: `gold`. Default format: `<gold><bold>Lv {level}</bold></gold>[ <purple>{ti
 | `{pct}` | percent to next level |
 | `{gold}` | gold carried |
 | `{bag}` | items carried |
+
+## quest_raid
+
+This week's tech-debt raid boss in this project: its HP is the TODO/FIXME/XXX/HACK markers, counted at each commit.
+
+Tone: `orange`. Default format: `[<orange><bold>{name}</bold></orange>][ {bar}][ <subtext>{hp}/{max_hp}</subtext>]`
+
+| option | type | default | meaning |
+|--------|------|---------|---------|
+| `width` | int | `6` | HP bar cells; 0 hides the bar. |
+| `style` | str | `""` | Bar style; empty means [bar].style. |
+
+| field | holds |
+|-------|-------|
+| `{name}` | the boss's name (dropped when narrow) |
+| `{bar}` | HP left as a bar |
+| `{hp}` | markers left |
+| `{max_hp}` | markers at their most this week |
+| `{project}` | the project |
 
 ## quest_daily
 
@@ -693,6 +729,7 @@ Tone: `green`. Default format: `<petc>{yard}</petc>`
 | `{sprite}` | the pet alone |
 | `{mood}` | excited, working, idle or sleepy |
 | `{stage}` | egg … wyrm |
+| `{form}` | a drake's or wyrm's form: ember, forge, lore, arcane or storm |
 
 | colour | when |
 |--------|------|

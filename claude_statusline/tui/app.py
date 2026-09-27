@@ -952,7 +952,11 @@ class App:
         return [Field("enabled", ["quest", "enabled"], "bool",
                       "saving registers the hooks (or removes them)"),
                 Field("placement", ["quest", "placement"], "choice", "line: its own line · inline: "
-                      "the hero on line 1 · manual: where you put quest segments", choices=list(PLACEMENTS)),
+                      "the hero on line 1 · manual: where you put quest segments · game: the whole bar "
+                      "becomes the game", choices=list(PLACEMENTS)),
+                Field("game_rows", ["quest", "game_rows"], "int", "game mode: rows of scene", lo=1, hi=8),
+                Field("game_hud_width", ["quest", "game_hud_width"], "choice",
+                      "game mode: columns for the gauges beside the scene", choices=["auto", 0, 12, 16, 20, 24, 28]),
                 Field("avatar", ["quest", "avatar"], "choice", "the animated pet picture, in kitty",
                       choices=["auto", "on", "off"]),
                 Field("avatar_cols", ["quest", "avatar_cols"], "int", "the picture's width in cells", lo=4, hi=20),
@@ -963,7 +967,7 @@ class App:
         out = [self.row(self.T(" ⚔ Claude Quest", "gold", bold=True),
                         self.T("  an RPG that plays itself while you work: XP for every tool, loot as "
                                "replies land, bosses from failing tests", "muted", italic=True)), Text()]
-        out += self.draw_form(self.quest_fields(), "quest", W, 7, y0 + 2)
+        out += self.draw_form(self.quest_fields(), "quest", W, 9, y0 + 2)
         out.append(Text())
         from ..quest import state_path
         if os.path.exists(state_path()):

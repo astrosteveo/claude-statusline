@@ -56,6 +56,10 @@ def banner(view, streak):
     b = view.get("boss")
     if b:
         lines.append(f"{b['icon']} {b['name']} lurks in {b['project']}: {b['hp']}/{b['max_hp']} HP")
+    ds = view.get("dungeons") or []
+    if ds:
+        lines.append(f"🏰 {len(ds)} dungeon{'s' if len(ds) != 1 else ''} open: "
+                     + ", ".join(f"#{d['number']} ({d['rooms']} rooms)" for d in ds[:3]))
     w = max(len(a) for a in art)
     art = art + [""] * (len(lines) - len(art))
     return "\n".join(f"{a.ljust(w)}   {line}" for a, line in zip(art, lines))

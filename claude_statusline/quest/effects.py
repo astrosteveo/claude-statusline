@@ -1,4 +1,4 @@
-"""Add up everything that modifies the game: gear, set bonuses, buffs and pet bond."""
+"""Add up everything that modifies the game: gear, set bonuses, buffs, the pet's form and bond."""
 from collections import defaultdict
 
 from . import items, rules
@@ -48,6 +48,7 @@ def total(state, now):
             add(bonus)
     for buff in live_buffs(state, now):
         add(buff["fx"])
+    add(rules.form_fx(state))
     tier, _ = rules.bond_level(state["pet"].get("bond", 0))
     fx["xp"] += 0.01 * tier
     return fx

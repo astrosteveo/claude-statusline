@@ -41,7 +41,15 @@ LEGACY_FEATURES = {
     "heartbeat": "leave `heartbeat` out of the line to hide it",
 }
 
-QUEST_LINE = {"left": ["quest", "quest_daily", "quest_boss", "quest_buffs", "quest_event"],
+GAME_TICKER = {"left": ["quest", "quest_boss", "quest_raid", "quest_dungeon", "quest_daily", "quest_buffs",
+                        "quest_event"],
+               "right": ["quest_streak", "quest_gold"]}
+# How a gauge looks beside the game scene.
+GAME_HUD_LOOK = {"width": 0, "format": "[<subtext>{label}</subtext> ]<level><bold>{pct}%</bold></level>"}
+# The scene is the picture in game mode, so the ticker keeps no bar but the hero's XP.
+GAME_BARLESS = {"quest_raid": {"width": 0}}
+QUEST_LINE = {"left": ["quest", "quest_daily", "quest_boss", "quest_raid", "quest_dungeon", "quest_buffs",
+                       "quest_event"],
               "right": ["quest_pet", "quest_streak", "quest_gold"]}
 
 
@@ -215,7 +223,7 @@ def _check_section(cfg_raw, problems):
                     problems.append(problem("warning", where, f"no longer used: {RETIRED[where]}"))
                 elif key not in default:
                     problems.append(problem("error", where, "unknown key" + _hint(key, default)))
-                elif where == "quest.avatar":
+                elif where in ("quest.avatar", "quest.game_hud_width"):   # checked below
                     continue
                 elif default[key] is not None and not isinstance(val, type(default[key])) and not (
                         isinstance(default[key], float) and isinstance(val, int) and not isinstance(val, bool)):
@@ -301,11 +309,39 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         problems.append(problem("error", "quest.avatar", "one of auto, on, off"))
         quest["avatar"] = "auto"
 
+    game = bool(quest.get("enabled")) and quest["placement"] == "game"
+    if game:
+        rows = quest.get("game_rows")
+        if not isinstance(rows, int) or isinstance(rows, bool) or not 1 <= rows <= 8:
+            problems.append(problem("error", "quest.game_rows", "a whole number from 1 to 8"))
+            quest["game_rows"] = rows = 3
+        hud = quest.get("game_hud")
+        if not isinstance(hud, list) or not all(isinstance(n, str) for n in hud):
+            problems.append(problem("error", "quest.game_hud", "a list of segment names"))
+            quest["game_hud"] = hud = list(DEFAULTS["quest"]["game_hud"])
+        width = quest.get("game_hud_width")
+        if width != "auto" and (not isinstance(width, int) or isinstance(width, bool) or not 0 <= width <= 60):
+            problems.append(problem("error", "quest.game_hud_width", '"auto" or a whole number from 0 to 60'))
+            quest["game_hud_width"] = "auto"
+        if len(hud) > rows:
+            problems.append(problem("warning", "quest.game_hud", f"only {rows} fit beside {rows} rows of scene"))
+        # The game is the whole bar: the ticker, then the scene with a gauge on each row.
+        lines_raw = [{"left": list(GAME_TICKER["left"]), "right": list(GAME_TICKER["right"]), "_auto": True}]
+        lines_raw += [{"right": [hud[i]] if i < len(hud) else [], "_scene": i} for i in range(rows)]
+        for n in hud[:rows]:
+            # The gauges always wear the compact look (a format written for the full bar would
+            # crowd the scene); every other option of yours still applies.
+            if isinstance(tables.get(n, {}), dict):
+                tables[n] = {**tables.get(n, {}), **GAME_HUD_LOOK}
+        for n, look in GAME_BARLESS.items():
+            if isinstance(tables.get(n, {}), dict):
+                tables[n] = {**tables.get(n, {}), **look}
+
     lines_raw = [dict(ln) if isinstance(ln, dict) else ln for ln in lines_raw]
     placed = {n for ln in lines_raw if isinstance(ln, dict) for side in ("left", "right")
               for n in (ln.get(side) or []) if isinstance(n, str)}
     placed_types = {(tables.get(n) or {}).get("type", n) if isinstance(tables.get(n), dict) else n for n in placed}
-    if quest.get("enabled"):
+    if quest.get("enabled") and not game:
         has_quest = any(t in catalog.CATALOG and catalog.CATALOG[t] == "quest" and t not in ("avatar",)
                         for t in placed_types)
         if quest["placement"] == "line" and not has_quest:
@@ -323,7 +359,7 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
             problems.append(problem("error", where, "must be a table"))
             continue
         for key in ln:
-            if key not in ("left", "right", "gap", "_auto"):
+            if key not in ("left", "right", "gap", "_auto", "_scene"):
                 problems.append(problem("error", f"{where}.{key}", "unknown key (left, right, gap)"))
         groups = []
         for side in ("left", "right"):
@@ -341,11 +377,13 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         if not isinstance(gap, int) or isinstance(gap, bool) or gap < 0:
             problems.append(problem("error", f"{where}.gap", "must be a non-negative integer"))
             gap = 2
-        if groups[0] or groups[1]:
+        if "_scene" in ln:
+            lines.append({"left": [], "right": groups[1], "gap": 0, "auto": True, "scene": ln["_scene"]})
+        elif groups[0] or groups[1]:
             lines.append({"left": groups[0], "right": groups[1], "gap": gap, "auto": bool(ln.get("_auto"))})
         else:
             problems.append(problem("warning", where, "empty line"))
-    if len(lines) > 4:
+    if len(lines) > 4 and not game:
         problems.append(problem("warning", "line", f"{len(lines)} lines; the bar takes that many rows "
                                                    f"from the conversation"))
 
@@ -355,7 +393,8 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         type_ = table.get("type", n)
         if type_ in catalog.CATALOG:
             resolve_segment(n, tables, problems, pal, set(), f"segment.{n}")
-            if n in (cfg.get("segment") or {}) and not (catalog.CATALOG.get(type_) == "quest" and not quest.get("enabled")):
+            if n in (cfg.get("segment") or {}) and not game and \
+                    not (catalog.CATALOG.get(type_) == "quest" and not quest.get("enabled")):
                 problems.append(problem("warning", f"segment.{n}", "configured but not placed on any line"))
         else:
             problems.append(problem("error", f"segment.{n}", f"unknown segment{_hint(type_, catalog.CATALOG)}"))

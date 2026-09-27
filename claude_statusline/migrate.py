@@ -113,7 +113,7 @@ def migrate(raw: dict):
     avatar_rows = {n for n, t in segs.items() if t.get("type") == "avatar"}
     if isinstance(lines, list):
         quest_types = {"quest", "quest_boss", "quest_daily", "quest_buffs", "quest_streak", "quest_event",
-                       "quest_gold", "quest_pet", "pet", "avatar"}
+                       "quest_gold", "quest_pet", "pet", "avatar", "quest_dungeon", "quest_raid"}
         uses_quest = False
         out = []
         for ln in lines:

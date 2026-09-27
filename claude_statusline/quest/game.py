@@ -10,7 +10,7 @@ import re
 import time
 from datetime import date, datetime, timedelta
 
-from . import boss, effects, items, quests, rules
+from . import boss, dungeon, effects, items, quests, raid, rules
 
 ACHIEVEMENTS = {
     # key: (name, description, title granted)
@@ -54,9 +54,14 @@ ACHIEVEMENTS = {
     "mogul": ("Merchant Prince", "Earn 5000 gold in total", "Merchant Prince"),
     "named": ("Best Friends", "Give your pet a name", None),
     "soulbound": ("Soulbound", "Reach the highest bond with your pet", "Soulbound"),
+    "evolved": ("Taking Shape", "Your pet takes its drake form", None),
+    "delver": ("Dungeon Crawler", "Clear a PR dungeon by merging it", None),
+    "deep_delve": ("Deep Delver", "Clear a PR dungeon of 5 rooms or more", "the Delver"),
+    "raider": ("Debt Collector", "Damage a tech-debt raid boss", None),
+    "debt_free": ("Debt Free", "Defeat a tech-debt raid boss", "the Solvent"),
 }
 
-PRIORITY = {"victory": 90, "levelup": 80, "boss": 70, "quest": 60, "achievement": 42,
+PRIORITY = {"victory": 90, "dungeon": 65, "raid": 65, "levelup": 80, "boss": 70, "quest": 60, "achievement": 42,
             "chest": 35, "eat": 30, "strut": 30, "use": 30, "hit": 20, "escape": 15}
 DROP_SOURCES = ["a treasure chest", "under your keyboard", "a forgotten branch", "the dungeon floor",
                 "a stale pull request", "deep in node_modules", "the bottom of the backlog",
@@ -146,10 +151,22 @@ class Game:
                 self.say(f"{b['icon']} {b['name']} wore off.")
         s["buffs"] = effects.live_buffs(s, self.now)
         quests.ensure(s, self.today)
+        if not s["pet"].get("form") and rules.stage_for(self.level())[0] in rules.FORM_STAGES:
+            gift = self._take_form()
+            self.announce("levelup", f"✨ Your pet settles into its form: {rules.pet_description(s)}.{gift}")
         b = s.get("boss")
         if b and self.now - b["spawned"] > boss.ESCAPE_AFTER:
             self.announce("escape", f"{b['icon']} The {b['name']} slipped away while you were gone.")
             s["boss"] = None
+        for k, d in list(s["dungeons"].items()):
+            if self.now - d["opened"] > dungeon.COLLAPSE_AFTER:
+                del s["dungeons"][k]
+                self.announce("escape", f"{dungeon.ICON} The {d['name']} (#{d['number']}) crumbled while "
+                                        "nobody merged it.")
+        week = quests.week_of(self.today)
+        for project, r in list(s["raids"].items()):
+            if r["week"] != week:
+                del s["raids"][project]
         self.refresh_fx()
 
     # ------------------------------------------------------------ progression
@@ -177,11 +194,25 @@ class Game:
         text = f"⬆️  LEVEL UP! You are now level {after}, {rank}. (+{gold} gold)"
         was, now = rules.stage_for(before), rules.stage_for(after)
         if was[0] != now[0]:
-            text += f"\n✨ Your pet evolved into {now[1]}!"
+            gift = self._take_form()
+            text += f"\n✨ Your pet evolved into {rules.pet_description(self.s)}!{gift}"
         self.announce("levelup", text, toast=(f"⬆️ Level {after}!", rank), sound="service-login")
         for need, key in ((10, "lvl10"), (25, "lvl25"), (50, "lvl50"), (75, "lvl75"), (100, "lvl100")):
             if after >= need:
                 self.unlock(key)
+
+    def _take_form(self):
+        """Settle the pet's form on reaching a drake: the school you use most, for good.
+        Returns the words describing its gift, or '' when nothing changed."""
+        pet = self.s["pet"]
+        if pet.get("form") or rules.stage_for(self.level())[0] not in rules.FORM_STAGES:
+            return ""
+        form = rules.form_for(rules.top_school(self.s.get("school"))) or rules.FORMS["agent"][0]
+        pet["form"] = form
+        self.refresh_fx()
+        icon, fx = rules.FORMS[rules.FORM_BY_KEY[form]][1:]
+        self.unlock("evolved")
+        return f" {icon} Its gift: {'; '.join(items.fx_lines(fx))}."
 
     def gain_gold(self, amount):
         amount = round(amount * (1 + self.fx.get("gold", 0)))
@@ -398,11 +429,17 @@ class Game:
             self.unlock("committed")
             if self.s["counters"]["commits"] >= 10:
                 self.unlock("ten_commits")
+        project = (event.get("cwd") or "").rstrip("/").rsplit("/", 1)[-1] or "?"
         if not failed and "push" in subs:
             flat += rules.PUSH_XP + fx.get("push_xp", 0)
             self.gain_gold(rules.PUSH_GOLD)
             self.bump("pushes")
             self.unlock("pusher")
+            self.dungeon_push(project)
+        if not failed and "commit" in subs:
+            self.raid_commit(project, raid.count_debt(event.get("cwd")))
+        for verb, rest in dungeon.commands(boss.segments(cmd)):
+            self.dungeon_command(verb, rest, project, out, failed)
         if re.search(r"\brm\s+-(?:rf|fr)\b", cmd):
             self.unlock("rm_rf")
 
@@ -412,7 +449,6 @@ class Game:
                 self.bump("tests")
                 flat += rules.TEST_XP + fx.get("test_xp", 0)
                 self.unlock("tester")
-            project = (event.get("cwd") or "").rstrip("/").rsplit("/", 1)[-1] or "?"
             failures = boss.count_failures(out)
             if failed or (failures or 0) > 0:
                 self.boss_failure(kind, project, failures)
@@ -472,6 +508,102 @@ class Game:
         if b["attempts"] <= 1 and not banished:
             self.unlock("clean_kill")
         self.roll_loot(1.0, fortune=0.5 + 0.1 * b["max_hp"], source=f"the {b['name']}'s hoard")
+
+    # ------------------------------------------------------------ PR dungeons
+
+    def dungeon_command(self, verb, rest, project, out, failed):
+        dungeons = self.s["dungeons"]
+        if verb == "create":
+            number = None if failed else dungeon.url_number(out)
+            if number is None or dungeon.key(project, number) in dungeons:
+                return
+            d = dungeon.open_(project, number, self.now, self.rng)
+            dungeons[dungeon.key(project, number)] = d
+            for k in sorted(dungeons, key=lambda k: dungeons[k]["opened"])[:-dungeon.KEEP]:
+                del dungeons[k]
+            self.announce("dungeon", f"{dungeon.ICON} PR #{number} opens the {d['name']} in {project}. "
+                                     "Merge it to clear the dungeon; every push is another room.")
+            return
+        number = dungeon.number_in(rest)
+        d = dungeon.find(dungeons, project, number)
+        if verb == "checks":
+            if not d:
+                return
+            n = dungeon.failing_checks(out)
+            if n and not d.get("failing"):
+                d["traps"] += 1
+                self.announce("hit", f"🪤 A trap in the {d['name']}! {n} check{'s' if n != 1 else ''} "
+                                     f"failing on #{d['number']}.")
+            d["failing"] = n
+        elif verb == "close" and not failed and d:
+            del dungeons[dungeon.key(d["project"], d["number"])]
+            self.announce("escape", f"{dungeon.ICON} You left the {d['name']} (#{d['number']}) unexplored.")
+        elif verb == "merge" and not failed and "--auto" not in rest:
+            if d:
+                del dungeons[dungeon.key(d["project"], d["number"])]
+            else:
+                d = {"name": "an uncharted dungeon", "number": number or "?", "rooms": 1, "traps": 0}
+            self.clear_dungeon(d)
+
+    def dungeon_push(self, project):
+        d = dungeon.find(self.s["dungeons"], project)
+        if d:
+            d["rooms"] += 1
+
+    def clear_dungeon(self, d):
+        xp, gold, fortune = dungeon.rewards(d, self.level())
+        xp, gold = self.gain_xp(xp), self.gain_gold(gold)
+        depth = f"{d['rooms']} room{'s' if d['rooms'] != 1 else ''}" + \
+            (f", {d['traps']} trap{'s' if d['traps'] != 1 else ''}" if d["traps"] else "")
+        self.announce("victory", f"{dungeon.ICON} PR #{d['number']} merged: you cleared the {d['name']} "
+                                 f"({depth}). +{xp} XP, +{gold} gold",
+                      toast=(f"{dungeon.ICON} Dungeon cleared!", f"PR #{d['number']}, {depth}"), sound="complete")
+        self.bump("dungeons")
+        self.unlock("delver")
+        if d["rooms"] >= 5:
+            self.unlock("deep_delve")
+        self.roll_loot(1.0, fortune=fortune, source=f"the {d['name']}")
+
+    # ------------------------------------------------------------ tech-debt raids
+
+    def raid_commit(self, project, debt):
+        if debt is None:
+            return
+        raids = self.s["raids"]
+        r = raids.get(project)
+        if not r:
+            if debt <= 0:
+                return
+            raids[project] = r = raid.summon(project, quests.week_of(self.today), debt, self.rng)
+            self.announce("raid", f"{raid.ICON} The {r['name']} rises from {project}'s backlog: "
+                                  f"{debt} TODOs and FIXMEs. Commits that remove them strike it.",
+                          toast=(f"{raid.ICON} {r['name']} rises!", f"{debt} HP, in {project}"),
+                          sound="dialog-warning")
+            return
+        if r["defeated"]:
+            return
+        r["hp"] = debt
+        r["max_hp"] = max(r["max_hp"], debt)
+        hit = r["low"] - debt
+        if hit <= 0:
+            return
+        r["low"] = debt
+        self.unlock("raider")
+        if debt == 0:
+            r["defeated"] = True
+            xp, gold, fortune = raid.rewards(r, self.level())
+            xp, gold = self.gain_xp(xp), self.gain_gold(gold)
+            self.announce("victory", f"{raid.ICON} The {r['name']} is slain: {project} is debt-free! "
+                                     f"+{xp} XP, +{gold} gold",
+                          toast=(f"{raid.ICON} {r['name']} slain!", f"{project} is debt-free"), sound="complete")
+            self.bump("raids")
+            self.unlock("debt_free")
+            self.roll_loot(1.0, fortune=fortune, source=f"the {r['name']}'s hoard")
+            return
+        xp = self.gain_xp(15 * min(hit, 50))
+        gold = self.gain_gold(2 * min(hit, 50))
+        self.announce("raid", f"⚔️  You strike the {r['name']} for {hit}! {debt}/{r['max_hp']} HP left. "
+                              f"+{xp} XP, +{gold} gold")
 
     # ------------------------------------------------------------ player actions
 

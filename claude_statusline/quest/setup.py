@@ -22,7 +22,7 @@ MARK = "<!-- claude-statusline: quest command -->"
 
 COMMAND_TEXT = """---
 description: Claude Quest — your hero, bag, quests, shop, boss and pet (try /quest help)
-argument-hint: "[sheet|bag|inspect|equip|use|sell|forge|shop|buy|quests|boss|pet|titles|log|guide|help] [args]"
+argument-hint: "[sheet|bag|inspect|equip|use|sell|forge|shop|buy|quests|boss|dungeons|raid|pet|titles|log|guide|help] [args]"
 allowed-tools: Bash(python3 -S ~/.claude/statusline.py quest:*)
 ---
 {mark}

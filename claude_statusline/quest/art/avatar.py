@@ -356,8 +356,13 @@ def layout(stage, w, h, gear):
 
 
 def render(stage, action, i, w, h, gear):
-    T, n, fn = ACTION_SPECS[action]
-    k = i / n
+    _, n, _ = ACTION_SPECS[action]
+    return render_at(stage, action, i / n, w, h, gear)
+
+
+def render_at(stage, action, k, w, h, gear):
+    """One frame of an action at loop position k in [0, 1)."""
+    T, _, fn = ACTION_SPECS[action]
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
     cr = cairo.Context(surf)
     big = BIG[stage]
@@ -462,10 +467,13 @@ def upload(fd, image_id, frames, gap, cols, rows):
 
 
 def current_look():
-    """Stage and gear from the save."""
+    """Stage and gear from the save; a drake's or wyrm's form rides along with the gear."""
     from .. import state as store
     view = store.load_readonly().get("view") or {}
-    return view.get("stage", "lizard"), view.get("gear") or {}
+    gear = dict(view.get("gear") or {})
+    if view.get("form"):
+        gear["form"] = view["form"]
+    return view.get("stage", "lizard"), gear
 
 
 def write_manifest(base):
@@ -485,6 +493,7 @@ def main(argv=None):
     ap.add_argument("--stage", help="override the stage from the save")
     ap.add_argument("--action", help="only this action (with --png)")
     ap.add_argument("--gear", help="with --png: 'all' for sample gear, 'none', or JSON")
+    ap.add_argument("--form", help="with --png: ember, forge, lore, arcane or storm")
     ap.add_argument("--png", help="write a contact sheet here instead of uploading")
     a = ap.parse_args(argv)
 
@@ -497,6 +506,8 @@ def main(argv=None):
             gear = {}
         elif a.gear:
             gear = json.loads(a.gear)
+        if a.form:
+            gear = dict(gear, form=a.form)
         w, h = 20 * a.cols, 54 * a.rows
         acts = [a.action] if a.action else ACTIONS
         per = 8

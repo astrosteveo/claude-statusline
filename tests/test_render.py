@@ -160,6 +160,14 @@ class RenderTests(unittest.TestCase):
                 if mode == "none":
                     self.assertNotIn("\033[0;3", out)
 
+    def test_right_only_line_survives_trimming(self):
+        """Claude Code trims lines: one with an empty left group must not start with a space."""
+        for mode in ("truecolor", "none"):
+            comp = compile_config({"color": mode, "line": [{"right": ["model"]}]})
+            out = render(self.data["busy"], comp, cols=80, now=NOW, env=ENV, live=False)
+            self.assertFalse(out[:1].isspace(), repr(out))
+            self.assertIn("Opus 5", out.strip())
+
     def test_busy_content(self):
         text = "\n".join(plain({"style": "minimal", "icons": "unicode"}, self.data["busy"], 200))
         for want in ("Opus 5", "high", "~/P/", "widget-factory", "feat/parser", "↑2", "+1", "~3", "?2",

@@ -14,9 +14,18 @@ from . import gear as G
 TAU = 2 * math.pi
 PALETTE = {
     "lizard": ((0.40, 0.78, 0.45), (0.85, 0.95, 0.60)),
-    "drake": ((0.55, 0.45, 0.85), (0.95, 0.80, 0.60)),
+    "drake": ((0.55, 0.45, 0.85), (0.95, 0.80, 0.60)),  # arcane, and the look before forms
     "wyrm": ((0.55, 0.45, 0.85), (0.95, 0.80, 0.60)),
 }
+# A drake or wyrm wears its form's colours: body, belly, wings.
+FORM_PALETTE = {
+    "ember": ((0.88, 0.42, 0.28), (1.00, 0.82, 0.55), (1.00, 0.62, 0.25)),
+    "forge": ((0.52, 0.56, 0.64), (0.95, 0.78, 0.50), (0.95, 0.66, 0.30)),
+    "lore": ((0.35, 0.62, 0.52), (0.93, 0.90, 0.70), (0.55, 0.85, 0.75)),
+    "arcane": ((0.55, 0.45, 0.85), (0.95, 0.80, 0.60), (0.75, 0.60, 1.00)),
+    "storm": ((0.30, 0.55, 0.88), (0.85, 0.93, 1.00), (0.55, 0.85, 1.00)),
+}
+WING = (0.75, 0.6, 1)
 SIDE_BIG = {"lizard": 1.0, "drake": 1.2, "wyrm": 1.45}
 
 
@@ -204,11 +213,17 @@ def _side_hatchling(cr, pose, gear):
         cr.restore()
 
 
+def colours(stage, gear):
+    """(body, belly, wing) for this stage, in the pet's form if it has one."""
+    form = FORM_PALETTE.get(gear.get("form")) if stage in ("drake", "wyrm") else None
+    return form or PALETTE[stage] + (WING,)
+
+
 def _side_lizard(cr, stage, pose, gear):
     t = pose.t
     big = SIDE_BIG[stage]
     cr.scale(big, big)
-    body, belly = PALETTE[stage]
+    body, belly, wing = colours(stage, gear)
     dark = tuple(c * 0.85 for c in body)
     wings = stage in ("drake", "wyrm")
     asleep = pose.asleep
@@ -265,7 +280,7 @@ def _side_lizard(cr, stage, pose, gear):
         cr.move_to(0, 0)
         cr.curve_to(-10, -30, -30, -34, -38, -26)
         cr.curve_to(-28, -20, -26, -10, 0, 0)
-        cr.set_source_rgba(0.75, 0.6, 1, 0.85)
+        cr.set_source_rgba(*wing, 0.85)
         cr.fill()
         cr.restore()
     if "charm" in gear:
@@ -417,7 +432,7 @@ def _front_hatchling(cr, pose, gear):
 
 def _front_lizard(cr, stage, pose, gear):
     t = pose.t
-    body, belly = PALETTE[stage]
+    body, belly, wing = colours(stage, gear)
     dark = tuple(c * 0.8 for c in body)
     wings = stage in ("drake", "wyrm")
 
@@ -446,7 +461,7 @@ def _front_lizard(cr, stage, pose, gear):
             cr.move_to(0, 0)
             cr.curve_to(10, -22, 28, -26, 34, -18)
             cr.curve_to(26, -14, 22, -6, 0, 4)
-            cr.set_source_rgba(0.75, 0.6, 1, 0.9)
+            cr.set_source_rgba(*wing, 0.9)
             cr.fill()
             cr.restore()
     for fx in (-9, 9):
