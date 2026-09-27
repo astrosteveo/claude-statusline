@@ -266,6 +266,18 @@ class GameModeTests(unittest.TestCase):
                     with open(path, "rb") as fh:
                         pw, ph = struct.unpack(">II", fh.read()[16:24])
                     self.assertTrue(0 <= x and x + pw <= w and ph == h, (sit, x, pw))
+            # Drawn again (another window's uploader, say), each file is replaced, never rewritten
+            # in place: kitty may be reading the old one, and a file shrinking under it kills kitty.
+            before = {p: os.stat(p).st_ino for p in [bg] + [p for _, p in patches]}
+            os.remove(os.path.join(os.path.dirname(bg), "index.json"))
+            with open(bg, "rb") as held:
+                old_bytes = held.read()
+                scene.frames_for(sit, w, h, "night", "lint", True, True)
+                held.seek(0)
+                self.assertEqual(held.read(), old_bytes)
+            for p, ino in before.items():
+                self.assertNotEqual(os.stat(p).st_ino, ino, p)
+            self.assertFalse([f for f in os.listdir(os.path.dirname(bg)) if f.endswith(".tmp")])
             r, wfd = os.pipe()
             scene.upload(wfd, 231, bg, patches[:2], gap, 40, 3)
             os.close(wfd)

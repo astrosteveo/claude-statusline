@@ -417,6 +417,15 @@ def _key(w, h, tod, boss, raid, dungeon):
     return hsh.hexdigest()[:16]
 
 
+def _save(surf, dest):
+    """Write a PNG kitty may be reading: a new file renamed into place, never the old one
+    emptied and refilled. Kitty maps the file it was sent; if that file shrinks under it,
+    kitty dies of SIGBUS. After a rename it keeps reading the old, complete file."""
+    tmp = f"{dest}.{os.getpid()}.tmp"
+    surf.write_to_png(tmp)
+    os.replace(tmp, dest)
+
+
 def frames_for(situation, w, h, tod, boss, raid, dungeon):
     """(backdrop PNG path, [(x, PNG path)], gap ms), drawn once and kept on disk."""
     folder = os.path.join(CACHE, f"scene-{_key(w, h, tod, boss, raid, dungeon)}", situation)
@@ -434,7 +443,7 @@ def frames_for(situation, w, h, tod, boss, raid, dungeon):
         pass
     n, seconds, frame = plan(situation, w, h, boss, raid)
     os.makedirs(folder, exist_ok=True)
-    backdrop(w, h, tod, boss, raid, dungeon, omit=target_of(situation, boss, raid)).write_to_png(bg)
+    _save(backdrop(w, h, tod, boss, raid, dungeon, omit=target_of(situation, boss, raid)), bg)
     xs = []
     for i in range(n):
         x, surf = frame(i)
@@ -448,7 +457,7 @@ def frames_for(situation, w, h, tod, boss, raid, dungeon):
             cr.set_source_surface(surf, x - left, 0)
             cr.paint()
             surf, x = clipped, left
-        surf.write_to_png(path(len(xs)))
+        _save(surf, path(len(xs)))
         xs.append(x)
     gap = max(40, int(seconds / n * 1000))
     with open(index + ".tmp", "w") as fh:
