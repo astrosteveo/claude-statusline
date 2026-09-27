@@ -143,13 +143,13 @@ class Clock(Segment):
     fields_doc = {"time": "the formatted time", "date": "ISO date", "weekday": "Mon, Tue…"}
 
     def fields(self, ctx, opts, level):
-        from datetime import datetime
-        dt = datetime.fromtimestamp(ctx.now)
+        import time
+        t = time.localtime(ctx.now)             # not datetime: importing it costs more than the bar
         try:
-            text = dt.strftime(opts["strftime"])
+            text = time.strftime(opts["strftime"], t)
         except Exception:
-            text = dt.strftime("%H:%M")
-        return {"time": text, "date": dt.strftime("%Y-%m-%d"), "weekday": dt.strftime("%a")}
+            text = time.strftime("%H:%M", t)
+        return {"time": text, "date": time.strftime("%Y-%m-%d", t), "weekday": time.strftime("%a", t)}
 
 
 @register

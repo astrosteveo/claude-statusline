@@ -156,8 +156,8 @@ class Limit(Segment):
         if opts["reset"] and left > 0:
             f["reset"] = f"{ctx.mark('reset')}{dur(left)}"
             if opts["clock"] and level < LESS and left < 3 * 86400:
-                from datetime import datetime
-                f["clock"] = datetime.fromtimestamp(ts).strftime("%H:%M")
+                import time
+                f["clock"] = time.strftime("%H:%M", time.localtime(ts))
         return f
 
     def colors(self, ctx, opts, f):

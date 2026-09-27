@@ -152,10 +152,20 @@ def fit_details(placed, room, group) -> Fit:
     Widths add up segment by segment, so the search renders a segment at a
     level at most once; the arrangement is measured whole before it is
     accepted."""
-    present = [p for p in placed if p.at(FULL) is not None]
+    widths = {}
+    # Most important first: once those already fill the room at full detail, every detail below
+    # them would be dropped before any of them gives way, so the rest are never even drawn.
+    present, used = [], 0
+    for p in sorted(placed, key=lambda p: (-p.prio, placed.index(p))):
+        if used >= room:
+            break
+        s = p.at(FULL)
+        if s is not None:
+            present.append(p)
+            used += group([s], "left").width + 1
+    present.sort(key=placed.index)
     order = sorted(present, key=lambda p: (p.prio, -placed.index(p)))
     levels = {p.name: FULL for p in present}
-    widths = {}
 
     def w(p, level):
         key = (p.name, level)
