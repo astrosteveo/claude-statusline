@@ -16,6 +16,7 @@ claude-statusline {version} — a fast, themeable status line for Claude Code, w
 look and try
   preview [options]               the bar at several widths      --width 80,120,160 --sample busy|quiet|hot|live
   themes | styles | icons | bars  galleries of every choice, drawn with your layout
+  demo [--speed 2]                a scripted session played in this terminal: looks, narrowing, game mode
   segments [name]                 the catalog: every segment, its options, fields and colours
   presets                         the ready-made layouts
       preview/render/themes/styles also take --theme T --style S --icons I --preset P --config PATH --plain
@@ -674,9 +675,10 @@ COMMANDS = {
     "validate": cmd_validate, "doctor": cmd_doctor, "ruler": cmd_ruler, "bench": cmd_bench,
     "set": cmd_set, "unset": lambda a: cmd_set(a, unset=True), "get": cmd_get,
     "migrate": cmd_migrate,
+    "demo": lambda a: __import__("claude_statusline.demo", fromlist=["run"]).run(a),
 }
 ALIASES = {"-h": "help", "--help": "help", "--version": "version", "-V": "version", "--doctor": "doctor",
-           "--ruler": "ruler", "--demo": "preview"}
+           "--ruler": "ruler", "--demo": "demo"}
 
 
 def run(argv) -> int:

@@ -35,6 +35,10 @@ and points `statusLine` in `~/.claude/settings.json` at it, backing up
 anything it replaces. The bar appears on Claude Code's next refresh.
 `./install.sh --uninstall` puts your previous status line back.
 
+To see it before you install anything, `python3 statusline.py demo` plays a
+scripted session in your terminal: the looks, a narrowing window, game mode,
+the party and live activity.
+
 As a plugin, the `design` skill lets Claude restyle the bar for you:
 
 ```

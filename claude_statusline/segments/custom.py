@@ -33,6 +33,14 @@ class Command(Segment):
         from .. import commands
         if not command or not commands.enabled(ctx.comp):
             return None
+        fake = ctx.data.get("_commands")                 # sample and demo payloads carry their own output
+        if isinstance(fake, dict):
+            line = fake.get(command)
+            if not line:
+                return None
+            text = Text([(t, (fg, bg, attrs, None)) for t, fg, bg, attrs in commands.spans_of(str(line))])
+            return {"text": text.clip(max(4, opts["max"])), "plain": text.plain(), "age": "0", "exit": "0",
+                    "took": "0.00"}
         every = max(commands.MIN_EVERY, num(opts["every"], 30.0))
         timeout = max(0.1, min(commands.MAX_TIMEOUT, num(opts["timeout"], 2.0)))
         key = commands.key_of(command, ctx.cwd, opts["per"])

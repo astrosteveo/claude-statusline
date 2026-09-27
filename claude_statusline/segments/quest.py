@@ -45,6 +45,9 @@ def load_state(ctx):
     than drawing the bar, so the parts the bar reads are kept as marshal in the
     runtime directory, keyed by the save's size and checksum."""
     def read():
+        fake = ctx.data.get("_quest")                # sample and demo payloads carry their own save
+        if isinstance(fake, dict):
+            return fake
         import marshal
         import zlib
         from ..quest import state_path
