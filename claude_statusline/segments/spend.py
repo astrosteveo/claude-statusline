@@ -86,19 +86,29 @@ class Burn(Segment):
         return {"rate": money(usd / (ms / 3_600_000.0))}
 
 
+CAUSES = {"tools_changed": "tools changed", "system_prompt_changed": "system prompt changed",
+          "ttl_expired_5m": "expired after 5m", "ttl_expired_1h": "expired after 1h",
+          "likely_server_side": "server side", "model_changed": "model changed"}
+
+
 @register
 class Cache(Segment):
     name = "cache"
-    doc = "The prompt cache, shown only while it is costing you: cold, or missing too often."
+    doc = ("The prompt cache, shown while it is costing you (cold, or missing too often, with the likely "
+           "cause) and in the last minutes before a warm cache goes cold.")
     priority = 65
     tone = "orange"
     glance = True
-    format = "<cachestate>{detail}</cachestate>"
+    format = "<cachestate>{detail}</cachestate>[<muted> · {cause}</muted>]"
     options = {"min_ratio": Opt(float, 0.90, "Warn when the hit ratio drops below this."),
-               "always": Opt(bool, False, "Show the hit ratio even when all is well.")}
-    fields_doc = {"detail": "'cold 310k' or the hit ratio", "ratio": "hit ratio, percent",
-                  "tokens": "tokens to re-cache when cold", "ttl": "the cache's TTL"}
-    colors_doc = {"cachestate": "orange when cold, yellow when the ratio is low, muted otherwise"}
+               "always": Opt(bool, False, "Show the hit ratio even when all is well."),
+               "countdown": Opt(float, 5.0, "Minutes before a warm cache goes cold to start counting down "
+                                            "(at most half its TTL); 0 turns the countdown off.")}
+    fields_doc = {"detail": "'cold 310k', 'hit 62%', 'cools 2m14s' or the hit ratio", "ratio": "hit ratio, percent",
+                  "tokens": "tokens to re-cache when cold", "ttl": "the cache's TTL",
+                  "left": "time until a warm cache goes cold", "cause": "the likely cause of the last miss"}
+    colors_doc = {"cachestate": "orange when cold, yellow when the ratio is low or under a minute is left, "
+                                "teal counting down, muted otherwise"}
 
     def fields(self, ctx, opts, level):
         node = ctx.data.get("prompt_cache")
@@ -108,11 +118,23 @@ class Cache(Segment):
         tokens = node.get("miss_recache_tokens", node.get("recache_tokens_if_cold"))
         tokens = short_num(tokens) if num(tokens) else ""
         pct = f"{ratio * 100:.0f}%" if ratio is not None else ""
-        base = {"ratio": pct, "tokens": tokens, "ttl": str(node.get("ttl") or "")}
+        miss = node.get("last_miss_cause")
+        causes = miss.get("causes") if isinstance(miss, dict) else None
+        cause = ", ".join(CAUSES.get(c, str(c).replace("_", " ")) for c in causes[:2]) \
+            if isinstance(causes, list) and causes and level < LEAN else ""
+        base = {"ratio": pct, "tokens": tokens, "ttl": str(node.get("ttl") or ""), "left": "", "cause": ""}
         if node.get("warm") is False:
             return dict(base, detail="cold" + (f" {tokens}" if tokens and level < LEAN else ""), _state="orange")
         if ratio is not None and ratio < opts["min_ratio"]:
-            return dict(base, detail=f"hit {pct}", _state="yellow")
+            return dict(base, detail=f"hit {pct}", cause=cause, _state="yellow")
+        expires = num(node.get("expires_at"))
+        if expires and opts["countdown"] > 0:
+            left = expires - ctx.now
+            ttl = {"5m": 300, "1h": 3600}.get(str(node.get("ttl")), 3600)
+            if 0 < left <= min(opts["countdown"] * 60, ttl / 2):
+                from .live import elapsed
+                return dict(base, detail=f"cools {elapsed(left)}", left=elapsed(left),
+                            _state="yellow" if left < 60 else "teal")
         if opts["always"] and pct:
             return dict(base, detail=pct, _state="muted")
         return None

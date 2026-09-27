@@ -61,7 +61,7 @@ Documented fields the segments read: `model.{id,display_name}`, `cwd`,
 `context_window.{total_input_tokens,total_output_tokens,context_window_size,used_percentage,current_usage}`,
 `exceeds_200k_tokens`, `fast_mode`, `effort.level`, `thinking.enabled`,
 `rate_limits.{five_hour,seven_day,spend_limit}.{used_percentage,resets_at}`,
-`prompt_cache.{warm,hit_ratio,miss_recache_tokens,ttl,…}`, `session_name`,
+`prompt_cache.{warm,hit_ratio,miss_recache_tokens,ttl,expires_at,last_miss_cause,…}`, `session_name`,
 `version`, `output_style.name`, `vim.mode`, `agent.name`,
 `pr.{number,url,review_state,kind}`, `worktree.{name,branch,original_branch}`.
 

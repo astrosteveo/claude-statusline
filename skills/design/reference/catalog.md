@@ -15,7 +15,7 @@ Every segment also takes `format` (its body template), `priority`, `icon` ("" hi
 | `context` | 70 | How full the context window is: a bar, the percentage, and the tokens. |
 | `pr` | 70 | The pull or merge request for this branch, its review state and checks. |
 | `mode` | 66 | The permission mode when it is not the default: plan, accept edits, auto, don't ask or bypass (live activity; the hooks see it change on the next event). |
-| `cache` | 65 | The prompt cache, shown only while it is costing you: cold, or missing too often. |
+| `cache` | 65 | The prompt cache, shown while it is costing you (cold, or missing too often, with the likely cause) and in the last minutes before a warm cache goes cold. |
 | `worktree` | 62 | The worktree this session runs in, and its branch. |
 | `cost` | 60 | What the session has cost, with its wall time and lines changed alongside. |
 | `duration` | 58 | The session's wall time, and how much of it was spent waiting on the API. |
@@ -320,25 +320,28 @@ Tone: `yellow`. Default format: `<modec><bold>{mode}</bold></modec>`
 
 ## cache
 
-The prompt cache, shown only while it is costing you: cold, or missing too often.
+The prompt cache, shown while it is costing you (cold, or missing too often, with the likely cause) and in the last minutes before a warm cache goes cold.
 
-Tone: `orange`. Default format: `<cachestate>{detail}</cachestate>`
+Tone: `orange`. Default format: `<cachestate>{detail}</cachestate>[<muted> · {cause}</muted>]`
 
 | option | type | default | meaning |
 |--------|------|---------|---------|
 | `min_ratio` | float | `0.9` | Warn when the hit ratio drops below this. |
 | `always` | bool | `false` | Show the hit ratio even when all is well. |
+| `countdown` | float | `5.0` | Minutes before a warm cache goes cold to start counting down (at most half its TTL); 0 turns the countdown off. |
 
 | field | holds |
 |-------|-------|
-| `{detail}` | 'cold 310k' or the hit ratio |
+| `{detail}` | 'cold 310k', 'hit 62%', 'cools 2m14s' or the hit ratio |
 | `{ratio}` | hit ratio, percent |
 | `{tokens}` | tokens to re-cache when cold |
 | `{ttl}` | the cache's TTL |
+| `{left}` | time until a warm cache goes cold |
+| `{cause}` | the likely cause of the last miss |
 
 | colour | when |
 |--------|------|
-| `<cachestate>` | orange when cold, yellow when the ratio is low, muted otherwise |
+| `<cachestate>` | orange when cold, yellow when the ratio is low or under a minute is left, teal counting down, muted otherwise |
 
 ## worktree
 

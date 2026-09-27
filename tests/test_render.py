@@ -306,6 +306,16 @@ class SegmentTests(unittest.TestCase):
         self.assertIsNone(self.one("cache", {"prompt_cache": {"warm": True, "hit_ratio": 0.99}}))
         self.assertIn("hit 50%", self.one("cache", {"prompt_cache": {"warm": True, "hit_ratio": 0.5}}))
 
+    def test_cache_countdown_and_cause(self):
+        warm = {"warm": True, "hit_ratio": 0.99, "ttl": "5m", "expires_at": NOW + 134}
+        self.assertEqual(self.one("cache", {"prompt_cache": warm}), "⊙ cools 2m14s")
+        self.assertIsNone(self.one("cache", {"prompt_cache": dict(warm, expires_at=NOW + 200)}))  # over half the TTL
+        self.assertIsNone(self.one("cache", {"prompt_cache": warm}, countdown=0.0))
+        hour = dict(warm, ttl="1h", expires_at=NOW + 290)
+        self.assertEqual(self.one("cache", {"prompt_cache": hour}), "⊙ cools 4m50s")
+        missed = {"warm": True, "hit_ratio": 0.62, "last_miss_cause": {"causes": ["tools_changed", "odd_new_cause"]}}
+        self.assertEqual(self.one("cache", {"prompt_cache": missed}), "⊙ hit 62% · tools changed, odd new cause")
+
     def test_heartbeat_moves_with_the_clock(self):
         comp = compile_config({"line": [{"left": ["heartbeat"]}]})
         frames = {render({}, comp, cols=80, now=NOW + i, env=ENV, live=False) for i in range(8)}

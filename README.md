@@ -123,7 +123,7 @@ colour in `[colors]`.
 | `limit_5h`, `limit_7d`, `limit_7d_model`, `limit_spend` | rate-limit windows with a pace projection (`→94%`: where you will be at the reset) and the reset countdown |
 | `cost`, `duration`, `diff`, `burn`, `tokens` | spend, wall time, lines changed, $/hour, tokens in and out |
 | `spend` | what today cost across every session, the month so far, and an optional daily budget as a bar |
-| `cache` | the prompt cache, only while it is costing you |
+| `cache` | the prompt cache: while it is costing you (with the likely cause of the last miss), and counting down the last minutes before a warm cache goes cold |
 | `env`, `host`, `session`, `agent`, `vim`, `output_style`, `version`, `clock` | the rest of what the host knows |
 | `text` | your own label; place several with `type = "text"` |
 | `command` | the first line of your own command's output, run in the background (below) |
