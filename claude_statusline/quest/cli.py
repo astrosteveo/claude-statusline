@@ -317,6 +317,9 @@ def show_guide(g):
           "failing `gh pr checks` a trap; `gh pr merge` clears it, paying more the deeper it went.")
     print("\n" + c("bold", "Tech-debt raids") + ": your first commit of the week in a project summons a boss "
           "with one HP per TODO, FIXME, XXX or HACK. Commits that remove them strike it.")
+    print("\n" + c("bold", "The party") + ": each subagent Claude sends out joins your pet in the scene while "
+          "it works and brings back XP with its report. Three at once is a full party. When a long "
+          "conversation is compacted, your pet tidies the scrolls.")
     print("\n" + c("bold", "Your pet") + " evolves at levels " +
           ", ".join(f"{need} ({d.split()[-1]})" for need, _, d in rules.PET_STAGES[1:]) +
           ", wears your gear, and bonds with you over time. As a drake it takes the form of your top "

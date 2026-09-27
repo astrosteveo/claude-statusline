@@ -82,7 +82,7 @@ class SettingsTests(unittest.TestCase):
         self.assertNotIn("Stop", data["hooks"])
         settings.add_quest_hooks(data)
         self.assertTrue(settings.quest_hooks_present(data))
-        self.assertEqual(settings.strip_quest_hooks(data), 5)
+        self.assertEqual(settings.strip_quest_hooks(data), len(settings.HOOK_EVENTS))
         self.assertFalse(settings.quest_hooks_present(data))
         self.assertEqual(data["hooks"]["PostToolUse"][0]["hooks"][0]["command"], "my-own-hook")
 
@@ -114,7 +114,7 @@ class QuestSwitchTests(unittest.TestCase):
         s = self.settings()
         self.assertEqual(s["theme"], "dark")
         cmds = [h["command"] for ev in s["hooks"].values() for e in ev for h in e["hooks"]]
-        self.assertEqual(len(cmds), 5)
+        self.assertEqual(len(cmds), len(settings.HOOK_EVENTS))
         self.assertTrue(all("statusline.py quest hook" in c for c in cmds))
         self.assertTrue(os.path.exists(os.path.join(self.claude, "commands", "quest.md")))
         cfg = os.path.join(self.home, ".config", "claude-statusline", "config.toml")

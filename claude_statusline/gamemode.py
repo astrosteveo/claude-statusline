@@ -22,7 +22,10 @@ SITUATIONS = ["idle", "work", "battle", "celebrate", "sleep", "yourturn"]
 # under 200 (the avatar's) and within 8 bits, which a 256-colour placeholder can name.
 SCENE_BASE = 100
 SLOTS = 16
-CELEBRATE = {"levelup", "achievement", "loot", "chest", "quest", "victory", "eat", "strut", "use", "dungeon"}
+CELEBRATE = {"levelup", "achievement", "loot", "chest", "quest", "victory", "eat", "strut", "use", "dungeon",
+             "compact"}
+PARTY_MAX = 3
+PARTY_LOOK = [("o>", "blue"), ("ô>", "pink"), ("ö>", "teal")]     # the companions in the text world
 FIGHT = {"boss", "hit", "raid"}
 STEP = 10                        # the picture's width snaps to this many columns, so resizing rarely re-draws it
 
@@ -30,6 +33,14 @@ STEP = 10                        # the picture's width snaps to this many column
 def time_of_day(now):
     hour = time.localtime(now).tm_hour
     return "dawn" if 5 <= hour < 8 else "day" if 8 <= hour < 18 else "dusk" if 18 <= hour < 21 else "night"
+
+
+def party_of(view, cfg=None):
+    """How many companions walk with the pet (at most PARTY_MAX; none with `party` off)."""
+    if cfg is not None and cfg.get("party") is False:
+        return 0
+    party = view.get("party")
+    return min(PARTY_MAX, len(party)) if isinstance(party, list) else 0
 
 
 def props(view, project):
@@ -91,20 +102,23 @@ def slot_of(key):
 
 
 def _ensure_scene(ctx, terminals, cols, rows, look, args):
-    """Start the scene uploader for each kitty window lacking this scene; the slot it lives in."""
+    """Start the scene uploader for each kitty window lacking this scene. Returns (image base,
+    columns) of the picture this window can show now: this scene once its upload is complete,
+    the last complete one while it is not, or None when there is none yet."""
     from .segments.quest import TIMING, _runtime
     folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quest", "art")
     try:            # changes whenever the drawing code does, so the scene is re-sent
         version = int(max(os.stat(os.path.join(folder, f)).st_mtime
                           for f in ("scene.py", "avatar.py", "sprites.py", "gear.py")))
     except (OSError, ValueError):
-        return False
+        return None
     key = f"{look}:{cols}x{rows}:{version}"
     slot = slot_of(key)
     base = SCENE_BASE + len(SITUATIONS) * slot
     mine = {tty: pid for tty, pid in terminals.items() if pid in _ancestors()}
+    targets = mine or terminals
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    for tty, pid in (mine or terminals).items():
+    for tty, pid in targets.items():
         stamp_file = _runtime(f"scene-{pid}-{slot}")
         try:
             with open(stamp_file) as fh:
@@ -124,8 +138,36 @@ def _ensure_scene(ctx, terminals, cols, rows, look, args):
                 "from claude_statusline.quest.art.scene import main; sys.exit(main(sys.argv[2:]))")
         from .gitstatus import spawn_detached
         spawn_detached([python, "-c", code, root, "--tty", tty, "--base", str(base),
-                        "--cols", str(cols), "--rows", str(rows)] + args)
-    return base
+                        "--cols", str(cols), "--rows", str(rows), "--ready", _runtime(f"scene-ready-{pid}-{slot}"),
+                        "--key", key] + args)
+    pid = next(iter(targets.values()))
+    shown = _runtime(f"scene-shown-{pid}")
+    try:
+        with open(_runtime(f"scene-ready-{pid}-{slot}")) as fh:
+            ready = fh.read() == key
+    except OSError:
+        ready = False
+    if ready:
+        try:
+            with open(shown) as fh:
+                same = fh.read() == f"{base}|{cols}|{rows}"
+        except OSError:
+            same = False
+        if not same:
+            try:
+                with open(shown, "w") as fh:
+                    fh.write(f"{base}|{cols}|{rows}")
+            except OSError:
+                pass
+        return base, cols
+    try:                        # kitty is still receiving this scene: keep showing the last one it has
+        with open(shown) as fh:
+            old_base, old_cols, old_rows = (int(x) for x in fh.read().split("|"))
+        if old_rows == rows:
+            return old_base, old_cols
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def kitty_rows(ctx, state, view, width, rows, sit, boss, raid, dungeon):
@@ -138,11 +180,15 @@ def kitty_rows(ctx, state, view, width, rows, sit, boss, raid, dungeon):
         return None
     cols = max(STEP, width // STEP * STEP)
     tod = time_of_day(ctx.now)
-    look = f"{view.get('stage')}:{view.get('gear_sig', '')}:{boss or '-'}:{int(raid)}:{int(dungeon)}:{tod}"
-    args = ["--tod", tod] + (["--boss", boss] if boss else []) + (["--raid"] if raid else []) + \
-        (["--dungeon"] if dungeon else [])
-    base = _ensure_scene(ctx, terminals, cols, rows, look, args)
-    if not base:
+    party = party_of(view, ctx.quest_cfg)
+    look = f"{view.get('stage')}:{view.get('gear_sig', '')}:{boss or '-'}:{int(raid)}:{int(dungeon)}:{tod}:{party}"
+    args = ["--tod", tod, "--party", str(party)] + (["--boss", boss] if boss else []) + \
+        (["--raid"] if raid else []) + (["--dungeon"] if dungeon else [])
+    got = _ensure_scene(ctx, terminals, cols, rows, look, args)
+    if not got:
+        return None
+    base, cols = got
+    if cols > width:
         return None
     image = base + SITUATIONS.index(sit)
     pad = " " * (width - cols)
@@ -228,6 +274,18 @@ def text_rows(ctx, state, view, width, rows, sit, boss, raid, dungeon):
         if rows >= 2 and tick % 4 < 2:
             _put(grid, ground - 1, col + len(sprite), "?", "text")
     _put(grid, ground, col, sprite, "gold" if sit == "celebrate" else "green")
+    behind = sit in ("idle", "work") and left
+    for i in range(party_of(view, ctx.quest_cfg)):                              # the party trails the pet
+        mate, role = PARTY_LOOK[i]
+        if behind:
+            c = col + len(sprite) + 1 + 3 * i
+            mate = mate[::-1].translate(MIRROR)
+        else:
+            c = col - 3 * (i + 1)
+        row = ground - 1 if (sit == "celebrate" and (tick + i) % 2 and rows >= 2) else ground
+        if sit == "sleep":
+            mate = mate.replace("o", "-").replace("ô", "-").replace("ö", "-")
+        _put(grid, row, c, mate, role)
 
     out = []
     for row in grid:

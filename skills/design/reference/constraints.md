@@ -87,9 +87,11 @@ with `--sample quiet` for the sparse case and `--sample hot` for the loud one;
 
 ## Claude Quest
 
-- `quest enable` registers five hooks in `settings.json` (SessionStart,
-  UserPromptSubmit, PostToolUse, PostToolUseFailure, Stop), installs `/quest`,
-  and sets `[quest] enabled = true`. `quest disable` removes them again and
+- `quest enable` registers eight hooks in `settings.json` (SessionStart,
+  UserPromptSubmit, PostToolUse, PostToolUseFailure, Stop, SubagentStart,
+  SubagentStop, PostCompact), installs `/quest`, and sets `[quest] enabled =
+  true`. A registration from version 3 lacks the last three; `doctor` and
+  `quest status` say so, and `quest enable` again brings it up to date. `quest disable` removes them again and
   keeps the save (`~/.claude/quest/state.json`).
 - The hooks do nothing while `[quest] enabled` is false, so the config is the
   single switch.

@@ -497,7 +497,9 @@ def cmd_doctor(argv):
         ("lines", describe_lines(comp)),
         ("width", f"COLUMNS={os.environ.get('COLUMNS') or '(unset)'} right_margin={comp['layout']['right_margin']}"),
         ("quest", ("on" if comp["quest"].get("enabled") else "off")
-         + (" · hooks registered" if st.quest_hooks_present(cfg) else " · hooks not registered")),
+         + (" · hooks registered" if st.quest_hooks_present(cfg) else
+            " · hooks out of date: run `statusline.py quest enable`" if st.quest_hooks_missing(cfg) != list(st.HOOK_EVENTS)
+            else " · hooks not registered")),
         ("activity", ("on" if comp["activity"].get("enabled") else "off")
          + (" · hooks registered" if st.activity_hooks_present(cfg) else " · hooks not registered")),
         ("runtime", runtime_dir()),

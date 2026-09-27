@@ -31,7 +31,8 @@ TITLES = [(1, "Wandering Prompter"), (5, "Apprentice"), (10, "Journeyman"), (15,
 CLASS_ICONS = {"shell": "🧙", "edit": "🔨", "read": "📜", "agent": "🔮", "web": "🏹"}
 EVENT_TONE = {"levelup": "gold", "victory": "gold", "boss": "red", "hit": "red", "quest": "green",
               "achievement": "purple", "loot": "cyan", "chest": "gold", "eat": "pink", "strut": "pink",
-              "use": "purple", "escape": "muted", "dungeon": "purple", "raid": "orange"}
+              "use": "purple", "escape": "muted", "dungeon": "purple", "raid": "orange", "party": "blue",
+              "compact": "teal"}
 
 
 # Parts of the save the bar never reads; left out of its cached copy.
@@ -448,7 +449,7 @@ IDLE_WEIGHTS = [("stand", 5), ("look", 3), ("lookaround", 2), ("walk", 2),
 REACTIONS = {"levelup": "levelup", "achievement": "achievement", "loot": "loot", "chest": "loot",
              "quest": "quest", "victory": "victory", "boss": "battle", "hit": "battle",
              "eat": "eat", "strut": "strut", "use": "strut", "escape": "lookaround",
-             "dungeon": "perk", "raid": "battle"}
+             "dungeon": "perk", "raid": "battle", "party": "perk", "compact": "strut"}
 TIMING = {"react": 8.0, "your_turn": 90.0, "idle_every": 8.0, "sleepy": 600.0, "refresh": 1800.0}
 
 

@@ -106,6 +106,7 @@ placement = "line"    # line, inline, manual, game (the whole bar becomes the ga
 avatar = "auto"       # the kitty picture of the pet: auto, on, off
 avatar_cols = 8
 event_seconds = 30.0
+party = true          # game mode: subagents at work walk with your pet
 game_rows = 3         # game mode: rows of scene under the quest ticker
 game_hud = ["context", "limit_5h", "limit_7d"]   # one gauge beside each row; any segment works
 game_hud_width = "auto"   # "auto" (the gauges' width, more on wide terminals) or 0 to 60

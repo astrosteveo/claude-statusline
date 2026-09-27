@@ -14,7 +14,8 @@ CLAUDE_DIR = os.path.expanduser(os.environ.get("CLAUDE_CONFIG_DIR") or "~/.claud
 SETTINGS = os.path.join(CLAUDE_DIR, "settings.json")
 ENTRY = os.path.join(CLAUDE_DIR, "statusline.py")
 
-HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "Stop")
+HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "Stop", "SubagentStart",
+               "SubagentStop", "PostCompact")
 # Commands earlier Claude Quest installs registered; replaced on enable, removed on disable.
 LEGACY_HOOK_MARKS = ("claude/quest/quest.py", "claude-quest hook", "claude_quest")
 
@@ -99,6 +100,15 @@ def strip_activity_hooks(data: dict) -> int:
 def _is_quest_hook(command: str) -> bool:
     command = command or ""
     return (" quest hook" in command and "statusline.py" in command) or any(m in command for m in LEGACY_HOOK_MARKS)
+
+
+def quest_hooks_missing(data: dict) -> list:
+    """Events Claude Quest wants a hook on that settings.json lacks (an older `quest enable`)."""
+    hooks = data.get("hooks") if isinstance(data.get("hooks"), dict) else {}
+    want = entry_command("quest", "hook")
+    return [ev for ev in HOOK_EVENTS if not any(h.get("command") == want for e in hooks.get(ev) or []
+                                                  if isinstance(e, dict) for h in e.get("hooks") or []
+                                                  if isinstance(h, dict))]
 
 
 def quest_hooks_present(data: dict) -> bool:

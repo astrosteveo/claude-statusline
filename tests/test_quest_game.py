@@ -463,3 +463,61 @@ class HookTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PartyTests(unittest.TestCase):
+    def test_subagents_join_and_report_back(self):
+        s = new_state()
+        g = game(s)
+        g.party_join("a1", "Explore")
+        g.finish()
+        self.assertEqual(s["party"]["a1"]["role"], "scout")
+        self.assertEqual(s["log"][-1]["kind"], "party")
+        self.assertFalse([m for m in g.msgs if "party" in m])      # news on the bar, not in the conversation
+        g.party_join("a2", "Plan")
+        g.party_join("a3", "my-reviewer")
+        self.assertIn("full_party", s["achievements"])
+        self.assertIn("Party Leader", s["titles"])
+        self.assertEqual(view.build(s, NOON)["party"][2], {"type": "my-reviewer", "role": "my-reviewer"})
+        xp = s["xp"]
+        g2 = game(s, now=NOON + 600)
+        g2.party_leave("a1")
+        self.assertGreater(s["xp"], xp)
+        self.assertNotIn("a1", s["party"])
+        g2.party_leave("nobody")                                   # a stop without a start is ignored
+
+    def test_the_party_breaks_up_on_its_own(self):
+        s = new_state()
+        game(s).party_join("a1", "Explore")
+        game(s, now=NOON + 4 * 3600)
+        self.assertEqual(s["party"], {})
+
+    def test_compaction(self):
+        s = new_state()
+        g = game(s)
+        g.compacted("auto")
+        g.finish()
+        self.assertIn("compact", [e["kind"] for e in s["log"]])
+        self.assertIn("tidy_mind", s["achievements"])
+        self.assertEqual(s["counters"]["compactions"], 1)
+
+    def test_old_saves_get_a_party(self):
+        s = state.migrate({"xp": 10})
+        self.assertEqual(s["party"], {})
+        self.assertIn("party", view.build(s, NOON))
+
+    def test_hooks_route_the_events(self):
+        from claude_statusline.quest import hooks
+        os.environ["CLAUDE_QUEST_FORCE"] = "1"
+        try:
+            hooks.handle({"hook_event_name": "SubagentStart", "agent_id": "z9", "agent_type": "Plan"})
+            with open(os.path.join(QUEST_HOME, "state.json")) as fh:
+                self.assertIn("z9", json.load(fh)["party"])
+            hooks.handle({"hook_event_name": "SubagentStop", "agent_id": "z9"})
+            hooks.handle({"hook_event_name": "PostCompact", "trigger": "manual"})
+            with open(os.path.join(QUEST_HOME, "state.json")) as fh:
+                saved = json.load(fh)
+            self.assertEqual(saved["party"], {})
+            self.assertIn("compact", [e["kind"] for e in saved["log"]])
+        finally:
+            os.environ.pop("CLAUDE_QUEST_FORCE", None)

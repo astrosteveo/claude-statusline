@@ -213,6 +213,12 @@ pet that evolves at levels 5, 15, 30 and 50. At 30 it takes the form of the
 school you use most (ember, forge, lore, arcane or storm), with a bonus
 to match; a wyrm doubles it.
 
+Each subagent Claude sends out joins your party: in game mode it walks with
+your pet while it works, and it brings back XP with its report. When a long
+conversation is compacted, your pet tidies the scrolls. (After upgrading from
+3.x, run `statusline.py quest enable` once more to register the hooks these
+need.)
+
 A pull request opened with `gh pr create` is a dungeon: every push is a room,
 failing `gh pr checks` spring traps, and `gh pr merge` clears it, paying more
 the deeper it went. Each week your first commit in a project summons a

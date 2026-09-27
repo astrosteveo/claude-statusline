@@ -101,6 +101,8 @@ DEFAULTS = {
         "avatar_cols": 8,
         # Seconds the latest event (loot, level-up, quest) stays on the bar.
         "event_seconds": 30.0,
+        # Subagents at work walk with your pet in game mode's scene.
+        "party": True,
     },
 }
 

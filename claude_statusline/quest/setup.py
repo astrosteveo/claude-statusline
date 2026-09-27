@@ -177,7 +177,12 @@ def status(log=print) -> int:
     log(f"  Claude Quest   {'on' if on else 'off'}" + ("" if on == hooks else
                                                         f"  (hooks {'present' if hooks else 'missing'}: run "
                                                         f"`statusline.py quest {'enable' if on else 'disable'}`)"))
-    log(f"  hooks          {'registered' if hooks else 'not registered'} in {st.SETTINGS}")
+    try:
+        missing = st.quest_hooks_missing(st.load())
+    except st.SettingsError:
+        missing = []
+    stale = bool(missing) and missing != list(st.HOOK_EVENTS)
+    log(f"  hooks          {'registered' if hooks else ('out of date (missing ' + ', '.join(missing) + '): run `statusline.py quest enable`' if stale else 'not registered')} in {st.SETTINGS}")
     log(f"  /quest         {'installed' if os.path.exists(COMMAND_FILE) else 'not installed'}")
     log(f"  save           {state_path() if os.path.exists(state_path()) else '(none yet)'}")
     if os.path.exists(state_path()):

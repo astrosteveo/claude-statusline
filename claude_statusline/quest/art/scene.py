@@ -286,6 +286,72 @@ def monster(cr, kind, x, gy, u, t, hit=0.0):
             cr.set_source_rgb(*scale)
 
 
+# ------------------------------------------------------------------ the party
+
+MATES = [(0.47, 0.64, 0.97), (0.96, 0.56, 0.76), (0.36, 0.82, 0.72)]
+PARTY = 0                       # companions walking with the pet: the subagents at work
+
+
+def companion(cr, x, gy, u, t, i, flip=False, asleep=False):
+    """A small round companion standing on the ground at `x`, hopping with `t`."""
+    u *= 1.45
+    body = MATES[i % len(MATES)]
+    hop = 0.0 if asleep else abs(math.sin(t * math.pi * 2 + i * 1.7)) * 2.2 * u
+    cy = gy - 5.5 * u - hop
+    d = -1 if flip else 1
+    cr.set_source_rgb(*(c * 0.7 for c in body))
+    for side in (-1, 1):                                  # feet
+        cr.arc(x + side * 2.4 * u, gy - 0.8 * u - (0 if asleep else hop * 0.3), 1.3 * u, 0, TAU)
+        cr.fill()
+    cr.save()
+    cr.translate(x, cy)
+    cr.scale(1.0, 0.92)
+    cr.arc(0, 0, 5 * u, 0, TAU)
+    cr.restore()
+    cr.set_source_rgb(*body)
+    cr.fill()
+    cr.set_source_rgba(1, 1, 1, 0.35)
+    cr.arc(x - 1.8 * u * d, cy - 2 * u, 1.6 * u, 0, TAU)
+    cr.fill()
+    for k in (0.4, 2.4):                                  # eyes, looking the way it walks
+        ex = x + k * u * d
+        if asleep:
+            cr.set_source_rgb(0.12, 0.12, 0.2)
+            cr.set_line_width(0.5 * u)
+            cr.move_to(ex - 0.8 * u, cy - 0.5 * u)
+            cr.line_to(ex + 0.8 * u, cy - 0.5 * u)
+            cr.stroke()
+        else:
+            cr.set_source_rgb(1, 1, 1)
+            cr.arc(ex, cy - 0.8 * u, 1.1 * u, 0, TAU)
+            cr.fill()
+            cr.set_source_rgb(0.1, 0.1, 0.18)
+            cr.arc(ex + 0.35 * u * d, cy - 0.7 * u, 0.55 * u, 0, TAU)
+            cr.fill()
+
+
+def with_party(pet, pw, h, t, flip=False, asleep=False, gap=None):
+    """The pet's picture with the party trailing it: (surface, how far left of the pet it starts)."""
+    if not PARTY:
+        return pet, 0
+    u = h / 60
+    step = int(gap or 19 * u)
+    w = pw + step * PARTY
+    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+    cr = cairo.Context(surf)
+    gy = h * GROUND
+    for i in range(PARTY):
+        if flip:                                          # heading left: the party follows on the right
+            x = pw + step * i + step * 0.55
+        else:
+            x = step * (PARTY - 1 - i) + step * 0.45
+        companion(cr, x, gy, u, t, i, flip=flip, asleep=asleep)
+    cr.set_source_surface(pet, 0 if flip else step * PARTY, 0)
+    cr.paint()
+    surf.flush()
+    return surf, 0 if flip else step * PARTY
+
+
 # ------------------------------------------------------------------ the actors
 
 def pet_sprite(stage, action, k, h, gear, flip=False):
@@ -334,14 +400,16 @@ def plan(situation, w, h, boss, raid):
             frac = i / n
             pos, back = _pingpong(frac)
             surf, _ = pet_sprite(stage, action, frac * loops, h, gear, flip=back)
-            return int(lo + pos * span - pw / 2), surf
+            surf, lead = with_party(surf, pw, h, frac * loops, flip=back)
+            return int(lo + pos * span - pw / 2) - lead, surf
         return n, period * loops, frame
 
     if situation == "battle":
         target = target_of(situation, boss, raid)
         tx = w * 0.8 if boss else w * 0.93
         n, period = 40, math.pi
-        x0 = int(tx - 22 * u * FOE - pw * 0.8)  # the pet stands just short of its foe
+        extra = int(17 * u) * PARTY                  # room behind the pet for the party
+        x0 = int(tx - 22 * u * FOE - pw * 0.8) - extra  # the pet stands just short of its foe
         box_w = int(tx - x0 + 20 * u * FOE)
 
         def frame(i):
@@ -356,8 +424,10 @@ def plan(situation, w, h, boss, raid):
                 cr.translate(max(0, lunge) * 1.5 * u, 0)
                 monster(cr, boss, tx - x0, gy, u * FOE, k * period * 2, hit=max(0, lunge))
                 cr.restore()
+            for m in range(PARTY):                    # the party backs the pet up
+                companion(cr, extra - int(17 * u) * m - 9 * u, gy, u, k * 2, m)
             pet, _ = pet_sprite(stage, "battle", k * 2, h, gear)
-            cr.set_source_surface(pet, 0, 0)
+            cr.set_source_surface(pet, extra, 0)
             cr.paint()
             if lunge > 0.5:
                 cr.set_source_rgba(1, 0.9, 0.4, lunge)
@@ -387,6 +457,10 @@ def plan(situation, w, h, boss, raid):
                 cr.set_source_rgb(*colours[c])
                 cr.fill()
                 cr.restore()
+            for m in range(PARTY):                    # the party hops beside the pet
+                side = -1 if m % 2 == 0 else 1
+                companion(cr, box_w / 2 + side * (pw * 0.5 + 14 * u * (m // 2 + 1)), h * GROUND, u, k * 2, m,
+                          flip=side < 0)
             pet, _ = pet_sprite(stage, "victory", k * 2, h, gear)
             cr.set_source_surface(pet, (box_w - pw) / 2, 0)
             cr.paint()
@@ -398,7 +472,8 @@ def plan(situation, w, h, boss, raid):
 
     def frame(i):
         surf, _ = pet_sprite(stage, action, i / n, h, gear)
-        return int(w * 0.24 - pw / 2), surf
+        surf, lead = with_party(surf, pw, h, i / n, asleep=situation == "sleep", gap=16 * u)
+        return int(w * 0.24 - pw / 2) - lead, surf
     return n, period, frame
 
 
@@ -413,7 +488,7 @@ def _key(w, h, tod, boss, raid, dungeon):
     for name in ("scene.py", "avatar.py", "sprites.py", "gear.py"):
         with open(os.path.join(here, name), "rb") as fh:
             hsh.update(fh.read())
-    hsh.update(json.dumps([LOOK, w, h, tod, boss, raid, dungeon], sort_keys=True).encode())
+    hsh.update(json.dumps([LOOK, w, h, tod, boss, raid, dungeon, PARTY], sort_keys=True).encode())
     return hsh.hexdigest()[:16]
 
 
@@ -483,7 +558,7 @@ def upload(fd, image_id, bg, patches, gap, cols, rows):
 
 
 def main(argv=None):
-    global LOOK
+    global LOOK, PARTY
     ap = argparse.ArgumentParser()
     ap.add_argument("--tty")
     ap.add_argument("--base", type=int, default=230)
@@ -495,12 +570,16 @@ def main(argv=None):
     ap.add_argument("--tod", default="day", choices=list(SKY))
     ap.add_argument("--stage", help="override the stage from the save")
     ap.add_argument("--form", help="override the form")
+    ap.add_argument("--party", type=int, default=0, help="companions walking with the pet (0 to 3)")
+    ap.add_argument("--ready", help="a file to write the key to once every situation is uploaded")
+    ap.add_argument("--key", default="")
     ap.add_argument("--png", help="write every situation's first frames here instead of uploading")
     a = ap.parse_args(argv)
     stage, gear = current_look()
     if a.form:
         gear = dict(gear, form=a.form)
     LOOK = (a.stage or stage, gear)
+    PARTY = max(0, min(3, a.party))
     boss = a.boss or None
 
     if a.png:
@@ -529,11 +608,16 @@ def main(argv=None):
             upload(fd, a.base + idx, bg, patches, gap, a.cols, a.rows)
     finally:
         os.close(fd)
+    if a.ready:                  # the bar switches to this picture only now that kitty has all of it
+        tmp = f"{a.ready}.{os.getpid()}"
+        with open(tmp, "w") as fh:
+            fh.write(a.key)
+        os.replace(tmp, a.ready)
     prune()
     return 0
 
 
-def prune(keep=8):
+def prune(keep=24):
     try:
         dirs = [os.path.join(CACHE, d) for d in os.listdir(CACHE) if d.startswith("scene-")]
     except OSError:

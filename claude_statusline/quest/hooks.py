@@ -1,7 +1,7 @@
 """Claude Code hook entry point: one JSON event on stdin, maybe a systemMessage out.
 
-Registered for SessionStart, UserPromptSubmit, PostToolUse, PostToolUseFailure
-and Stop by `statusline.py quest enable`. It must never break a session, so
+Registered for SessionStart, UserPromptSubmit, PostToolUse, PostToolUseFailure,
+Stop, SubagentStart, SubagentStop and PostCompact by `statusline.py quest enable`. It must never break a session, so
 any error is swallowed and the hook exits 0. When Claude Quest is switched
 off in the status line config, the hook does nothing at all.
 """
@@ -9,7 +9,8 @@ import os
 import sys
 
 SOUNDS = "/usr/share/sounds/freedesktop/stereo"
-EVENTS = ("SessionStart", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "Stop")
+EVENTS = ("SessionStart", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "Stop", "SubagentStart",
+          "SubagentStop", "PostCompact")
 
 
 def enabled() -> bool:
@@ -63,6 +64,12 @@ def handle(event):
             g.tool(event, failed=name == "PostToolUseFailure")
         elif name == "Stop":
             g.stop()
+        elif name == "SubagentStart":
+            g.party_join(str(event.get("agent_id") or ""), str(event.get("agent_type") or ""))
+        elif name == "SubagentStop":
+            g.party_leave(str(event.get("agent_id") or ""))
+        elif name == "PostCompact":
+            g.compacted(str(event.get("trigger") or ""))
         g.finish()
         if name == "SessionStart" and event.get("source", "startup") in ("startup", "resume"):
             from . import ui, view

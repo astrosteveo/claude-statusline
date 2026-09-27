@@ -68,6 +68,8 @@ def build(s, now=None):
                      for d in sorted(s.get("dungeons", {}).values(), key=lambda d: -d["opened"])],
         "raids": {p: {"name": r["name"], "hp": r["hp"], "max_hp": r["max_hp"], "defeated": r["defeated"]}
                   for p, r in s.get("raids", {}).items()},
+        "party": [{"type": m["type"], "role": m["role"]}
+                  for m in sorted(s.get("party", {}).values(), key=lambda m: m["since"])],
         "achievements": len(s.get("achievements", {})),
         "rarest": max((items.rarity_rank(items.ITEMS[e["id"]]["rarity"]) for e in s.get("bag", [])
                        if e["id"] in items.ITEMS), default=None),

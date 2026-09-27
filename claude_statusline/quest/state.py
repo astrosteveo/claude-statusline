@@ -16,7 +16,7 @@ LOG_KEEP = 200
 
 COUNTERS = ["commits", "pushes", "tests", "edits", "reads", "prompts", "agents", "bosses",
             "items_found", "items_used", "shell", "web", "thanks", "quests_done",
-            "xp_gained", "gold_earned", "forged", "bought", "sold", "dungeons", "raids"]
+            "xp_gained", "gold_earned", "forged", "bought", "sold", "dungeons", "raids", "compactions"]
 
 
 def legacy_xp():
@@ -58,6 +58,7 @@ def migrate(s):
     s.setdefault("boss", None)
     s.setdefault("dungeons", {})
     s.setdefault("raids", {})
+    s.setdefault("party", {})
     s.setdefault("log", [])
     s.setdefault("sessions", {})
     counters = s.setdefault("counters", {})

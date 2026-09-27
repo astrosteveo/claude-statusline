@@ -59,10 +59,18 @@ ACHIEVEMENTS = {
     "deep_delve": ("Deep Delver", "Clear a PR dungeon of 5 rooms or more", "the Delver"),
     "raider": ("Debt Collector", "Damage a tech-debt raid boss", None),
     "debt_free": ("Debt Free", "Defeat a tech-debt raid boss", "the Solvent"),
+    "full_party": ("Full Party", "Have three subagents in your party at once", "Party Leader"),
+    "tidy_mind": ("Tidy Mind", "Have a conversation compacted", None),
+    "spring_cleaning": ("Spring Cleaning", "Have 10 conversations compacted", "the Tidy"),
 }
+# What a subagent is called once it joins the party.
+ROLES = {"Explore": "scout", "Plan": "strategist", "general-purpose": "adventurer", "statusline-setup": "tinkerer",
+         "claude-code-guide": "sage"}
+PARTY_MAX = 3
+PARTY_EXPIRES = 3 * 3600
 
 PRIORITY = {"victory": 90, "dungeon": 65, "raid": 65, "levelup": 80, "boss": 70, "quest": 60, "achievement": 42,
-            "chest": 35, "eat": 30, "strut": 30, "use": 30, "hit": 20, "escape": 15}
+            "chest": 35, "party": 32, "compact": 31, "eat": 30, "strut": 30, "use": 30, "hit": 20, "escape": 15}
 DROP_SOURCES = ["a treasure chest", "under your keyboard", "a forgotten branch", "the dungeon floor",
                 "a stale pull request", "deep in node_modules", "the bottom of the backlog",
                 "a git stash from 2023", "the recycle bin", "behind a TODO comment"]
@@ -126,9 +134,11 @@ class Game:
     def log(self, kind, text):
         self.s["log"].append({"at": self.now, "kind": kind, "text": text})
 
-    def announce(self, kind, text, toast=None, sound=None, priority=None):
-        """Show a line, log it, maybe toast it, and offer it as the pet's reaction."""
-        self.say(text)
+    def announce(self, kind, text, toast=None, sound=None, priority=None, quiet=False):
+        """Show a line, log it, maybe toast it, and offer it as the pet's reaction. A quiet
+        announcement goes to the log and the bar's news, not into the conversation."""
+        if not quiet:
+            self.say(text)
         self.log(kind, text.split("\n")[0])
         if toast:
             self.toasts.append((toast[0], toast[1], sound))
@@ -163,6 +173,7 @@ class Game:
                 del s["dungeons"][k]
                 self.announce("escape", f"{dungeon.ICON} The {d['name']} (#{d['number']}) crumbled while "
                                         "nobody merged it.")
+        s["party"] = {k: m for k, m in s["party"].items() if self.now - m["since"] < PARTY_EXPIRES}
         week = quests.week_of(self.today)
         for project, r in list(s["raids"].items()):
             if r["week"] != week:
@@ -461,6 +472,38 @@ class Game:
         self.daily_chest()
         self.s["last_stop"] = self.now
         self.roll_loot(rules.STOP_LOOT_CHANCE)
+
+    # ------------------------------------------------------------ the party
+
+    def party_join(self, agent_id, kind):
+        """A subagent starts: it joins the party while it works."""
+        if not agent_id or agent_id in self.s["party"]:
+            return
+        kind = kind or "general-purpose"
+        role = ROLES.get(kind, kind)
+        self.s["party"][agent_id] = {"type": kind, "role": role, "since": self.now}
+        self.announce("party", f"🧭 A{'n' if role[:1] in 'aeiou' else ''} {role} joins your party "
+                               f"({kind}). {len(self.s['party'])} at work.", quiet=True)
+        if len(self.s["party"]) >= PARTY_MAX:
+            self.unlock("full_party")
+
+    def party_leave(self, agent_id):
+        m = self.s["party"].pop(agent_id, None)
+        if not m:
+            return
+        minutes = (self.now - m["since"]) / 60
+        xp = self.gain_xp(min(40, 5 + 2 * minutes), "agent")
+        self.announce("party", f"📜 The {m['role']} returns with its report. +{xp} XP", priority=25, quiet=True)
+
+    def compacted(self, trigger):
+        self.bump("compactions")
+        xp = self.gain_xp(10)
+        how = "you asked for it" if trigger == "manual" else "the scrolls had grown long"
+        self.announce("compact", f"🧹 Your pet tidies the scrolls: the conversation is compacted ({how}). +{xp} XP",
+                      quiet=True)
+        self.unlock("tidy_mind")
+        if self.s["counters"]["compactions"] >= 10:
+            self.unlock("spring_cleaning")
 
     # ------------------------------------------------------------ bosses
 

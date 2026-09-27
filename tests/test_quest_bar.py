@@ -256,6 +256,7 @@ class GameModeTests(unittest.TestCase):
             importlib.reload(avatar)
             importlib.reload(scene)
             scene.LOOK = ("drake", {"form": "storm"})
+            scene.PARTY = 3
             w, h = 400, 63
             for sit in scene.SITUATIONS:
                 bg, patches, gap = scene.frames_for(sit, w, h, "night", "lint", True, True)
@@ -292,3 +293,44 @@ class GameModeTests(unittest.TestCase):
                 os.environ.pop("XDG_CACHE_HOME", None)
             else:
                 os.environ["XDG_CACHE_HOME"] = old
+
+
+class PartySceneTests(unittest.TestCase):
+    def test_the_text_world_draws_the_party(self):
+        save(party=[{"type": "Explore", "role": "scout"}, {"type": "Plan", "role": "strategist"}],
+             state={"last_tool": NOW - 2, "last_activity": NOW})
+        comp = compile_config({"style": "minimal", "icons": "unicode", "quest": {"enabled": True, "placement": "game"}})
+        ctx = Context({}, comp, cols=120, now=NOW, env=ENV, live=False)
+        ground = render_lines({}, comp, ctx=ctx)[-1].text.plain()
+        self.assertTrue("o>" in ground or "<o" in ground, ground)
+        self.assertTrue("ô>" in ground or "<ô" in ground, ground)
+        save()
+        ground = render_lines({}, comp, ctx=Context({}, comp, cols=120, now=NOW, env=ENV, live=False))[-1].text.plain()
+        self.assertNotIn("ô", ground)
+
+    def test_the_scene_switches_only_to_a_complete_picture(self):
+        from claude_statusline import gamemode as G, gitstatus
+        runtime = tempfile.mkdtemp(prefix="scene-ready-")
+        old_rt, old_spawn = os.environ.get("XDG_RUNTIME_DIR"), gitstatus.spawn_detached
+        os.environ["XDG_RUNTIME_DIR"] = runtime
+        spawned = []
+        gitstatus.spawn_detached = lambda argv: spawned.append(argv) or True
+        try:
+            ctx = Context({}, compile_config({}), cols=120, now=NOW, env=ENV, live=True)
+            terms = {"/dev/pts/9": 4242}
+            self.assertIsNone(G._ensure_scene(ctx, terms, 100, 3, "drake:x:-:0:0:day:0", []))   # nothing ready
+            argv = spawned[-1]
+            ready, key = argv[argv.index("--ready") + 1], argv[argv.index("--key") + 1]
+            with open(ready, "w") as fh:
+                fh.write(key)                                      # the uploader finished
+            first = G._ensure_scene(ctx, terms, 100, 3, "drake:x:-:0:0:day:0", [])
+            self.assertEqual(first[1], 100)
+            second = G._ensure_scene(ctx, terms, 100, 3, "drake:x:-:0:0:day:2", [])  # the party grows
+            self.assertEqual(second, first)                         # the old picture until the new one is in
+            self.assertEqual(len(spawned), 2)
+        finally:
+            gitstatus.spawn_detached = old_spawn
+            if old_rt is None:
+                os.environ.pop("XDG_RUNTIME_DIR", None)
+            else:
+                os.environ["XDG_RUNTIME_DIR"] = old_rt
