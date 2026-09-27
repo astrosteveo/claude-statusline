@@ -81,7 +81,7 @@ fresh; run --no-config
 check "--no-config makes no config"        '[ ! -f "$HOME/.config/claude-statusline/config.toml" ]'
 
 fresh; run --quest
-check "--quest registers five hooks"       'jq_ "sum(len(e[\"hooks\"]) for ev in c[\"hooks\"].values() for e in ev) == 5"'
+check "--quest registers eight hooks"      'jq_ "sum(len(e[\"hooks\"]) for ev in c[\"hooks\"].values() for e in ev) == 8"'
 check "--quest installs /quest"            '[ -f "$HOME/.claude/commands/quest.md" ]'
 check "--quest switches it on"             'grep -q "enabled = true" "$HOME/.config/claude-statusline/config.toml"'
 check "--quest links claude-quest"         '[ -L "$HOME/.local/bin/claude-quest" ]'
