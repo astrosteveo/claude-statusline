@@ -25,7 +25,7 @@ CATALOG = {
     "git": "vcs", "pr": "vcs", "worktree": "vcs",
     "context": "usage", "tokens": "usage", "limit_5h": "usage", "limit_7d": "usage",
     "limit_7d_model": "usage", "limit_spend": "usage",
-    "cost": "spend", "duration": "spend", "diff": "spend", "cache": "spend", "burn": "spend",
+    "cost": "spend", "duration": "spend", "diff": "spend", "cache": "spend", "burn": "spend", "spend": "spend",
     "env": "env", "host": "env", "heartbeat": "env",
     "tools": "live", "agents": "live", "tasks": "live", "turn": "live", "mode": "live",
     "quest": "quest", "quest_boss": "quest", "quest_daily": "quest", "quest_buffs": "quest",

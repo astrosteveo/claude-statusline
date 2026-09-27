@@ -1,7 +1,7 @@
 """Cost, time, lines changed, burn rate and the prompt cache."""
 from __future__ import annotations
 
-from ..fit import LEAN, LESS
+from ..fit import LEAN, LESS, NARROW, TEXT
 from ..util import dur, money, num, short_num
 from . import Opt, Segment, register
 
@@ -122,3 +122,64 @@ class Cache(Segment):
 
     def tone_at(self, ctx, opts, f):
         return f["_state"]
+
+
+@register
+class Spend(Segment):
+    name = "spend"
+    doc = ("What today cost across every session this bar has drawn (local days), with the week and "
+           "the month, and an optional daily budget drawn as a bar.")
+    priority = 56
+    tone = "gold"
+    format = ("[<subtext>{label}</subtext> ]<spendc><bold>${today}</bold></spendc>[ {bar}][ <muted>{pct}%</muted>]"
+              "[<muted> · week ${week}</muted>][<muted> · month ${month}</muted>]")
+    options = {
+        "label": Opt(str, "today", "Label before the amount; empty for none."),
+        "budget": Opt(float, 0.0, "A daily budget in dollars; 0 for none. Shows a bar and turns the amount "
+                                  "yellow, orange and red as it fills."),
+        "week": Opt(bool, False, "Also show the last seven days."),
+        "month": Opt(bool, True, "Also show the month so far."),
+        "width": Opt(int, 8, "Budget bar cells; 0 hides the bar."),
+    }
+    fields_doc = {"label": "the label", "today": "dollars today", "week": "dollars over the last seven days",
+                  "month": "dollars this month", "bar": "today against the budget", "pct": "percent of the budget",
+                  "budget": "the daily budget"}
+    colors_doc = {"spendc": "gold, or by [thresholds] against the budget"}
+
+    def fields(self, ctx, opts, level):
+        t = spend_totals(ctx)
+        if t is None:
+            return None
+        budget = max(0.0, num(opts["budget"], 0.0))
+        pct = 100.0 * t["today"] / budget if budget else None
+        width = 0 if not budget or level >= TEXT else (opts["width"] if level < NARROW else max(3, opts["width"] // 2))
+        return {"label": opts["label"] if level < NARROW else "", "today": money(t["today"]),
+                "week": money(t["week"]) if opts["week"] and level < LESS else "",
+                "month": money(t["month"]) if opts["month"] and level < LESS else "",
+                "bar": ctx.bar(min(100.0, pct), width, tone=ctx.level_role(pct)) if width and pct is not None else "",
+                "pct": f"{pct:.0f}" if pct is not None and level < LEAN else "",
+                "budget": money(budget) if budget else "", "_pct": pct}
+
+    def colors(self, ctx, opts, f):
+        return {"spendc": ctx.level_role(f["_pct"]) if f["_pct"] is not None else "gold"}
+
+    def tone_at(self, ctx, opts, f):
+        return ctx.level_role(f["_pct"]) if f["_pct"] is not None else None
+
+
+def spend_totals(ctx):
+    """Today's, the week's and the month's spend, or None when the payload has no cost."""
+    def get():
+        fake = ctx.data.get("_spend")
+        if isinstance(fake, dict):
+            return {k: num(fake.get(k), 0.0) for k in ("today", "week", "month")}
+        usd, ms, _, _, _ = _cost(ctx.data)
+        sid = ctx.data.get("session_id")
+        if usd is None or not sid:
+            return None
+        from .. import ledger
+        led = ledger.read()
+        if ctx.live and ledger.due(led, str(sid), usd, ctx.now):
+            led = ledger.update(str(sid), usd, ms, ctx.now) or led
+        return ledger.totals(led, ctx.now, str(sid), usd, ms)
+    return ctx.memo("spend", get)

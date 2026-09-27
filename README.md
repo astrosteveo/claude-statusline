@@ -122,6 +122,7 @@ colour in `[colors]`.
 | `context` | context window: bar, percentage, tokens |
 | `limit_5h`, `limit_7d`, `limit_7d_model`, `limit_spend` | rate-limit windows with a pace projection (`→94%`: where you will be at the reset) and the reset countdown |
 | `cost`, `duration`, `diff`, `burn`, `tokens` | spend, wall time, lines changed, $/hour, tokens in and out |
+| `spend` | what today cost across every session, the month so far, and an optional daily budget as a bar |
 | `cache` | the prompt cache, only while it is costing you |
 | `env`, `host`, `session`, `agent`, `vim`, `output_style`, `version`, `clock` | the rest of what the host knows |
 | `text` | your own label; place several with `type = "text"` |
@@ -138,6 +139,16 @@ colour in `[colors]`.
 detail together (the reset clock, then the pace and token counts, then bars
 at half width, then no bars) and only then does the lowest-priority segment
 drop. Give what you care about a higher `priority`.
+
+## Spend today
+
+The `spend` segment adds up what every session cost today, as this bar saw
+it, in your local day: `today $61.20 · month $489`. Set `budget` for a daily
+limit drawn as a bar that turns yellow, orange and red as it fills, and
+`week = true` for the last seven days. The ledger lives in
+`~/.local/state/claude-statusline/spend.bin`; it counts only sessions this
+status line drew (not `claude -p`, not other machines). The `dashboard`
+preset shows it; elsewhere add it on the configurator's Layout page.
 
 ## Live activity
 

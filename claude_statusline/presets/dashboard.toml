@@ -9,5 +9,5 @@ gap = 1
 left = ["context", "limit_5h", "limit_7d", "limit_7d_model", "limit_spend"]
 
 [[line]]
-left = ["cost", "burn", "tokens", "cache", "env", "agent", "output_style"]
+left = ["cost", "spend", "burn", "tokens", "cache", "env", "agent", "output_style"]
 right = ["clock"]

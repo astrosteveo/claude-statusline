@@ -20,6 +20,7 @@ Every segment also takes `format` (its body template), `priority`, `icon` ("" hi
 | `cost` | 60 | What the session has cost, with its wall time and lines changed alongside. |
 | `duration` | 58 | The session's wall time, and how much of it was spent waiting on the API. |
 | `diff` | 57 | Lines added and removed this session. |
+| `spend` | 56 | What today cost across every session this bar has drawn (local days), with the week and the month, and an optional daily budget drawn as a bar. |
 | `limit_7d_model` | 55 | The per-model weekly window, shown only when it differs from the overall one. |
 | `turn` | 52 | How long Claude has been working on your last message, or how long it has waited for you since it finished; compaction and a failed turn too (live activity). |
 | `env` | 50 | The active virtualenv or conda env, and the host when the session is remote. |
@@ -393,6 +394,34 @@ Tone: `green`. Default format: `<green>+{added}</green><muted>/</muted><red>-{re
 |-------|-------|
 | `{added}` | lines added |
 | `{removed}` | lines removed |
+
+## spend
+
+What today cost across every session this bar has drawn (local days), with the week and the month, and an optional daily budget drawn as a bar.
+
+Tone: `gold`. Default format: `[<subtext>{label}</subtext> ]<spendc><bold>${today}</bold></spendc>[ {bar}][ <muted>{pct}%</muted>][<muted> · week ${week}</muted>][<muted> · month ${month}</muted>]`
+
+| option | type | default | meaning |
+|--------|------|---------|---------|
+| `label` | str | `"today"` | Label before the amount; empty for none. |
+| `budget` | float | `0.0` | A daily budget in dollars; 0 for none. Shows a bar and turns the amount yellow, orange and red as it fills. |
+| `week` | bool | `false` | Also show the last seven days. |
+| `month` | bool | `true` | Also show the month so far. |
+| `width` | int | `8` | Budget bar cells; 0 hides the bar. |
+
+| field | holds |
+|-------|-------|
+| `{label}` | the label |
+| `{today}` | dollars today |
+| `{week}` | dollars over the last seven days |
+| `{month}` | dollars this month |
+| `{bar}` | today against the budget |
+| `{pct}` | percent of the budget |
+| `{budget}` | the daily budget |
+
+| colour | when |
+|--------|------|
+| `<spendc>` | gold, or by [thresholds] against the budget |
 
 ## limit_7d_model
 

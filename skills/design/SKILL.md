@@ -68,6 +68,7 @@ is the segment list; `reference/examples.md` has whole configs to start from.
 | "a rainbow / gradient bar" | `set bar.fill gradient`; blends: `set bar.fill "cyan,purple"` |
 | "a slimmer bar" | `set bar.style slim` (or line, dots, braille, pips) |
 | "my own label" | a `[segment.<name>]` table with `type = "text"` and `text = "…"`, placed on a line |
+| "what did today cost" / "a daily budget" | place `spend`; `set segment.spend.budget 50` |
 | "show what Claude is doing" / "running tools" / "subagents" | `activity enable`; `turn`, `tools`, `agents`, `tasks`, `mode` get a line of their own |
 | "the RPG" / "Claude Quest" | `quest enable`; its line appears at the bottom; `/quest` plays |
 | "no pet picture" | `set quest.avatar off` (the text pet shows instead) |
