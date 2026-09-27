@@ -11,6 +11,7 @@ from .util import dig
 
 VIVID = ("powerline", "slant", "pills")
 NERD_STYLES = ("powerline", "slant", "pills", "capsules")
+_INK: dict = {}
 
 
 def nerd_terminal(env) -> bool:
@@ -95,7 +96,11 @@ class Context:
         dark, light = self.pal.get("_dark"), self.pal.get("_light")
         if tone is None or dark is None or light is None:
             return dark
-        return readable_on(tone, dark, light)
+        key = (tone, dark, light)
+        ink = _INK.get(key)
+        if ink is None:
+            ink = _INK[key] = readable_on(tone, dark, light)
+        return ink
 
     # -- bars --------------------------------------------------------------
     def bar(self, pct, width, style="", fill="", tone=None):
@@ -121,7 +126,7 @@ class Context:
         base = opts.get("width", -1)
         if base is None or base < 0:
             base = self.bar_cfg.get("width", 13)
-        if level >= TEXT:
+        if level >= TEXT or base == 0:
             return 0
         if level >= NARROW:
             return max(4, base // 2)

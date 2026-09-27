@@ -28,7 +28,7 @@ def _path(slot):
 def _read(path, key):
     try:
         with open(path, "rb") as fh:
-            blob = marshal.load(fh)
+            blob = marshal.loads(fh.read())
     except Exception:
         return []
     if not isinstance(blob, dict) or blob.get("key") != key:

@@ -589,7 +589,7 @@ Tone: `gold`. Default format: `<eventc>{text}</eventc>`
 
 | option | type | default | meaning |
 |--------|------|---------|---------|
-| `max` | int | `48` | Longest text shown; longer ends in … |
+| `max` | int | `48` | Longest text shown when the line is short of room; with room to spare the whole text shows. |
 
 | field | holds |
 |-------|-------|

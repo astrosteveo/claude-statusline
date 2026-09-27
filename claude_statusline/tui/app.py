@@ -112,7 +112,8 @@ class App:
         self.look_col = 0
         self.layout_line = 0
         self.layout_pos = 0
-        self.layout_focus = 1     # 0 preset row, 1 lines
+        self.layout_focus = 1     # 0 preset row, 1 lines, 2 game mode's rows
+        self.game_i = 0           # 0 the top row's details, 1 the gauges
         self.preset_cursor = None
         self.seg_i = 0
         self.seg_focus = 0        # 0 list, 1 options
@@ -476,7 +477,78 @@ class App:
         if self.comp["quest"].get("enabled") and self.comp["quest"].get("placement") == "line" \
                 and any(ln.get("auto") for ln in self.comp["lines"]):
             out.append(self.T(" + the Claude Quest line (Quest page)", "muted", italic=True))
+        if self.game_on():
+            out.append(self.T(" GAME MODE  the bar is the game; these lines give its top row its details",
+                              "gold", bold=True))
+            for gi, (label, key, names, explicit) in enumerate(self.game_rows()):
+                focused = self.layout_focus == 2 and gi == self.game_i
+                row = self.row(self.T(f" {label:<8}", "accent" if focused else "muted", bold=focused))
+                for j, name in enumerate(names):
+                    label_t = f" {name} "
+                    if focused and j == self.layout_pos:
+                        row.extend(self.T(label_t, "base", bold=True, bg="accent"))
+                    else:
+                        row.extend(self.T(label_t, self.seg_tone(name), bg="surface"))
+                    row.add(" ")
+                if not names:
+                    row.extend(self.T("(none — press a to add one)", "muted", italic=True))
+                if key == "game_details":
+                    row.extend(self.T("  set by you (r: back to auto)" if explicit else
+                                      "  auto: the model, then your lines", "muted", italic=True))
+                out.append(row)
         return out
+
+    # -- game mode's rows ------------------------------------------------------------
+    def game_on(self):
+        q = self.comp["quest"]
+        return bool(q.get("enabled")) and q.get("placement") == "game"
+
+    def game_rows(self):
+        """(label, quest key, names, set explicitly?) for the top row's details and the gauges."""
+        own = dig(self.raw, ["quest", "game_details"])
+        if isinstance(own, list):
+            details = list(own)
+        else:
+            top = next((ln for ln in self.comp["lines"] if ln.get("details") is not None), None)
+            details = [s["name"] for s in top["details"]] if top else []
+        hud = self.get(["quest", "game_hud"])
+        return [("top row", "game_details", details, isinstance(own, list)),
+                ("gauges", "game_hud", list(hud) if isinstance(hud, list) else [], True)]
+
+    def keys_game(self, k):
+        label, key, names, _ = self.game_rows()[self.game_i]
+        self.layout_pos = max(0, min(self.layout_pos, max(0, len(names) - 1)))
+        if k in ("left", "h"):
+            self.layout_pos = max(0, self.layout_pos - 1)
+        elif k in ("right", "l"):
+            self.layout_pos = min(max(0, len(names) - 1), self.layout_pos + 1)
+        elif k in ("up", "k"):
+            if self.game_i:
+                self.game_i, self.layout_pos = self.game_i - 1, 0
+            else:
+                self.layout_focus = 1 if self.lines() else 0
+        elif k in ("down", "j"):
+            self.game_i, self.layout_pos = min(1, self.game_i + 1), 0
+        elif k in ("<", ",", "shift-left", ">", ".", "shift-right") and names:
+            d = -1 if k in ("<", ",", "shift-left") else 1
+            i = self.layout_pos
+            if 0 <= i + d < len(names):
+                names[i], names[i + d] = names[i + d], names[i]
+                self.layout_pos += d
+                self.set(["quest", key], names)
+        elif k in ("x", "delete", "backspace") and names:
+            gone = names.pop(self.layout_pos)
+            self.set(["quest", key], names)
+            self.say(f"removed {gone} from the {label}", "yellow")
+        elif k in ("a", "+", "insert"):
+            self.open_picker()
+            self.picker["target"] = key
+        elif k == "r" and key == "game_details":
+            self.set(["quest", "game_details"], None)
+            self.say("top row back to auto: the model, then your lines", "green")
+        else:
+            return False
+        return True
 
     def seg_tone(self, name):
         from .. import segments
@@ -492,6 +564,8 @@ class App:
 
     def keys_layout(self, k):
         presets = list_presets()
+        if self.layout_focus == 2:
+            return self.keys_game(k)
         if self.layout_focus == 0:
             own = bool(isinstance(self.raw.get("line"), list) and self.raw["line"])
             cur = (self.preset_cursor or self.get(["preset"])) if own else self.get(["preset"])
@@ -507,7 +581,7 @@ class App:
                 self.apply_preset(cur)
                 self.preset_cursor = None
             elif k in ("down", "j"):
-                self.layout_focus = 1
+                self.layout_focus = 1 if self.lines() or not self.game_on() else 2
             else:
                 return False
             return True
@@ -535,6 +609,8 @@ class App:
             else:
                 self.layout_line -= 1
         elif k in ("down", "j"):
+            if self.layout_line == len(lines) - 1 and self.game_on():
+                self.layout_focus, self.game_i, self.layout_pos = 2, 0, 0
             self.layout_line = min(len(lines) - 1, self.layout_line + 1)
         elif k in ("<", ",", "shift-left", ">", ".", "shift-right") and flat:
             self.shift(-1 if k in ("<", ",", "shift-left") else 1)
@@ -641,6 +717,7 @@ class App:
             self.picker["i"] = 0
         elif k == "enter" and items:
             it = items[min(self.picker["i"], len(items) - 1)]
+            target = self.picker.get("target")
             self.picker = None
             name = it["name"]
             if it.get("label"):
@@ -649,6 +726,12 @@ class App:
                     n += 1
                 name = f"label{n}"
                 put(self.raw, ["segment", name], {"type": "text", "text": "hello"})
+            if target:
+                names = next(r[2] for r in self.game_rows() if r[1] == target)
+                names.insert(min(self.layout_pos + 1, len(names)), name)
+                self.set(["quest", target], names)
+                self.say(f"added {name} to game mode's {'top row' if target == 'game_details' else 'gauges'}")
+                return True
             lines = self.own_lines()
             if not lines:
                 lines.append({"left": [], "right": []})
@@ -767,7 +850,10 @@ class App:
         elif f.kind == "choice" and f.choices:
             i = f.choices.index(v) if v in f.choices else (f.choices.index("") if "" in f.choices else -1)
             nv = f.choices[(i + d) % len(f.choices)]
-            self.set(f.path, None if nv == "" else nv)
+            if f.setter:
+                self.store(f, nv)
+            else:
+                self.set(f.path, None if nv == "" else nv)
         elif f.kind == "int":
             nv = int(v or 0) + d * f.step
             if f.lo is not None:
@@ -832,7 +918,7 @@ class App:
     def placed_names(self):
         seen = []
         for ln in self.comp["lines"]:
-            for s in ln["left"] + ln["right"]:
+            for s in ln["left"] + ln["right"] + (ln.get("details") or []):
                 if s["name"] not in seen:
                     seen.append(s["name"])
         return seen
@@ -955,6 +1041,9 @@ class App:
                       "the hero on line 1 · manual: where you put quest segments · game: the whole bar "
                       "becomes the game", choices=list(PLACEMENTS)),
                 Field("game_rows", ["quest", "game_rows"], "int", "game mode: rows of scene", lo=1, hi=8),
+                Field("game_details", [], "choice", "game mode's top row: auto (the model, then your lines), "
+                      "none, or your own list (Layout page)", choices=["auto", "none", "custom"],
+                      getter=self.details_mode, setter=self.set_details_mode),
                 Field("game_hud_width", ["quest", "game_hud_width"], "choice",
                       "game mode: columns for the gauges beside the scene", choices=["auto", 0, 12, 16, 20, 24, 28]),
                 Field("avatar", ["quest", "avatar"], "choice", "the animated pet picture, in kitty",
@@ -963,11 +1052,24 @@ class App:
                 Field("event_seconds", ["quest", "event_seconds"], "float",
                       "how long news (loot, level-ups) stays", step=5.0, lo=0.0)]
 
+    def details_mode(self):
+        own = dig(self.raw, ["quest", "game_details"])
+        return "auto" if not isinstance(own, list) else ("none" if not own else "custom")
+
+    def set_details_mode(self, mode):
+        if mode == "auto":
+            drop(self.raw, ["quest", "game_details"])
+        elif mode == "none":
+            put(self.raw, ["quest", "game_details"], [])
+        else:
+            put(self.raw, ["quest", "game_details"], self.game_rows()[0][2] or ["model"])
+            self.say("your own top row: change it on the Layout page", "green")
+
     def page_quest(self, W, H, y0):
         out = [self.row(self.T(" ⚔ Claude Quest", "gold", bold=True),
                         self.T("  an RPG that plays itself while you work: XP for every tool, loot as "
                                "replies land, bosses from failing tests", "muted", italic=True)), Text()]
-        out += self.draw_form(self.quest_fields(), "quest", W, 9, y0 + 2)
+        out += self.draw_form(self.quest_fields(), "quest", W, 10, y0 + 2)
         out.append(Text())
         from ..quest import state_path
         if os.path.exists(state_path()):

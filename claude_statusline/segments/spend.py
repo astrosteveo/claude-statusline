@@ -92,6 +92,7 @@ class Cache(Segment):
     doc = "The prompt cache, shown only while it is costing you: cold, or missing too often."
     priority = 65
     tone = "orange"
+    glance = True
     format = "<cachestate>{detail}</cachestate>"
     options = {"min_ratio": Opt(float, 0.90, "Warn when the hit ratio drops below this."),
                "always": Opt(bool, False, "Show the hit ratio even when all is well.")}

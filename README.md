@@ -175,15 +175,25 @@ enabled = true
 placement = "game"
 ```
 
-The whole bar becomes the game. The top line is the quest ticker; below it
-a scene spans the width: your pet wanders, runs while tools fire, charges
-the boss or the tech-debt kraken, throws confetti at loot, waits for you
-after a reply and sleeps when you step away, with a castle on the hill while
-a PR dungeon is open. In kitty it is an animated picture (drawn once per
-situation and looped by kitty itself, so it moves smoothly between
-refreshes); elsewhere it is a little text world. Beside each row sits one
-gauge from `game_hud`, compact: context, 5h and 7d by default. `game_rows`
-sets the height.
+The whole bar becomes the game. Below the top line a scene spans the width:
+your pet wanders, runs while tools fire, charges the boss or the tech-debt
+kraken, throws confetti at loot, waits for you after a reply and sleeps when
+you step away, with a castle on the hill while a PR dungeon is open. In kitty
+it is an animated picture (drawn once per situation and looped by kitty
+itself, so it moves smoothly between refreshes); elsewhere it is a little
+text world. `game_rows` sets the height.
+
+The top line is the quest ticker, with your session details beside it: the
+model first, then the segments of your own lines (or your preset's), less
+what the gauges show. The ticker is fitted first and never changes for
+them, and the news takes any room left before they do. The details give way
+one at a time, lowest priority first: less detail, then just the icon, then
+gone. `game_details` sets the list yourself (`[]` for none); the
+configurator's Layout page edits it.
+
+Beside each row of scene sits one gauge from `game_hud` (context, 5h and 7d
+by default; any segment works). On a wide terminal the gauges also show a
+bar, the pace and the reset time.
 
 Play with `/quest` inside Claude Code or `claude-quest` in a terminal: `sheet`,
 `bag`, `equip`, `use`, `sell`, `forge`, `shop`, `buy`, `quests`, `boss`, `dungeons`, `raid`, `pet`,

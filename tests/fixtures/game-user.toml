@@ -1,0 +1,44 @@
+# claude-statusline 3 — migrated from your 2.x config (the old file is config.toml.bak-*).
+#
+#   statusline.py configure     change anything with a live preview
+#   statusline.py set <k> <v>   e.g. set theme catppuccin, set style powerline
+
+theme = "midnight"      # the same ink, lavender, blue and sea green as your kitty theme
+style = "capsules"      # minimal, classic, dots, chips, capsules, pills, powerline, slant
+icons = "nerd"
+
+[[line]]
+left = ["model", "dir", "git", "pr", "cache", "cost", "duration", "diff", "env", "session", "output_style"]
+
+[[line]]
+left = ["context"]
+right = ["limit_5h", "limit_7d", "limit_7d_model", "clock"]
+
+# The Claude Quest line (hero, quests, boss, buffs, news, pet, streak, gold) is
+# added below these automatically, and the kitty pet sits at the right edge.
+
+[segment.dir]
+mode = "base"           # the folder you are in, nothing above it
+
+[segment.cost]
+time = false            # dollars alone: time and lines are their own segments here
+lines = false
+
+[segment.context]
+format = "{bar} <level><bold>{pct}%</bold></level> <muted>{tokens} of {size} tokens</muted>"
+
+[segment.limit_5h]
+clock = false           # ↻1h43m, without the time of day
+pace_mode = "recent"    # → from the last half hour's rate
+
+[segment.limit_7d]
+clock = false
+pace_mode = "recent"
+
+[bar]
+width = 16
+
+[quest]
+enabled = true
+placement = "game"      # the whole bar is the game; "line" for the quest line under your lines
+avatar = "auto"

@@ -34,18 +34,49 @@ EVENT_TONE = {"levelup": "gold", "victory": "gold", "boss": "red", "hit": "red",
               "use": "purple", "escape": "muted", "dungeon": "purple", "raid": "orange"}
 
 
+# Parts of the save the bar never reads; left out of its cached copy.
+UNREAD = ("log", "days", "achievements", "sessions", "shop", "titles", "counters", "equipped", "charges",
+          "daily", "weekly")
+
+
 def load_state(ctx):
-    """The save as a dict, or None."""
+    """The save as a dict, or None. Parsing a long-played save's JSON costs more
+    than drawing the bar, so the parts the bar reads are kept as marshal in the
+    runtime directory, keyed by the save's size and checksum."""
     def read():
+        import marshal
+        import zlib
         from ..quest import state_path
         try:
             with open(state_path(), "rb") as fh:
                 raw = fh.read()
+        except OSError:
+            return None
+        key = (len(raw), zlib.crc32(raw))
+        cache = _runtime("quest-state.bin")
+        try:
+            with open(cache, "rb") as fh:
+                blob = marshal.loads(fh.read())
+            if blob.get("key") == key:
+                return blob["state"]
+        except Exception:
+            pass
+        try:
             from ..fastjson import loads
             data = loads(raw)
-            return data if isinstance(data, dict) else None
-        except (OSError, ValueError):
+        except ValueError:
             return None
+        if not isinstance(data, dict):
+            return None
+        data = {k: v for k, v in data.items() if k not in UNREAD and not (k == "bag" and "view" in data)}
+        try:
+            tmp = f"{cache}.{os.getpid()}"
+            with open(tmp, "wb") as fh:
+                marshal.dump({"key": key, "state": data}, fh)
+            os.replace(tmp, cache)
+        except (OSError, ValueError):
+            pass
+        return data
     return ctx.memo("quest-state", read)
 
 
@@ -294,8 +325,10 @@ class Event(QuestSegment):
     doc = "The latest thing that happened (loot, a level-up, a quest done), for a little while."
     priority = 50
     tone = "gold"
+    elastic = True
     format = "<eventc>{text}</eventc>"
-    options = {"max": Opt(int, 48, "Longest text shown; longer ends in …")}
+    options = {"max": Opt(int, 48, "Longest text shown when the line is short of room; with room to "
+                                   "spare the whole text shows.")}
     fields_doc = {"text": "what happened", "kind": "levelup, loot, quest, victory, boss, achievement…"}
     colors_doc = {"eventc": "by kind: gold level-ups and victories, cyan loot, green quests, red bosses"}
 
@@ -310,7 +343,7 @@ class Event(QuestSegment):
         text = " ".join(str(ev.get("text") or "").split())
         if not text:
             return None
-        cap = opts["max"] if level < LEAN else max(16, opts["max"] // 2)
+        cap = (opts["max"] if level < LEAN else max(16, opts["max"] // 2)) + int(opts.get("_room") or 0)
         return {"text": clip(text, cap), "kind": str(ev.get("kind") or "")}
 
     def colors(self, ctx, opts, f):
@@ -439,7 +472,7 @@ def kitty_terminals(ctx):
         cache = _runtime("kitty-terminals.bin")
         try:
             with open(cache, "rb") as fh:
-                blob = marshal.load(fh)
+                blob = marshal.loads(fh.read())
             if time.time() - blob["at"] < 15:
                 return blob["terminals"]
         except Exception:

@@ -84,6 +84,9 @@ DEFAULTS = {
         "game_rows": 3,
         "game_hud": ["context", "limit_5h", "limit_7d"],
         "game_hud_width": "auto",
+        # The session details on game mode's top row: "auto" (the model, then
+        # your lines' segments, less what the gauges show) or a list.
+        "game_details": "auto",
         # The pet as an animated picture in kitty; "auto" draws it when
         # Claude Code runs in kitty.
         "avatar": "auto",
@@ -193,7 +196,7 @@ def compiled(path=None, use_cache=True) -> dict:
     if use_cache:
         try:
             with open(cache, "rb") as fh:
-                blob = marshal.load(fh)
+                blob = marshal.loads(fh.read())
             if blob.get("key") == key:
                 return blob["compiled"]
         except Exception:

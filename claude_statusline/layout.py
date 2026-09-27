@@ -44,8 +44,12 @@ LEGACY_FEATURES = {
 GAME_TICKER = {"left": ["quest", "quest_boss", "quest_raid", "quest_dungeon", "quest_daily", "quest_buffs",
                         "quest_event"],
                "right": ["quest_streak", "quest_gold"]}
-# How a gauge looks beside the game scene.
+# How a gauge (a segment with a label and a percentage) looks beside the game scene:
+# compact at first, and with a small bar, the pace and the reset when the column is wide.
 GAME_HUD_LOOK = {"width": 0, "format": "[<subtext>{label}</subtext> ]<level><bold>{pct}%</bold></level>"}
+GAME_HUD_RICH = {"width": 8, "format": "[<subtext>{label:<3}</subtext> ][{bar} ]<level><bold>{pct:>3}%</bold></level>"
+                                       "[ <muted>{detail}</muted>][ <pacecolor>{pace}</pacecolor>]"
+                                       "[ <muted>{reset}[·{clock}]</muted>]"}
 # The scene is the picture in game mode, so the ticker keeps no bar but the hero's XP.
 GAME_BARLESS = {"quest_raid": {"width": 0}}
 QUEST_LINE = {"left": ["quest", "quest_daily", "quest_boss", "quest_raid", "quest_dungeon", "quest_buffs",
@@ -191,7 +195,64 @@ def resolve_segment(name, tables, problems, pal, seen, where_line):
             "prio": opts.get("priority") if opts.get("priority") is not None else seg.priority,
             "opts": {k: v for k, v in opts.items() if k not in ("format", "missing")},
             "tpl": tpl, "missing": trees.get("missing"), "icon": opts.get("icon"),
-            "tone": tone, "own_icon": own_icon, "bare": seg.bare, "quest": seg.quest}
+            "tone": tone, "own_icon": own_icon, "bare": seg.bare, "quest": seg.quest,
+            "elastic": seg.elastic}
+
+
+def type_of(name, tables):
+    table = tables.get(name)
+    return table.get("type", name) if isinstance(table, dict) else name
+
+
+def game_details(lines, tables, gauges):
+    """The session details game mode puts on its top row when `game_details` is
+    "auto": the model first, then every segment of `lines` in order, less quest
+    segments and whatever the gauges beside the scene already show. As
+    (name, where it came from) pairs."""
+    shown = {type_of(g, tables) for g in gauges}
+    found = []
+    for i, ln in enumerate(lines):
+        if not isinstance(ln, dict):
+            continue
+        for side in ("left", "right"):
+            names = ln.get(side)
+            for n in names if isinstance(names, list) else []:
+                if isinstance(n, str) and n not in (f[0] for f in found):
+                    found.append((n, f"line[{i}].{side}"))
+    model = next((f for f in found if type_of(f[0], tables) == "model"), ("model", "quest.game_details"))
+    out = [model]
+    for n, where in found:
+        t = type_of(n, tables)
+        if t == "model" or t in shown or catalog.CATALOG.get(t) == "quest":
+            continue
+        out.append((n, where))
+    return out
+
+
+def _gauge_looks(name, tables):
+    """(compact, rich) overrides for a segment beside the scene, or ({}, {}) for
+    one that is not a gauge: those keep their own format."""
+    seg = catalog.get(type_of(name, tables))
+    if seg is None or not {"label", "pct"} <= set(seg.fields_doc) or "width" not in seg.options:
+        return {}, {}
+    rich = dict(GAME_HUD_RICH)
+    fields = set(seg.fields_doc)
+    for part, field in (("[ <muted>{detail}</muted>]", "detail"), ("[ <pacecolor>{pace}</pacecolor>]", "pace"),
+                        ("[ <muted>{reset}[·{clock}]</muted>]", "reset")):
+        if field not in fields:
+            rich["format"] = rich["format"].replace(part, "")
+    return GAME_HUD_LOOK, rich
+
+
+def _barless(names, tables):
+    """A copy of `tables` in which the bar segments among `names` draw no bar."""
+    out = dict(tables)
+    for n in names:
+        table = tables.get(n, {})
+        seg = catalog.get(type_of(n, tables))
+        if isinstance(table, dict) and seg is not None and "width" in seg.options and not seg.quest:
+            out[n] = {**table, "width": 0}
+    return out
 
 
 def check_fill(fill, pal):
@@ -223,7 +284,7 @@ def _check_section(cfg_raw, problems):
                     problems.append(problem("warning", where, f"no longer used: {RETIRED[where]}"))
                 elif key not in default:
                     problems.append(problem("error", where, "unknown key" + _hint(key, default)))
-                elif where in ("quest.avatar", "quest.game_hud_width"):   # checked below
+                elif where in ("quest.avatar", "quest.game_hud_width", "quest.game_details"):   # checked below
                     continue
                 elif default[key] is not None and not isinstance(val, type(default[key])) and not (
                         isinstance(default[key], float) and isinstance(val, int) and not isinstance(val, bool)):
@@ -325,17 +386,31 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
             quest["game_hud_width"] = "auto"
         if len(hud) > rows:
             problems.append(problem("warning", "quest.game_hud", f"only {rows} fit beside {rows} rows of scene"))
-        # The game is the whole bar: the ticker, then the scene with a gauge on each row.
-        lines_raw = [{"left": list(GAME_TICKER["left"]), "right": list(GAME_TICKER["right"]), "_auto": True}]
-        lines_raw += [{"right": [hud[i]] if i < len(hud) else [], "_scene": i} for i in range(rows)]
+        details = quest.get("game_details", "auto")
+        if details != "auto" and not (isinstance(details, list) and all(isinstance(n, str) for n in details)):
+            problems.append(problem("error", "quest.game_details", '"auto" or a list of segment names'))
+            quest["game_details"] = details = "auto"
+        # Your own lines (or the preset's) give way to the game, but they name the session
+        # details that share its top row.
+        named = game_details(lines_raw, tables, hud[:rows]) if details == "auto" else \
+            [(n, "quest.game_details") for n in details]
+        dtables = _barless([n for n, _ in named], tables)
+        # The gauges wear the gauge looks (a format written for the full bar would crowd the
+        # scene); every other option of yours still applies.
+        compact, rich = dict(tables), dict(tables)
         for n in hud[:rows]:
-            # The gauges always wear the compact look (a format written for the full bar would
-            # crowd the scene); every other option of yours still applies.
             if isinstance(tables.get(n, {}), dict):
-                tables[n] = {**tables.get(n, {}), **GAME_HUD_LOOK}
+                small, big = _gauge_looks(n, tables)
+                compact[n] = {**tables.get(n, {}), **small}
+                rich[n] = {**tables.get(n, {}), **big}
         for n, look in GAME_BARLESS.items():
             if isinstance(tables.get(n, {}), dict):
                 tables[n] = {**tables.get(n, {}), **look}
+        # The game is the whole bar: the ticker and the details, then the scene with a gauge on each row.
+        lines_raw = [{"left": list(GAME_TICKER["left"]), "right": list(GAME_TICKER["right"]), "_auto": True,
+                      "_details": named, "_dtables": dtables}]
+        lines_raw += [{"right": [hud[i]] if i < len(hud) else [], "_scene": i, "_tables": compact, "_rich": rich}
+                      for i in range(rows)]
 
     lines_raw = [dict(ln) if isinstance(ln, dict) else ln for ln in lines_raw]
     placed = {n for ln in lines_raw if isinstance(ln, dict) for side in ("left", "right")
@@ -359,8 +434,9 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
             problems.append(problem("error", where, "must be a table"))
             continue
         for key in ln:
-            if key not in ("left", "right", "gap", "_auto", "_scene"):
+            if key not in ("left", "right", "gap", "_auto", "_scene", "_details", "_dtables", "_tables", "_rich"):
                 problems.append(problem("error", f"{where}.{key}", "unknown key (left, right, gap)"))
+        own = ln.get("_tables", tables)
         groups = []
         for side in ("left", "right"):
             names = ln.get(side, [])
@@ -369,7 +445,7 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
                 names = []
             specs = []
             for n in names:
-                spec = resolve_segment(n, tables, problems, pal, seen, f"{where}.{side}")
+                spec = resolve_segment(n, own, problems, pal, seen, f"{where}.{side}")
                 if spec is not None:
                     specs.append(spec)
             groups.append(specs)
@@ -378,7 +454,20 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
             problems.append(problem("error", f"{where}.gap", "must be a non-negative integer"))
             gap = 2
         if "_scene" in ln:
-            lines.append({"left": [], "right": groups[1], "gap": 0, "auto": True, "scene": ln["_scene"]})
+            rich = [s for s in (resolve_segment(n, ln["_rich"], [], pal, set(), where) for n in ln["right"]) if s]
+            lines.append({"left": [], "right": groups[1], "rich": rich, "gap": 0, "auto": True,
+                          "scene": ln["_scene"]})
+        elif "_details" in ln:
+            details = []
+            for n, whence in ln["_details"]:
+                spec = resolve_segment(n, ln["_dtables"], problems, pal, seen, whence)
+                if spec is None:
+                    continue
+                if spec["quest"]:
+                    problems.append(problem("warning", whence, f"{n!r} is on the quest ticker already"))
+                    continue
+                details.append(spec)
+            lines.append({"left": groups[0], "right": groups[1], "gap": gap, "auto": True, "details": details})
         elif groups[0] or groups[1]:
             lines.append({"left": groups[0], "right": groups[1], "gap": gap, "auto": bool(ln.get("_auto"))})
         else:

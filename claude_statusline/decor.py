@@ -14,6 +14,8 @@ colour it stands for). A look decides the rest:
     slant      the same, joined by slants (Nerd Font)
 
 `bare` segments (the heartbeat) are drawn as plain text in every look.
+A `glance` segment (game mode's session details at their leanest) is its
+icon alone, in its tone: a coloured icon, a small chip, a pill or a block.
 """
 from __future__ import annotations
 
@@ -39,14 +41,15 @@ LOOKS = {
 
 class RSeg:
     """A segment rendered for one detail level."""
-    __slots__ = ("name", "icon", "body", "tone", "bare")
+    __slots__ = ("name", "icon", "body", "tone", "bare", "glance")
 
-    def __init__(self, name, icon, body, tone, bare=False):
+    def __init__(self, name, icon, body, tone, bare=False, glance=False):
         self.name = name
         self.icon = icon
         self.body = body
         self.tone = tone
         self.bare = bare
+        self.glance = glance
 
 
 def _st(fg=None, bg=None, attrs=0):
@@ -55,6 +58,8 @@ def _st(fg=None, bg=None, attrs=0):
 
 # --- text looks ----------------------------------------------------------------
 def _plain_seg(s: RSeg, ctx) -> Text:
+    if s.glance:
+        return Text.of(s.icon, _st(s.tone))
     if s.bare or not s.icon:
         return s.body
     out = Text().add(s.icon, _st(s.tone))
@@ -78,6 +83,9 @@ def _soft(segs, ctx, rounded: bool) -> Text:
             continue
         out = Text()
         tone = s.tone or ctx.color("accent")
+        if s.glance:
+            parts.append(_glance_chip(s, ctx, tone, left_cap, right_cap))
+            continue
         if s.icon:
             ink = ctx.chip_ink(tone)
             out.add(left_cap, _st(tone))
@@ -94,8 +102,15 @@ def _soft(segs, ctx, rounded: bool) -> Text:
     return join(parts, Text.of(" "))
 
 
+def _glance_chip(s: RSeg, ctx, tone, left_cap, right_cap) -> Text:
+    """The icon alone on a chip of its tone."""
+    return Text().add(left_cap, _st(tone)).add(s.icon, _st(ctx.chip_ink(tone), tone)).add(right_cap, _st(tone))
+
+
 def _vivid_block(s: RSeg, ctx, bg) -> Text:
     ink = ctx.chip_ink(bg)
+    if s.glance:
+        return Text().add(" ", _st(None, bg)).add(s.icon, _st(ink, bg)).add(" ", _st(None, bg))
     out = Text().add(" ", _st(None, bg))
     if s.icon:
         out.add(s.icon, _st(ink, bg))
@@ -112,6 +127,9 @@ def _pills(segs, ctx) -> Text:
             parts.append(s.body)
             continue
         bg = s.tone or ctx.color("accent")
+        if s.glance:
+            parts.append(_glance_chip(s, ctx, bg, ROUND_LEFT, ROUND_RIGHT))
+            continue
         out = Text().add(ROUND_LEFT, _st(bg))
         block = _vivid_block(s, ctx, bg)
         block.spans[0] = ("", block.spans[0][1])             # the cap already pads the left
@@ -166,7 +184,7 @@ def _arrows(segs, ctx, side: str, slant: bool) -> Text:
 
 def group(segs, ctx, side="left") -> Text:
     """One side of a line in the context's look."""
-    segs = [s for s in segs if s.body]
+    segs = [s for s in segs if s.body or s.glance]
     if not segs:
         return Text()
     look = ctx.style

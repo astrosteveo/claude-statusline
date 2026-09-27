@@ -172,6 +172,7 @@ class Vim(Segment):
     doc = "The vim mode, when vim keybindings are on (pair with hideVimModeIndicator)."
     priority = 35
     tone = "green"
+    glance = True
     format = "<vimmode><bold>{mode}</bold></vimmode>"
     fields_doc = {"mode": "NORMAL, INSERT, VISUAL or VISUAL LINE"}
     colors_doc = {"vimmode": "green in INSERT, yellow in VISUAL, blue in NORMAL"}

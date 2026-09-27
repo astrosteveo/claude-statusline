@@ -21,6 +21,7 @@ class ContextWindow(Segment):
     doc = "How full the context window is: a bar, the percentage, and the tokens."
     priority = 70
     tone = "green"
+    glance = True
     format = ("[<subtext>{label}</subtext> ][{bar} ][<level><bold>{pct}%</bold></level>]"
               "[ <muted>{detail}</muted>]")
     options = {
@@ -98,6 +99,7 @@ class Limit(Segment):
     window_len = 0
     label = ""
     tone = "green"
+    glance = True
     format = ("[<subtext>{label}</subtext> ][{bar} ]<level><bold>{pct}%</bold></level>"
               "[ <pacecolor>{pace}</pacecolor>][ <muted>{reset}[·{clock}]</muted>]")
     options = {

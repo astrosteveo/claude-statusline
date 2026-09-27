@@ -15,6 +15,7 @@ class Git(Segment):
            "nudge when a dirty tree has gone a while without a commit.")
     priority = 85
     tone = "green"
+    glance = True
     format = ("<link><gitstate><bold>{branch}</bold></gitstate></link>[ <red><bold>{state}</bold></red>]"
               "[ <cyan>{sync}</cyan>][ <muted>{noupstream}</muted>][ <green>{staged}</green>]"
               "[ <yellow>{dirty}</yellow>][ <subtext>{untracked}</subtext>][ <red>{conflict}</red>]"
@@ -95,6 +96,7 @@ class PR(Segment):
     doc = "The pull or merge request for this branch, its review state and checks."
     priority = 70
     tone = "purple"
+    glance = True
     format = "<link><prstate><bold>{sigil}{number}</bold></prstate></link>[ <muted>{review}</muted>][ {checks}]"
     options = {"links": Opt(bool, True, "Link the number to the pull request.")}
     fields_doc = {"sigil": "# for GitHub, ! for GitLab", "number": "the number", "url": "its URL",

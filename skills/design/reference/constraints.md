@@ -76,6 +76,9 @@ with `--sample quiet` for the sparse case and `--sample hot` for the loud one;
   single switch.
 - The pet picture needs kitty (Unicode placeholders) and pycairo; elsewhere
   the pet is drawn as text.
+- Game mode (`placement = "game"`) replaces your lines with the quest ticker
+  and the scene. Your lines still name the session details on the ticker's
+  row (`game_details`), and they give way before any quest segment does.
 
 ## Not possible
 

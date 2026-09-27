@@ -89,7 +89,7 @@ def _paths(root):
 def _load(path):
     try:
         with open(path, "rb") as fh:
-            return marshal.load(fh)
+            return marshal.loads(fh.read())
     except Exception:
         return None
 

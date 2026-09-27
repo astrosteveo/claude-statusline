@@ -55,6 +55,37 @@ class AppTests(unittest.TestCase):
                 for r in rows:
                     self.assertLessEqual(r.width, w, (TABS[i], w, h, r.plain()))
 
+    def test_game_mode_rows_on_the_layout_page(self):
+        self.app.raw["quest"] = {"enabled": True, "placement": "game"}
+        self.app.raw["line"] = [{"left": ["model", "dir", "git", "cost"]}]
+        self.app.changed()
+        self.app.goto(TABS.index("Layout"))
+        text = "\n".join(r.plain() for r in self.app.draw(160, 40))
+        self.assertIn("GAME MODE", text)
+        self.assertIn("auto: the model, then your lines", text)
+        self.app.layout_focus, self.app.layout_line = 1, 0
+        keys(self.app, "down")                                 # from the last line into the top row
+        self.assertEqual(self.app.layout_focus, 2)
+        keys(self.app, "right", "x")                           # remove dir
+        self.assertEqual(self.app.raw["quest"]["game_details"], ["model", "git", "cost"])
+        keys(self.app, ">")
+        self.assertEqual(self.app.raw["quest"]["game_details"], ["model", "cost", "git"])
+        keys(self.app, "a")
+        self.app.picker["filter"] = "clock"
+        self.app.picker["i"] = [it["name"] for it in self.app.picker_items()].index("clock")
+        keys(self.app, "enter")
+        self.assertIn("clock", self.app.raw["quest"]["game_details"])
+        keys(self.app, "down", "x")                            # the gauges
+        self.assertEqual(self.app.raw["quest"]["game_hud"], ["limit_5h", "limit_7d"])
+        keys(self.app, "up", "r")
+        self.assertNotIn("game_details", self.app.raw["quest"])
+        self.assertIn("git", self.app.placed_names())
+        self.app.goto(TABS.index("Quest"))
+        field = next(f for f in self.app.quest_fields() if f.label == "game_details")
+        self.assertEqual(self.app.value_of(field), "auto")
+        self.app.nudge(field, 1)
+        self.assertEqual(self.app.raw["quest"]["game_details"], [])
+
     def test_look_changes_apply_live(self):
         keys(self.app, "down")
         self.assertEqual(self.app.raw["theme"], "claude-light")

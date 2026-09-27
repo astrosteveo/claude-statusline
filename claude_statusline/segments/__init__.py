@@ -65,6 +65,8 @@ class Segment:
     colors_doc: dict = {}  # dynamic colour -> when it applies
     bare = False           # drawn without chip or icon in every look
     quest = False          # part of Claude Quest: hidden unless quest is enabled
+    glance = False         # its icon's colour carries its state, so the icon alone says something
+    elastic = False        # takes the columns a fitted line has left over (fit.py)
 
     def all_options(self) -> dict:
         out = {}

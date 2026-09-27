@@ -96,10 +96,14 @@ separator = ""        # for the classic and dots styles
 
 [quest]
 enabled = false
-placement = "line"    # line, inline, manual
+placement = "line"    # line, inline, manual, game (the whole bar becomes the game)
 avatar = "auto"       # the kitty picture of the pet: auto, on, off
 avatar_cols = 8
 event_seconds = 30.0
+game_rows = 3         # game mode: rows of scene under the quest ticker
+game_hud = ["context", "limit_5h", "limit_7d"]   # one gauge beside each row; any segment works
+game_hud_width = "auto"   # "auto" (the gauges' width, more on wide terminals) or 0 to 60
+game_details = "auto"     # session details on the ticker's row: "auto" or a list of segments
 
 [git]
 enabled = true
@@ -121,3 +125,12 @@ counts, titles), `narrow` (half-width bars, short names), `text` (no bars).
 Only when even that overflows does the lowest-priority segment drop, and the
 line is tried again from the richest level. `preview` shows what happened at
 each width.
+
+In game mode the ticker's row is fitted in two passes. The quest segments are
+fitted alone, exactly as above, and the news then takes any columns left
+over (its `max` applies only when the row is short). The session details get
+what remains, right-aligned against the streak and gold. They give way one
+at a time, lowest priority first: each steps down its levels, then to
+`glance` (its icon alone, when the icon's colour carries its state: git, the
+PR, the cache, vim, the gauges), then drops, before the next one gives up
+anything. They never clip and never change the quest segments.

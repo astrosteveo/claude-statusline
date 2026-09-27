@@ -101,7 +101,9 @@ avatar_cols = 8
 event_seconds = 30.0     # how long loot and level-ups stay on the bar
 game_rows = 3            # game mode: rows of scene under the quest ticker
 game_hud = ["context", "limit_5h", "limit_7d"]   # a gauge beside each row
-game_hud_width = "auto"  # columns kept for the gauges; 0 for none
+game_hud_width = "auto"  # columns kept for the gauges (wider on wide terminals); 0 for none
+game_details = "auto"    # session details on the ticker's row: "auto" is the model, then the
+                         # segments of your lines less what the gauges show; or a list, [] for none
 
 # --- the finer points ---------------------------------------------------------------
 [layout]

@@ -151,18 +151,26 @@ def cmd_preview(argv):
     widths = _widths(vals.get("width"), sorted({80, 120, max(80, cols)}))
     mode = _mode(fl.get("plain"))
     report = []
-    from .fit import LEVELS
-    from .width import strip_ansi
+    from .fit import DETAIL_LEVELS, LEVELS
     for w in widths:
         ctx, fits = _render_lines(comp, data, w, now)
         report.append((w, ctx, fits))
     if fl.get("json"):
         import json
+
+        def line(f):
+            out = {"text": f.text.ansi(ctx.mode), "plain": f.text.plain(), "width": f.width,
+                   "level": LEVELS[f.level], "dropped": f.dropped, "overflow": f.overflow}
+            if f.grown:
+                out["grown"] = f.grown
+            if f.details is not None:
+                out["details"] = {"levels": {n: DETAIL_LEVELS[lv] for n, lv in f.details.levels.items()},
+                                  "dropped": f.details.dropped}
+            return out
         print(json.dumps({"problems": [list(p) for p in comp["problems"]], "widths": [
-            {"columns": w, "usable": ctx.avail, "style": ctx.style, "icons": ctx.iconset, "lines": [
-                None if f is None else {"text": f.text.ansi(ctx.mode), "plain": f.text.plain(), "width": f.width,
-                                        "level": LEVELS[f.level], "dropped": f.dropped, "overflow": f.overflow}
-                for f in fits]} for w, ctx, fits in report]}, indent=2, ensure_ascii=False))
+            {"columns": w, "usable": ctx.avail, "style": ctx.style, "icons": ctx.iconset,
+             "lines": [None if f is None else line(f) for f in fits]} for w, ctx, fits in report]},
+            indent=2, ensure_ascii=False))
         return 0
     head = (f"preset {comp['preset']} · theme {comp['theme']} · style {report[0][1].style} · "
             f"icons {report[0][1].iconset} · sample {vals.get('sample') or 'busy'}")
@@ -179,18 +187,34 @@ def cmd_preview(argv):
                 notes.append(f"line {i}: empty, left out")
                 continue
             print(f.text.ansi(mode) if mode != "none" else f.text.plain())
-            bits = []
-            if f.level:
-                bits.append(f"level {LEVELS[f.level]}")
-            if f.dropped:
-                bits.append("dropped " + ", ".join(f.dropped))
-            if f.overflow:
-                bits.append(f"OVERFLOWS by {f.overflow}")
-            if bits:
-                notes.append(f"line {i}: " + "; ".join(bits))
+            notes += fit_notes(i, f)
         for n in notes:
             print(_paint(f"  ↳ {n}", "muted", mode, comp))
     return 0
+
+
+def fit_notes(i, f):
+    """What gave way on one fitted line, for `preview`."""
+    from .fit import DETAIL_LEVELS, LEVELS
+    game = f.details is not None
+    bits = []
+    if f.level:
+        bits.append(f"{'game at ' if game else 'level '}{LEVELS[f.level]}")
+    if f.dropped:
+        bits.append(("game dropped " if game else "dropped ") + ", ".join(f.dropped))
+    for name, cols in f.grown.items():
+        bits.append(f"{name} took {cols} spare columns")
+    if f.overflow:
+        bits.append(f"OVERFLOWS by {f.overflow}")
+    out = [f"line {i}: " + "; ".join(bits)] if bits else []
+    if game:
+        d = f.details
+        lean = [f"{n} at {DETAIL_LEVELS[lv]}" for n, lv in d.levels.items() if lv]
+        dbits = ([", ".join(lean)] if lean else []) + (["dropped " + ", ".join(d.dropped)] if d.dropped else [])
+        if not d.levels and not d.dropped:
+            dbits = ["none to show"]
+        out.append(f"line {i} details: " + ("; ".join(dbits) if dbits else "all in full"))
+    return out
 
 
 def cmd_render(argv):
@@ -402,16 +426,34 @@ def cmd_validate(argv):
         print(json.dumps({"path": path, "ok": not errors, "problems": [
             {"level": p[0], "path": p[1], "message": p[2]} for p in comp["problems"]],
             "lines": [[s["name"] for s in ln["left"]] + ["⇥"] + [s["name"] for s in ln["right"]]
-                      for ln in comp["lines"]]}, indent=2, ensure_ascii=False))
+                      for ln in comp["lines"]],
+            **({"game_details": [s["name"] for ln in comp["lines"] if ln.get("details") is not None
+                                 for s in ln["details"]]} if any(ln.get("details") is not None
+                                                                 for ln in comp["lines"]) else {})},
+            indent=2, ensure_ascii=False))
         return 1 if errors else 0
     print(path)
     for p in comp["problems"]:
         print(f"  {p[0]}: {p[1]}: {p[2]}" if p[1] else f"  {p[0]}: {p[2]}")
-    n = sum(len(ln["left"]) + len(ln["right"]) for ln in comp["lines"])
+    n = sum(len(ln["left"]) + len(ln["right"]) + len(ln.get("details") or []) for ln in comp["lines"])
     warn = len(comp["problems"]) - len(errors)
     print(f"  {'ok' if not errors else f'{len(errors)} error(s)'}: {len(comp['lines'])} line(s), {n} segment(s)"
           + (f", {warn} warning(s)" if warn else ""))
     return 1 if errors else 0
+
+
+def describe_lines(comp):
+    """The lines in force, as one row of text; game mode's by what they hold."""
+    lines = comp["lines"]
+    top = next((ln for ln in lines if ln.get("details") is not None), None)
+    if top is None:
+        return " / ".join(", ".join(s["name"] for s in ln["left"] + ln["right"]) for ln in lines)
+    gauges = [s["name"] for ln in lines if ln.get("scene") is not None for s in ln["right"]]
+    rows = sum(1 for ln in lines if ln.get("scene") is not None)
+    details = ", ".join(s["name"] for s in top["details"]) or "none"
+    how = "auto" if comp["quest"].get("game_details", "auto") == "auto" else "set"
+    return (f"game mode: the quest ticker with details ({how}) {details}; "
+            f"{rows} rows of scene with gauges {', '.join(gauges) or 'none'}")
 
 
 def cmd_doctor(argv):
@@ -437,7 +479,7 @@ def cmd_doctor(argv):
                  f"colour {comp['color']}→{mode}"),
         ("terminal", f"TERM={os.environ.get('TERM', '')} COLORTERM={os.environ.get('COLORTERM', '')}"
                      f"{'  (bundles Nerd Font symbols)' if nerd_terminal(os.environ) else ''}"),
-        ("lines", " / ".join(", ".join(s["name"] for s in ln["left"] + ln["right"]) for ln in comp["lines"])),
+        ("lines", describe_lines(comp)),
         ("width", f"COLUMNS={os.environ.get('COLUMNS') or '(unset)'} right_margin={comp['layout']['right_margin']}"),
         ("quest", ("on" if comp["quest"].get("enabled") else "off")
          + (" · hooks registered" if st.quest_hooks_present(cfg) else " · hooks not registered")),
