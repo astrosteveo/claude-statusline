@@ -67,6 +67,35 @@ def status_line_entry() -> dict:
     return {"type": "command", "command": entry_command(), "padding": 0, "refreshInterval": 1}
 
 
+def _is_activity_hook(command: str) -> bool:
+    command = command or ""
+    return " activity hook" in command and "statusline.py" in command
+
+
+def activity_hooks_present(data: dict) -> bool:
+    from .activity import EVENTS
+    hooks = data.get("hooks") if isinstance(data.get("hooks"), dict) else {}
+    want = entry_command("activity", "hook")
+    return all(any(h.get("command") == want and h.get("async") for e in hooks.get(ev) or [] if isinstance(e, dict)
+                   for h in e.get("hooks") or [] if isinstance(h, dict)) for ev in EVENTS)
+
+
+def add_activity_hooks(data: dict):
+    """The live-activity hooks: background (`async`), so no tool call waits for them."""
+    from .activity import EVENTS, TOOL_EVENTS
+    hooks = data.setdefault("hooks", {})
+    command = entry_command("activity", "hook")
+    for event in EVENTS:
+        entry = {"hooks": [{"type": "command", "command": command, "async": True}]}
+        if event in TOOL_EVENTS:
+            entry = {"matcher": "*", **entry}
+        hooks.setdefault(event, []).append(entry)
+
+
+def strip_activity_hooks(data: dict) -> int:
+    return _strip(data, _is_activity_hook)
+
+
 def _is_quest_hook(command: str) -> bool:
     command = command or ""
     return (" quest hook" in command and "statusline.py" in command) or any(m in command for m in LEGACY_HOOK_MARKS)
@@ -81,6 +110,10 @@ def quest_hooks_present(data: dict) -> bool:
 
 def strip_quest_hooks(data: dict) -> int:
     """Remove every Claude Quest hook (this engine's and older installs'). Returns how many."""
+    return _strip(data, _is_quest_hook)
+
+
+def _strip(data: dict, ours) -> int:
     hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         return 0
@@ -94,7 +127,7 @@ def strip_quest_hooks(data: dict) -> int:
             if not isinstance(entry, dict) or not isinstance(entry.get("hooks"), list):
                 kept.append(entry)
                 continue
-            inner = [h for h in entry["hooks"] if not (isinstance(h, dict) and _is_quest_hook(h.get("command")))]
+            inner = [h for h in entry["hooks"] if not (isinstance(h, dict) and ours(h.get("command")))]
             removed += len(entry["hooks"]) - len(inner)
             if inner:
                 kept.append(dict(entry, hooks=inner))

@@ -105,6 +105,13 @@ game_hud_width = "auto"  # columns kept for the gauges (wider on wide terminals)
 game_details = "auto"    # session details on the ticker's row: "auto" is the model, then the
                          # segments of your lines less what the gauges show; or a list, [] for none
 
+# --- live activity ----------------------------------------------------------------
+# What Claude is doing now: the turn, the tools running, subagents, the task list,
+# the permission mode. `statusline.py activity enable` registers the hooks.
+[activity]
+enabled = false
+placement = "auto"       # auto: its segments get a line of their own · manual: place them yourself
+
 # --- the finer points ---------------------------------------------------------------
 [layout]
 right_margin = 5         # columns Claude Code keeps at the right edge (statusline.py ruler)

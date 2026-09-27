@@ -125,6 +125,7 @@ colour in `[colors]`.
 | `cache` | the prompt cache, only while it is costing you |
 | `env`, `host`, `session`, `agent`, `vim`, `output_style`, `version`, `clock` | the rest of what the host knows |
 | `text` | your own label; place several with `type = "text"` |
+| `turn`, `tools`, `agents`, `tasks`, `mode` | live activity: what Claude is doing now (below) |
 | `heartbeat` | a tick that moves while the bar refreshes (off unless placed: a debugging aid) |
 | `quest`, `quest_boss`, `quest_raid`, `quest_dungeon`, `quest_daily`, `quest_buffs`, `quest_event`, `quest_streak`, `quest_gold`, `quest_pet` | Claude Quest |
 
@@ -137,6 +138,29 @@ colour in `[colors]`.
 detail together (the reset clock, then the pace and token counts, then bars
 at half width, then no bars) and only then does the lowest-priority segment
 drop. Give what you care about a higher `priority`.
+
+## Live activity
+
+```sh
+statusline.py activity enable      # background hooks; the segments get a line of their own
+statusline.py activity disable
+```
+
+The bar shows what Claude is doing right now:
+
+| segment | shows |
+|---------|-------|
+| `turn` | `working 2m14s` while Claude answers, `waiting 4m` once it has, `compacting`, or why a turn stopped |
+| `tools` | the tool running (the longest-running, if several), what it works on and for how long, then this turn's finished ones: `Bash pytest -q 18s ✓ Edit ×2 · ✓ Read ×2` |
+| `agents` | the subagents at work: kind, task and time |
+| `tasks` | the task list, where the model keeps one: the task in hand and how many are done |
+| `mode` | the permission mode when it is not the default: plan, accept edits, auto, don't ask, bypass |
+
+The hooks run in the background (`async`), so no tool call waits for them,
+and each event updates a small file per session that a refresh reads once.
+Nothing reads the transcript. The segments get a line of their own under
+yours (in game mode they join the top row's details) unless you place any of
+them yourself; `[activity] placement = "manual"` turns that off.
 
 ## Claude Quest
 

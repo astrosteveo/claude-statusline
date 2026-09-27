@@ -1100,7 +1100,12 @@ class App:
 
     # -- page: more -----------------------------------------------------------------------------
     def more_fields(self):
-        return [Field("colour depth", ["color"], "choice", "auto follows COLORTERM",
+        return [Field("live activity", ["activity", "enabled"], "bool",
+                      "tools, subagents and the turn, from background hooks (saving registers them)"),
+                Field("activity place", ["activity", "placement"], "choice",
+                      "auto: its segments get a line of their own · manual: where you put them",
+                      choices=["auto", "manual"]),
+                Field("colour depth", ["color"], "choice", "auto follows COLORTERM",
                       choices=["auto", "truecolor", "256", "16", "none"]),
                 Field("right margin", ["layout", "right_margin"], "int",
                       "columns the host keeps at the edge (statusline.py ruler)", lo=0, hi=20),
@@ -1151,6 +1156,8 @@ class App:
         from .. import __version__
         quest_before = bool(dig(self.saved, ["quest", "enabled"]))
         quest_after = bool(dig(self.raw, ["quest", "enabled"]))
+        live_before = bool(dig(self.saved, ["activity", "enabled"]))
+        live_after = bool(dig(self.raw, ["activity", "enabled"]))
         text = dumps(self.raw, header=f"# claude-statusline {__version__} — written by `statusline.py configure`.\n"
                                       f"# Every key is optional; see `statusline.py help`.\n")
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
@@ -1173,6 +1180,15 @@ class App:
                 note = " · Claude Quest " + ("on: hooks registered" if quest_after else "off: hooks removed")
             except Exception as exc:
                 note = f" · Claude Quest: {exc}"
+            self.saved = copy.deepcopy(self.raw)
+        if live_after != live_before:
+            from .. import activity
+            log = []
+            try:
+                (activity.enable if live_after else activity.disable)(log=log.append)
+                note += " · live activity " + ("on: hooks registered" if live_after else "off: hooks removed")
+            except Exception as exc:
+                note += f" · live activity: {exc}"
             self.saved = copy.deepcopy(self.raw)
         self.say(f"saved {self.path}{note} — your bar updates within a second", "green", 6)
 

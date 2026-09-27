@@ -66,6 +66,19 @@ its separator goes with it; a line with nothing on it is left out. Preview
 with `--sample quiet` for the sparse case and `--sample hot` for the loud one;
 `--sample live` uses the last payload the bar actually received.
 
+## Live activity
+
+- `activity enable` registers command hooks with `async: true` for
+  SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure,
+  SubagentStart, SubagentStop, Stop, StopFailure, PreCompact, PostCompact,
+  TaskCreated, TaskCompleted and SessionEnd, and sets `[activity] enabled`.
+  Each event updates `activity-<session>.bin` in the runtime directory.
+- The payload carries none of this: without the hooks the `turn`, `tools`,
+  `agents`, `tasks` and `mode` segments show nothing.
+- The permission mode reaches the bar with the next hook event, not the
+  moment it changes. The task list exists only where the model has the task
+  tools (off by default on current models).
+
 ## Claude Quest
 
 - `quest enable` registers five hooks in `settings.json` (SessionStart,

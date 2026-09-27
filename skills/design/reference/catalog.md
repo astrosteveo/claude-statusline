@@ -14,15 +14,20 @@ Every segment also takes `format` (its body template), `priority`, `icon` ("" hi
 | `limit_spend` | 72 | The spend limit, for accounts behind a gateway that meters spend. |
 | `context` | 70 | How full the context window is: a bar, the percentage, and the tokens. |
 | `pr` | 70 | The pull or merge request for this branch, its review state and checks. |
+| `mode` | 66 | The permission mode when it is not the default: plan, accept edits, auto, don't ask or bypass (live activity; the hooks see it change on the next event). |
 | `cache` | 65 | The prompt cache, shown only while it is costing you: cold, or missing too often. |
 | `worktree` | 62 | The worktree this session runs in, and its branch. |
 | `cost` | 60 | What the session has cost, with its wall time and lines changed alongside. |
 | `duration` | 58 | The session's wall time, and how much of it was spent waiting on the API. |
 | `diff` | 57 | Lines added and removed this session. |
 | `limit_7d_model` | 55 | The per-model weekly window, shown only when it differs from the overall one. |
+| `turn` | 52 | How long Claude has been working on your last message, or how long it has waited for you since it finished; compaction and a failed turn too (live activity). |
 | `env` | 50 | The active virtualenv or conda env, and the host when the session is remote. |
+| `tools` | 48 | The tools Claude is running now, with what they work on and for how long, then the ones just finished this turn (live activity). |
+| `agents` | 47 | The subagents at work: their kind, what they were asked, and for how long (live activity). |
 | `burn` | 45 | The spend rate: dollars per hour of session so far. |
 | `host` | 45 | The machine's name (only over SSH or in a container, unless `always`). |
+| `tasks` | 44 | The task list Claude keeps (TaskCreate or TodoWrite, where the model has them): the task in hand and how many are done (live activity). |
 | `session` | 40 | The session name, once one is set (/rename). |
 | `agent` | 38 | The agent, when Claude Code runs with --agent. |
 | `vim` | 35 | The vim mode, when vim keybindings are on (pair with hideVimModeIndicator). |
@@ -296,6 +301,21 @@ Tone: `purple`. Default format: `<link><prstate><bold>{sigil}{number}</bold></pr
 |--------|------|
 | `<prstate>` | green approved/open, yellow awaiting review, orange changes requested, grey draft, purple merged, red closed |
 
+## mode
+
+The permission mode when it is not the default: plan, accept edits, auto, don't ask or bypass (live activity; the hooks see it change on the next event).
+
+Tone: `yellow`. Default format: `<modec><bold>{mode}</bold></modec>`
+
+| field | holds |
+|-------|-------|
+| `{mode}` | the mode's name |
+| `{raw}` | the mode as Claude Code names it |
+
+| colour | when |
+|--------|------|
+| `<modec>` | blue plan, yellow accept edits, teal auto, orange don't ask, red bypass |
+
 ## cache
 
 The prompt cache, shown only while it is costing you: cold, or missing too often.
@@ -409,6 +429,27 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bol
 | `<level>` | green / yellow / orange / red by [thresholds] |
 | `<pacecolor>` | red when the projection passes 100%, orange past 85%, else muted |
 
+## turn
+
+How long Claude has been working on your last message, or how long it has waited for you since it finished; compaction and a failed turn too (live activity).
+
+Tone: `accent`. Default format: `<turnc>{state}</turnc>[ <muted>{time}</muted>]`
+
+| option | type | default | meaning |
+|--------|------|---------|---------|
+| `waiting` | bool | `true` | Show how long Claude has waited for you. |
+| `wait_max` | float | `12.0` | Hours after which the wait is no longer shown. |
+
+| field | holds |
+|-------|-------|
+| `{state}` | working, waiting, compacting, or why a turn stopped |
+| `{time}` | how long, in that state |
+| `{compactions}` | compactions this session |
+
+| colour | when |
+|--------|------|
+| `<turnc>` | accent working, muted waiting, yellow compacting, red after a failure |
+
 ## env
 
 The active virtualenv or conda env, and the host when the session is remote.
@@ -419,6 +460,42 @@ Tone: `teal`. Default format: `[<teal>{venv}</teal>][ <subtext>@{host}</subtext>
 |-------|-------|
 | `{venv}` | virtualenv or conda env name |
 | `{host}` | hostname, over SSH or in a container |
+
+## tools
+
+The tools Claude is running now, with what they work on and for how long, then the ones just finished this turn (live activity).
+
+Tone: `cyan`. Default format: `[<bold>{tool}</bold>][ <subtext>{target}</subtext>][ <muted>{elapsed}</muted>][ <muted>{more}</muted>][ {done}]`
+
+| option | type | default | meaning |
+|--------|------|---------|---------|
+| `recent` | int | `3` | Finished tools shown after the running one, grouped by name. |
+| `target` | int | `32` | Longest target shown (a command, a file, a pattern). |
+
+| field | holds |
+|-------|-------|
+| `{tool}` | the tool running now (the longest-running, if several) |
+| `{target}` | what it works on |
+| `{elapsed}` | how long it has run |
+| `{more}` | +n other tools running |
+| `{done}` | tools finished this turn: ✓ Read ×3 · Edit |
+| `{running}` | how many are running |
+
+## agents
+
+The subagents at work: their kind, what they were asked, and for how long (live activity).
+
+Tone: `purple`. Default format: `{agents}`
+
+| option | type | default | meaning |
+|--------|------|---------|---------|
+| `desc` | int | `24` | Longest task description shown for each. |
+
+| field | holds |
+|-------|-------|
+| `{agents}` | each subagent: kind, task, time |
+| `{count}` | how many are running |
+| `{kinds}` | their kinds, comma-separated |
 
 ## burn
 
@@ -449,6 +526,22 @@ Tone: `teal`. Default format: `<teal>{host}</teal>`
 |-------|-------|
 | `{host}` | hostname |
 | `{user}` | user name |
+
+## tasks
+
+The task list Claude keeps (TaskCreate or TodoWrite, where the model has them): the task in hand and how many are done (live activity).
+
+Tone: `green`. Default format: `[<text>{current}</text> ]<bold>{done}/{total}</bold>`
+
+| option | type | default | meaning |
+|--------|------|---------|---------|
+| `max` | int | `32` | Longest task title shown. |
+
+| field | holds |
+|-------|-------|
+| `{current}` | the task in progress (or the next one) |
+| `{done}` | tasks completed |
+| `{total}` | tasks in the list |
 
 ## session
 

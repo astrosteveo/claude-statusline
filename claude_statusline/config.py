@@ -71,6 +71,12 @@ DEFAULTS = {
     },
     "glyphs": {},
     "colors": {},
+    # Live activity: hooks that tell the bar what Claude is doing (statusline.py activity enable).
+    "activity": {
+        "enabled": False,
+        # auto: the activity segments get a line of their own unless you place them yourself.
+        "placement": "auto",
+    },
     "quest": {
         "enabled": False,
         # line: a line of its own at the bottom; inline: the hero badge on

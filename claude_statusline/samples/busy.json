@@ -69,5 +69,70 @@
     "stash": 1,
     "upstream": "origin/feat/parser"
   },
-  "_home": "/home/u"
+  "_home": "/home/u",
+  "_activity": {
+    "turn": -134,
+    "mode": "acceptEdits",
+    "tools": [
+      [
+        "Bash",
+        "pytest tests/test_parser.py -q",
+        -18,
+        ""
+      ]
+    ],
+    "recent": [
+      [
+        "Read",
+        "parser.py",
+        -120,
+        true,
+        ""
+      ],
+      [
+        "Read",
+        "lexer.py",
+        -118,
+        true,
+        ""
+      ],
+      [
+        "Edit",
+        "parser.py",
+        -60,
+        true,
+        ""
+      ],
+      [
+        "Edit",
+        "parser.py",
+        -40,
+        true,
+        ""
+      ]
+    ],
+    "agents": [
+      [
+        "Explore",
+        -75,
+        "Find every caller of parse()",
+        "Grep",
+        "parse("
+      ]
+    ],
+    "tasks": [
+      [
+        "Split the tokenizer",
+        "completed"
+      ],
+      [
+        "Fix nested quotes",
+        "in_progress"
+      ],
+      [
+        "Update the docs",
+        "pending"
+      ]
+    ]
+  }
 }

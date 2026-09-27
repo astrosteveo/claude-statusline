@@ -52,6 +52,9 @@ GAME_HUD_RICH = {"width": 8, "format": "[<subtext>{label:<3}</subtext> ][{bar} ]
                                        "[ <muted>{reset}[·{clock}]</muted>]"}
 # The scene is the picture in game mode, so the ticker keeps no bar but the hero's XP.
 GAME_BARLESS = {"quest_raid": {"width": 0}}
+# Live activity gets a line of its own unless you place its segments yourself.
+ACTIVITY_SEGMENTS = ["turn", "tools", "agents", "tasks", "mode"]
+ACTIVITY_LINE = {"left": ["turn", "tools", "agents", "tasks"], "right": ["mode"]}
 QUEST_LINE = {"left": ["quest", "quest_daily", "quest_boss", "quest_raid", "quest_dungeon", "quest_buffs",
                        "quest_event"],
               "right": ["quest_pet", "quest_streak", "quest_gold"]}
@@ -277,7 +280,7 @@ def _check_section(cfg_raw, problems):
         if isinstance(default, dict) and not isinstance(body, dict):
             problems.append(problem("error", section, "must be a table"))
             continue
-        if section in ("layout", "bar", "thresholds", "git", "quest"):
+        if section in ("layout", "bar", "thresholds", "git", "quest", "activity"):
             for key, val in body.items():
                 where = f"{section}.{key}"
                 if where in RETIRED:
@@ -361,6 +364,18 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
     if not lines_raw:
         lines_raw = preset.get("line") or []
     tables = deep_merge(preset.get("segment") or {}, cfg.get("segment") if isinstance(cfg.get("segment"), dict) else {})
+
+    activity = dict(cfg["activity"])
+    if activity.get("placement") not in ("auto", "manual"):
+        problems.append(problem("error", "activity.placement", "one of auto, manual"))
+        activity["placement"] = "auto"
+    if activity.get("enabled") and activity["placement"] == "auto" and lines_raw and \
+            isinstance(lines_raw[-1], dict):
+        placed_now = {n for ln in lines_raw if isinstance(ln, dict) for side in ("left", "right")
+                      for n in (ln.get(side) or []) if isinstance(n, str)}
+        if not {type_of(n, tables) for n in placed_now} & set(ACTIVITY_SEGMENTS):
+            lines_raw = list(lines_raw) + [{"left": list(ACTIVITY_LINE["left"]),
+                                           "right": list(ACTIVITY_LINE["right"]), "_auto": True}]
 
     quest = dict(cfg["quest"])
     if quest.get("placement") not in PLACEMENTS:
@@ -499,5 +514,5 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         "layout": dict(cfg["layout"], wide_glyphs=[g for g in wide if isinstance(g, str)]),
         "bar": bar, "thresholds": dict(cfg["thresholds"]), "git": dict(cfg["git"]),
         "glyphs": dict(cfg["glyphs"]) if isinstance(cfg.get("glyphs"), dict) else {},
-        "quest": quest, "lines": lines,
+        "quest": quest, "activity": activity, "lines": lines,
     }

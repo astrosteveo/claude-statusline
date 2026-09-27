@@ -105,6 +105,10 @@ game_hud = ["context", "limit_5h", "limit_7d"]   # one gauge beside each row; an
 game_hud_width = "auto"   # "auto" (the gauges' width, more on wide terminals) or 0 to 60
 game_details = "auto"     # session details on the ticker's row: "auto" or a list of segments
 
+[activity]
+enabled = false       # `statusline.py activity enable` registers the hooks and sets this
+placement = "auto"    # auto: turn, tools, agents, tasks, mode get a line of their own; manual
+
 [git]
 enabled = true
 cache_ttl = 2.0       # the background refresh's period

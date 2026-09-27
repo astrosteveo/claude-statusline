@@ -23,6 +23,7 @@ look and try
 change
   set <key> <value>               e.g. set theme nord · set style capsules · set segment.dir.mode base
   get <key> | unset <key>         read or remove one setting
+  activity enable | disable       live activity on or off (background hooks; tools, agents, turn…)
   quest enable | disable | status Claude Quest on or off (hooks, the /quest command, the quest line)
   quest <command>                 play: sheet, bag, equip, use, shop, quests, boss, pet… (quest help)
 
@@ -483,6 +484,8 @@ def cmd_doctor(argv):
         ("width", f"COLUMNS={os.environ.get('COLUMNS') or '(unset)'} right_margin={comp['layout']['right_margin']}"),
         ("quest", ("on" if comp["quest"].get("enabled") else "off")
          + (" · hooks registered" if st.quest_hooks_present(cfg) else " · hooks not registered")),
+        ("activity", ("on" if comp["activity"].get("enabled") else "off")
+         + (" · hooks registered" if st.activity_hooks_present(cfg) else " · hooks not registered")),
         ("runtime", runtime_dir()),
     ]
     for k, v in rows:
@@ -663,6 +666,9 @@ def run(argv) -> int:
     if cmd == "quest":
         from .quest.main import main as quest_main
         return quest_main(rest) or 0
+    if cmd == "activity":
+        from .activity import main as activity_main
+        return activity_main(rest) or 0
     fn = COMMANDS.get(cmd)
     if fn is None:
         from .layout import closest

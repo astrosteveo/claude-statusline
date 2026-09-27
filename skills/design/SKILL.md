@@ -22,6 +22,7 @@ $SL presets                         # ready-made layouts
 $SL set <key> <value>               # one change, validated; comments in the file survive
 $SL get <key> | unset <key>
 $SL validate                        # every problem, with did-you-mean; exit 1 on errors
+$SL activity enable | disable       # live activity (background hooks) on or off
 $SL quest enable | disable | status # Claude Quest on or off
 $SL migrate --write                 # tidy a config from an earlier version
 ```
@@ -67,6 +68,7 @@ is the segment list; `reference/examples.md` has whole configs to start from.
 | "a rainbow / gradient bar" | `set bar.fill gradient`; blends: `set bar.fill "cyan,purple"` |
 | "a slimmer bar" | `set bar.style slim` (or line, dots, braille, pips) |
 | "my own label" | a `[segment.<name>]` table with `type = "text"` and `text = "…"`, placed on a line |
+| "show what Claude is doing" / "running tools" / "subagents" | `activity enable`; `turn`, `tools`, `agents`, `tasks`, `mode` get a line of their own |
 | "the RPG" / "Claude Quest" | `quest enable`; its line appears at the bottom; `/quest` plays |
 | "no pet picture" | `set quest.avatar off` (the text pet shows instead) |
 | "run my own script in the bar" | not supported by design (constraints.md: the refresh budget) |

@@ -27,6 +27,7 @@ CATALOG = {
     "limit_7d_model": "usage", "limit_spend": "usage",
     "cost": "spend", "duration": "spend", "diff": "spend", "cache": "spend", "burn": "spend",
     "env": "env", "host": "env", "heartbeat": "env",
+    "tools": "live", "agents": "live", "tasks": "live", "turn": "live", "mode": "live",
     "quest": "quest", "quest_boss": "quest", "quest_daily": "quest", "quest_buffs": "quest",
     "quest_streak": "quest", "quest_event": "quest", "quest_gold": "quest", "quest_pet": "quest",
     "avatar": "quest", "pet": "quest", "quest_dungeon": "quest", "quest_raid": "quest",
