@@ -35,15 +35,15 @@ SLOTS = ["head", "hand", "back", "feet", "charm"]
 ITEMS = {}
 
 
-def _gear(id, name, rarity, slot, fx, flavor, visual, icon, set=None, drop=True):
+def _gear(id, name, rarity, slot, fx, flavor, visual, icon, set=None, drop=True, season=None):
     ITEMS[id] = {"id": id, "name": name, "rarity": rarity, "kind": "gear", "slot": slot,
                  "fx": fx, "flavor": flavor, "visual": visual, "icon": icon,
-                 "set": set, "drop": drop}
+                 "set": set, "drop": drop, "season": season}
 
 
-def _use(id, name, rarity, use, flavor, icon, drop=True):
+def _use(id, name, rarity, use, flavor, icon, drop=True, season=None):
     ITEMS[id] = {"id": id, "name": name, "rarity": rarity, "kind": "consumable",
-                 "use": use, "flavor": flavor, "icon": icon, "drop": drop}
+                 "use": use, "flavor": flavor, "icon": icon, "drop": drop, "season": season}
 
 
 # ---- head
@@ -163,6 +163,26 @@ _use("refactor_tome", "Tome of Refactoring", "epic", {"xp": 1000},
 _use("self_fixing_bug", "a Bug That Fixed Itself", "legendary", {"banish": True},
      "Nobody knows why. Nobody will ever know why.", "🐞")
 
+# ---- the Hallowed Harvest (seasons.py): these drop only in late October
+_gear("pumpkin_helm", "Jack-o'-Lantern Helm", "uncommon", "head", {"xp": 0.05, "luck": 0.03},
+      "Carved with a merge conflict marker. Glows faintly when tests fail.",
+      {"kind": "pumpkin", "color": "#ff8a1f", "accent": "#3f7a2a"}, "🎃", set="hallowed_harvest",
+      season="halloween")
+_gear("branch_broom", "Broom of Branch Sweeping", "rare", "hand", {"xp_shell": 0.1, "commit_xp": 5},
+      "Sweeps away merged branches. Flies, if you believe in it.",
+      {"kind": "staff", "color": "#7a4f2a", "accent": "#e0a030"}, "🧹", set="hallowed_harvest", season="halloween")
+_gear("midnight_cloak", "Cloak of Midnight Deploys", "rare", "back", {"commit_xp": 8, "luck": 0.05},
+      "Worn by those who ship at 23:59 on a Friday. Smells of rollbacks.",
+      {"kind": "cape", "color": "#2d1f45", "accent": "#ff8a1f", "stars": True}, "🦇", set="hallowed_harvest",
+      season="halloween")
+_gear("last_resort_candle", "Candle of Last Resort", "epic", "charm", {"xp": 0.08, "luck": 0.1},
+      "Lit when every other debugging idea has burned out.",
+      {"kind": "amulet", "color": "#ffb347", "glow": True}, "🕯️", set="hallowed_harvest", season="halloween")
+_use("fun_size_bar", "Fun-Size Candy Bar", "common", {"treat": 2, "xp": 30},
+     "Technically a meal. Your pet disagrees.", "🍫", season="halloween")
+_use("candy_corn", "Bag of Candy Corn", "uncommon", {"buff": {"luck": 0.5}, "minutes": 20, "icon": "🍬"},
+     "Nobody admits to liking it. Everybody eats it.", "🍬", season="halloween")
+
 SETS = {
     "version_control": {
         "name": "Keeper of History", "title": "Keeper of History",
@@ -173,6 +193,11 @@ SETS = {
         "name": "Guardian of Main", "title": "Guardian of Main",
         "pieces": ["goggles", "zero_warnings_cloak", "blade_green_ci"],
         "bonus": {2: {"test_xp": 10}, 3: {"bounty": 1.0}},
+    },
+    "hallowed_harvest": {
+        "name": "Hallowed Harvest", "title": "the Haunted",
+        "pieces": ["pumpkin_helm", "branch_broom", "midnight_cloak", "last_resort_candle"],
+        "bonus": {2: {"luck": 0.05}, 4: {"xp": 0.1, "luck": 0.1}},
     },
     "terminal_wizard": {
         "name": "Archwizard of the Shell", "title": "Archwizard of the Shell",
@@ -241,8 +266,13 @@ def by_name(name):
     return _BY_NORM.get(_norm(name))
 
 
-def droppable(rarity):
-    return [i for i in ITEMS.values() if i["rarity"] == rarity and i["drop"]]
+def droppable(rarity, season=None):
+    """Items that can drop at `rarity`: the everyday ones, plus the season's while it lasts."""
+    return [i for i in ITEMS.values() if i["rarity"] == rarity and i["drop"] and i.get("season") in (None, season)]
+
+
+def seasonal(rarity, season):
+    return [i for i in ITEMS.values() if i["rarity"] == rarity and i["drop"] and season and i.get("season") == season]
 
 
 def rarity_rank(rarity):

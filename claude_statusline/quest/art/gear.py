@@ -154,6 +154,26 @@ def hat(cr, spec, r, view, t):
         cr.fill()
         star(cr, 0.05 * r, -0.55 * r, 0.24 * r)
         cr.fill()
+    elif kind == "pumpkin":                    # a jack-o'-lantern worn as a helm
+        for dx, rr, k in ((-0.55, 0.62, 0.82), (0.55, 0.62, 0.82), (0, 0.75, 1.0)):
+            ellipse(cr, dx * r, -0.05 * r, rr * r, 0.62 * r)
+            cr.set_source_rgb(*shade(col, k))
+            cr.fill()
+        cr.rectangle(-0.09 * r, -0.85 * r, 0.18 * r, 0.26 * r)
+        cr.set_source_rgb(*acc)
+        cr.fill()
+        glowing = 0.75 + 0.25 * math.sin(t * 4)
+        cr.set_source_rgba(1, 0.86, 0.35, glowing)
+        for side in (-1, 1):
+            cr.move_to(side * 0.18 * r, -0.2 * r)
+            cr.line_to(side * 0.42 * r, 0.02 * r)
+            cr.line_to(side * 0.08 * r, 0.02 * r)
+            cr.close_path()
+            cr.fill()
+        cr.move_to(-0.4 * r, 0.18 * r)
+        cr.curve_to(-0.15 * r, 0.38 * r, 0.15 * r, 0.38 * r, 0.4 * r, 0.18 * r)
+        cr.curve_to(0.15 * r, 0.28 * r, -0.15 * r, 0.28 * r, -0.4 * r, 0.18 * r)
+        cr.fill()
     elif kind == "halo":
         pulse = 0.35 + 0.2 * math.sin(t * 3)
         cr.set_line_width(0.34 * r)

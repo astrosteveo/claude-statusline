@@ -320,6 +320,9 @@ def show_guide(g):
     print("\n" + c("bold", "The party") + ": each subagent Claude sends out joins your pet in the scene while "
           "it works and brings back XP with its report. Three at once is a full party. When a long "
           "conversation is compacted, your pet tidies the scrolls.")
+    print("\n" + c("bold", "Seasons") + ": from 24 October to 1 November the Hallowed Harvest brings haunted "
+          "bosses, seasonal loot and a Trick or Treat quest. Any day a treasure goblin may appear: commit "
+          "within ten minutes to catch it.")
     print("\n" + c("bold", "Your pet") + " evolves at levels " +
           ", ".join(f"{need} ({d.split()[-1]})" for need, _, d in rules.PET_STAGES[1:]) +
           ", wears your gear, and bonds with you over time. As a drake it takes the form of your top "

@@ -10,7 +10,7 @@ import re
 import time
 from datetime import date, datetime, timedelta
 
-from . import boss, dungeon, effects, items, quests, raid, rules
+from . import boss, dungeon, effects, items, quests, raid, rules, seasons
 
 ACHIEVEMENTS = {
     # key: (name, description, title granted)
@@ -62,14 +62,18 @@ ACHIEVEMENTS = {
     "full_party": ("Full Party", "Have three subagents in your party at once", "Party Leader"),
     "tidy_mind": ("Tidy Mind", "Have a conversation compacted", None),
     "spring_cleaning": ("Spring Cleaning", "Have 10 conversations compacted", "the Tidy"),
+    "trick_or_treat": ("Trick or Treat", "Defeat a haunted boss during the Hallowed Harvest", None),
+    "goblin": ("Goblin Catcher", "Catch a treasure goblin with a commit", None),
 }
+GOBLIN_CHANCE = 1 / 400     # per tool call
+GOBLIN_STAYS = 600          # seconds you have to commit and catch it
 # What a subagent is called once it joins the party.
 ROLES = {"Explore": "scout", "Plan": "strategist", "general-purpose": "adventurer", "statusline-setup": "tinkerer",
          "claude-code-guide": "sage"}
 PARTY_MAX = 3
 PARTY_EXPIRES = 3 * 3600
 
-PRIORITY = {"victory": 90, "dungeon": 65, "raid": 65, "levelup": 80, "boss": 70, "quest": 60, "achievement": 42,
+PRIORITY = {"victory": 90, "dungeon": 65, "raid": 65, "goblin": 64, "season": 62, "levelup": 80, "boss": 70, "quest": 60, "achievement": 42,
             "chest": 35, "party": 32, "compact": 31, "eat": 30, "strut": 30, "use": 30, "hit": 20, "escape": 15}
 DROP_SOURCES = ["a treasure chest", "under your keyboard", "a forgotten branch", "the dungeon floor",
                 "a stale pull request", "deep in node_modules", "the bottom of the backlog",
@@ -113,6 +117,7 @@ class Game:
         self.toasts = []
         self.reaction = None
         self._fx = None
+        self.season = seasons.current(self.today, seasons.enabled_in_config())
 
     # ------------------------------------------------------------ plumbing
 
@@ -160,7 +165,14 @@ class Game:
             if b["until"] <= self.now:
                 self.say(f"{b['icon']} {b['name']} wore off.")
         s["buffs"] = effects.live_buffs(s, self.now)
-        quests.ensure(s, self.today)
+        quests.ensure(s, self.today, self.season)
+        if self.season and s.get("season_seen") != f"{self.season}:{self.today.year}":
+            s["season_seen"] = f"{self.season}:{self.today.year}"
+            self.announce("season", seasons.SEASONS[self.season]["announce"], priority=62)
+        g = s.get("goblin")
+        if g and self.now > g["until"]:
+            s["goblin"] = None
+            self.announce("escape", "💨 The treasure goblin got away with its sack.", quiet=True)
         if not s["pet"].get("form") and rules.stage_for(self.level())[0] in rules.FORM_STAGES:
             gift = self._take_form()
             self.announce("levelup", f"✨ Your pet settles into its form: {rules.pet_description(s)}.{gift}")
@@ -323,9 +335,13 @@ class Game:
             return None
         minimum = self.s["charges"].pop("guarantee", None)
         rarity = self.roll_rarity(fortune, minimum)
-        item = self.rng.choice(items.droppable(rarity))
+        pool = items.droppable(rarity)
+        special = items.seasonal(rarity, self.season)
+        if special and self.rng.random() < 0.3:            # the season's own loot turns up often
+            pool = special
+        item = self.rng.choice(pool)
         if self.fx.get("dedupe") and self.owns(item["id"]):
-            item = self.rng.choice(items.droppable(rarity))
+            item = self.rng.choice(pool)
         return self.grant(item["id"], source or self.rng.choice(DROP_SOURCES))
 
     def grant(self, item_id, source, found=True):
@@ -416,6 +432,10 @@ class Game:
             flat = self._shell(event, failed)
         self.gain_xp(rules.tool_xp(name), school, flat)
         self.roll_loot(rules.TOOL_LOOT_CHANCE)
+        if not self.s.get("goblin") and self.rng.random() < GOBLIN_CHANCE:
+            self.s["goblin"] = {"since": self.now, "until": self.now + GOBLIN_STAYS}
+            self.announce("goblin", "💰 A treasure goblin scurries past! Commit in the next ten minutes to "
+                                    "catch it.", priority=60)
         self.s["last_tool"] = self.now
 
     def _shell(self, event, failed):
@@ -449,6 +469,7 @@ class Game:
             self.dungeon_push(project)
         if not failed and "commit" in subs:
             self.raid_commit(project, raid.count_debt(event.get("cwd")))
+            self.catch_goblin()
         for verb, rest in dungeon.commands(boss.segments(cmd)):
             self.dungeon_command(verb, rest, project, out, failed)
         if re.search(r"\brm\s+-(?:rf|fr)\b", cmd):
@@ -472,6 +493,19 @@ class Game:
         self.daily_chest()
         self.s["last_stop"] = self.now
         self.roll_loot(rules.STOP_LOOT_CHANCE)
+
+    # ------------------------------------------------------------ the treasure goblin
+
+    def catch_goblin(self):
+        g = self.s.get("goblin")
+        if not g or self.now > g["until"]:
+            return
+        self.s["goblin"] = None
+        gold = self.gain_gold(60 + 6 * self.level())
+        self.announce("victory", f"💰 You caught the treasure goblin! It drops its sack: +{gold} gold",
+                      toast=("💰 Goblin caught!", f"+{gold} gold"), sound="complete")
+        self.unlock("goblin")
+        self.roll_loot(1.0, fortune=1.5, source="the goblin's sack")
 
     # ------------------------------------------------------------ the party
 
@@ -510,7 +544,10 @@ class Game:
     def boss_failure(self, kind, project, failures):
         b = self.s.get("boss")
         if not b:
-            b = boss.spawn(kind, project, failures, self.now, self.rng)
+            haunted = seasons.SEASONS[self.season]["bosses"].get(kind) if self.season else None
+            b = boss.spawn(kind, project, failures, self.now, self.rng, names=haunted)
+            if haunted:
+                b["season"] = self.season
             self.s["boss"] = b
             self.announce("boss", f"{b['icon']} A wild {b['name']} appears in {project}! {b['hp']} HP. "
                                   f"Get the {boss.KIND_NOUN[kind]} passing to defeat it.",
@@ -546,6 +583,8 @@ class Game:
                       toast=(f"⚔️ {b['name']} {verb}!", f"+{xp} XP, +{gold} gold"), sound="complete")
         self.bump("bosses")
         self.unlock("first_boss")
+        if b.get("season") == "halloween":
+            self.unlock("trick_or_treat")
         if self.s["counters"]["bosses"] >= 10:
             self.unlock("slayer10")
         if b["attempts"] <= 1 and not banished:
@@ -848,7 +887,8 @@ class Game:
             rng = random.Random(f"shop:{today}:{self.s.get('created', '')}")
             stock = []
             for kind, n in (("consumable", 3), ("gear", 2)):
-                pool = [i for i in items.ITEMS.values() if i["kind"] == kind and i["rarity"] in items.BUY_PRICE]
+                pool = [i for i in items.ITEMS.values() if i["kind"] == kind and i["rarity"] in items.BUY_PRICE
+                        and not i.get("season")]
                 for _ in range(n):
                     weights = [items.RARITY_WEIGHT[i["rarity"]] for i in pool]
                     pick = rng.choices(pool, weights)[0]

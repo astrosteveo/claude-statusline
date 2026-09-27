@@ -55,7 +55,75 @@ def _hills(cr, w, h, base, amp, freq, phase, rgb):
     cr.fill()
 
 
-def backdrop(w, h, tod, boss=None, raid=False, dungeon=False, omit=None):
+def pumpkin(cr, x, gy, u, lit):
+    """A pumpkin on the ground; lit, it grins."""
+    for k, dx in enumerate((-2.2, 2.2, 0)):
+        cr.save()
+        cr.translate(x + dx * u, gy - 3.4 * u)
+        cr.scale(1.0 if k < 2 else 1.25, 0.8)
+        cr.arc(0, 0, 3.6 * u, 0, TAU)
+        cr.restore()
+        cr.set_source_rgb(*((0.86, 0.42, 0.08) if k < 2 else (0.98, 0.52, 0.12)))
+        cr.fill()
+    cr.set_source_rgb(0.25, 0.45, 0.18)
+    cr.rectangle(x - 0.5 * u, gy - 7.8 * u, 1.1 * u, 1.9 * u)
+    cr.fill()
+    if lit:
+        cr.set_source_rgb(1, 0.86, 0.35)
+        for side in (-1, 1):
+            cr.move_to(x + side * 1.6 * u, gy - 4.8 * u)
+            cr.line_to(x + side * 2.6 * u, gy - 3.4 * u)
+            cr.line_to(x + side * 0.7 * u, gy - 3.4 * u)
+            cr.close_path()
+            cr.fill()
+        cr.move_to(x - 2.4 * u, gy - 2.4 * u)
+        cr.curve_to(x - 1 * u, gy - 1 * u, x + 1 * u, gy - 1 * u, x + 2.4 * u, gy - 2.4 * u)
+        cr.curve_to(x + 1 * u, gy - 1.8 * u, x - 1 * u, gy - 1.8 * u, x - 2.4 * u, gy - 2.4 * u)
+        cr.fill()
+
+
+def bat(cr, x, y, u, rgb):
+    cr.set_source_rgb(*rgb)
+    cr.move_to(x, y)
+    for dx, dy in ((2, -1.6), (4, -0.4), (5.5, -2), (5, 0.6), (2.5, 0.2), (0, 1.4), (-2.5, 0.2), (-5, 0.6),
+                   (-5.5, -2), (-4, -0.4), (-2, -1.6)):
+        cr.line_to(x + dx * u, y + dy * u)
+    cr.close_path()
+    cr.fill()
+
+
+def goblin_with_sack(cr, x, gy, u):
+    """The treasure goblin, hurrying off with its sack."""
+    cr.set_source_rgb(0.86, 0.68, 0.24)                        # the sack
+    cr.arc(x + 5 * u, gy - 6 * u, 4.2 * u, 0, TAU)
+    cr.fill()
+    cr.set_source_rgb(0.62, 0.46, 0.14)
+    cr.rectangle(x + 4 * u, gy - 10.8 * u, 2 * u, 1.4 * u)
+    cr.fill()
+    cr.set_source_rgb(1, 0.9, 0.45)
+    cr.arc(x + 5 * u, gy - 6 * u, 1.2 * u, 0, TAU)
+    cr.fill()
+    cr.set_source_rgb(0.38, 0.62, 0.3)                         # the goblin
+    cr.save()
+    cr.translate(x, gy - 4.5 * u)
+    cr.scale(0.8, 1.1)
+    cr.arc(0, 0, 3.2 * u, 0, TAU)
+    cr.restore()
+    cr.fill()
+    cr.arc(x - 0.6 * u, gy - 9.4 * u, 2.6 * u, 0, TAU)
+    cr.fill()
+    for side in (-1, 1):
+        cr.move_to(x - 0.6 * u + side * 2 * u, gy - 10 * u)
+        cr.line_to(x - 0.6 * u + side * 4.6 * u, gy - 11.6 * u)
+        cr.line_to(x - 0.6 * u + side * 2.2 * u, gy - 8.8 * u)
+        cr.close_path()
+        cr.fill()
+    cr.set_source_rgb(1, 0.95, 0.3)
+    cr.arc(x - 1.6 * u, gy - 9.8 * u, 0.6 * u, 0, TAU)
+    cr.fill()
+
+
+def backdrop(w, h, tod, boss=None, raid=False, dungeon=False, omit=None, season=None, goblin=False):
     """The still part of the scene."""
     top, bottom, far, near, ground = SKY[tod]
     u = h / 60
@@ -81,7 +149,7 @@ def backdrop(w, h, tod, boss=None, raid=False, dungeon=False, omit=None):
             cr.fill()
     body_x, body_y = w * 0.08, h * 0.26
     if tod == "night":
-        cr.set_source_rgb(0.95, 0.94, 0.82)
+        cr.set_source_rgb(*((1.0, 0.72, 0.38) if season == "halloween" else (0.95, 0.94, 0.82)))
         cr.arc(body_x, body_y, 6 * u, 0, TAU)
         cr.fill()
         cr.set_source_rgb(*top)
@@ -117,6 +185,15 @@ def backdrop(w, h, tod, boss=None, raid=False, dungeon=False, omit=None):
         cr.move_to(x, gy)
         cr.line_to(x + rng.uniform(-1.5, 1.5) * u, gy - rng.uniform(1.5, 3.5) * u)
         cr.stroke()
+    if season == "halloween":
+        lit = tod in ("dusk", "night")
+        for i, fx in enumerate((0.19, 0.46, 0.71)):
+            pumpkin(cr, w * fx + rng.uniform(-8, 8) * u, gy + 0.5 * u, u * (1.7 + 0.25 * (i % 2)), lit)
+        dark = (0.12, 0.08, 0.16) if tod != "night" else (0.24, 0.15, 0.32)
+        for i in range(max(3, w // 160)):
+            bat(cr, w * rng.uniform(0.2, 0.95), h * rng.uniform(0.12, 0.4), u * rng.uniform(1.5, 2.1), dark)
+    if goblin:
+        goblin_with_sack(cr, w * 0.4, gy, u * 2.0)
     if raid:
         pond(cr, w, gy, u)
         if omit != "raid":
@@ -290,6 +367,7 @@ def monster(cr, kind, x, gy, u, t, hit=0.0):
 
 MATES = [(0.47, 0.64, 0.97), (0.96, 0.56, 0.76), (0.36, 0.82, 0.72)]
 PARTY = 0                       # companions walking with the pet: the subagents at work
+EXTRAS = {}                     # the season and the treasure goblin, for the backdrop
 
 
 def companion(cr, x, gy, u, t, i, flip=False, asleep=False):
@@ -488,7 +566,7 @@ def _key(w, h, tod, boss, raid, dungeon):
     for name in ("scene.py", "avatar.py", "sprites.py", "gear.py"):
         with open(os.path.join(here, name), "rb") as fh:
             hsh.update(fh.read())
-    hsh.update(json.dumps([LOOK, w, h, tod, boss, raid, dungeon, PARTY], sort_keys=True).encode())
+    hsh.update(json.dumps([LOOK, w, h, tod, boss, raid, dungeon, PARTY, EXTRAS], sort_keys=True).encode())
     return hsh.hexdigest()[:16]
 
 
@@ -518,7 +596,7 @@ def frames_for(situation, w, h, tod, boss, raid, dungeon):
         pass
     n, seconds, frame = plan(situation, w, h, boss, raid)
     os.makedirs(folder, exist_ok=True)
-    _save(backdrop(w, h, tod, boss, raid, dungeon, omit=target_of(situation, boss, raid)), bg)
+    _save(backdrop(w, h, tod, boss, raid, dungeon, omit=target_of(situation, boss, raid), **EXTRAS), bg)
     xs = []
     for i in range(n):
         x, surf = frame(i)
@@ -558,7 +636,7 @@ def upload(fd, image_id, bg, patches, gap, cols, rows):
 
 
 def main(argv=None):
-    global LOOK, PARTY
+    global LOOK, PARTY, EXTRAS
     ap = argparse.ArgumentParser()
     ap.add_argument("--tty")
     ap.add_argument("--base", type=int, default=230)
@@ -571,6 +649,8 @@ def main(argv=None):
     ap.add_argument("--stage", help="override the stage from the save")
     ap.add_argument("--form", help="override the form")
     ap.add_argument("--party", type=int, default=0, help="companions walking with the pet (0 to 3)")
+    ap.add_argument("--season", default="", help="a season's props (seasons.py), e.g. halloween")
+    ap.add_argument("--goblin", action="store_true", help="a treasure goblin in the scene")
     ap.add_argument("--ready", help="a file to write the key to once every situation is uploaded")
     ap.add_argument("--key", default="")
     ap.add_argument("--png", help="write every situation's first frames here instead of uploading")
@@ -580,6 +660,7 @@ def main(argv=None):
         gear = dict(gear, form=a.form)
     LOOK = (a.stage or stage, gear)
     PARTY = max(0, min(3, a.party))
+    EXTRAS = {"season": a.season or None, "goblin": a.goblin}
     boss = a.boss or None
 
     if a.png:
@@ -588,7 +669,7 @@ def main(argv=None):
         cr = cairo.Context(sheet)
         for row, sit in enumerate(SITUATIONS):
             n, _, frame = plan(sit, w, h, boss, a.raid)
-            bg = backdrop(w, h, a.tod, boss, a.raid, a.dungeon, omit=target_of(sit, boss, a.raid))
+            bg = backdrop(w, h, a.tod, boss, a.raid, a.dungeon, omit=target_of(sit, boss, a.raid), **EXTRAS)
             for j, i in enumerate((0, n // 3)):
                 y = (row * 2 + j) * h
                 cr.set_source_surface(bg, 0, y)

@@ -219,6 +219,12 @@ conversation is compacted, your pet tidies the scrolls. (After upgrading from
 3.x, run `statusline.py quest enable` once more to register the hooks these
 need.)
 
+From 24 October to 1 November the Hallowed Harvest is on: bosses are
+haunted, seasonal gear and candy drop (the set makes you the Haunted), one
+daily quest is Trick or Treat, and the scene has pumpkins and bats. Any day,
+a treasure goblin may scurry past; commit within ten minutes to catch it
+and its sack. `[quest] seasons = false` turns the seasons off.
+
 A pull request opened with `gh pr create` is a dungeon: every push is a room,
 failing `gh pr checks` spring traps, and `gh pr merge` clears it, paying more
 the deeper it went. Each week your first commit in a project summons a

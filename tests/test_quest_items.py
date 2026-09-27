@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from claude_statusline.quest import items  # noqa: E402
 
-HAT_KINDS = {"paper", "beanie", "headphones", "goggles", "crown", "helm", "wizard", "halo"}
+HAT_KINDS = {"pumpkin", "paper", "beanie", "headphones", "goggles", "crown", "helm", "wizard", "halo"}
 HAND_KINDS = {"sword", "duck", "pointer", "stick", "wand", "staff", "hammer"}
 BACK_KINDS = {"cape", "wings", "backpack"}
 FEET_KINDS = {"boots", "sneakers", "socks"}

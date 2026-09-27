@@ -12,6 +12,11 @@ from datetime import date
 from . import effects, items, rules
 
 
+def _season(now):
+    from . import seasons
+    return seasons.current(date.fromtimestamp(now), seasons.enabled_in_config())
+
+
 def build(s, now=None):
     now = time.time() if now is None else now
     xp = s["xp"]
@@ -68,6 +73,8 @@ def build(s, now=None):
                      for d in sorted(s.get("dungeons", {}).values(), key=lambda d: -d["opened"])],
         "raids": {p: {"name": r["name"], "hp": r["hp"], "max_hp": r["max_hp"], "defeated": r["defeated"]}
                   for p, r in s.get("raids", {}).items()},
+        "season": _season(now),
+        "goblin": (s.get("goblin") or {}).get("until"),
         "party": [{"type": m["type"], "role": m["role"]}
                   for m in sorted(s.get("party", {}).values(), key=lambda m: m["since"])],
         "achievements": len(s.get("achievements", {})),

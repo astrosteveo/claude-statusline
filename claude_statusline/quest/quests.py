@@ -45,14 +45,19 @@ def week_of(day):
     return f"{y}-W{w:02d}"
 
 
-def ensure(state, today=None):
-    """Roll new quests when the day or week changes."""
+def ensure(state, today=None, season=None):
+    """Roll new quests when the day or week changes. In a season, the third is the season's."""
     today = today or date.today()
     salt = state.get("created", "")
     daily = state["daily"]
     if daily.get("date") != today.isoformat():
         rng = random.Random(f"{today.isoformat()}:{salt}")
         picks = rng.sample(DAILY, DAILY_COUNT)
+        if season:
+            from .seasons import SEASONS
+            special = SEASONS.get(season, {}).get("quest")
+            if special:
+                picks[-1] = special
         state["daily"] = {"date": today.isoformat(), "quests": [_make(p, rng) for p in picks],
                           "free_reroll": True, "chest": daily.get("chest")}
     week = week_of(today)

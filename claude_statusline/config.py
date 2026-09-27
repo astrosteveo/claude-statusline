@@ -103,6 +103,8 @@ DEFAULTS = {
         "event_seconds": 30.0,
         # Subagents at work walk with your pet in game mode's scene.
         "party": True,
+        # Seasonal events (the Hallowed Harvest, late October): bosses, loot, the scene.
+        "seasons": True,
     },
 }
 

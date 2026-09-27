@@ -521,3 +521,72 @@ class PartyTests(unittest.TestCase):
             self.assertIn("compact", [e["kind"] for e in saved["log"]])
         finally:
             os.environ.pop("CLAUDE_QUEST_FORCE", None)
+
+
+class SeasonTests(unittest.TestCase):
+    def setUp(self):
+        os.environ.pop("QUEST_SEASON", None)
+
+    def tearDown(self):
+        os.environ.pop("QUEST_SEASON", None)
+
+    def test_dates(self):
+        from datetime import date
+        from claude_statusline.quest import seasons
+        self.assertIsNone(seasons.current(date(2026, 10, 23)))
+        self.assertEqual(seasons.current(date(2026, 10, 24)), "halloween")
+        self.assertEqual(seasons.current(date(2026, 11, 1)), "halloween")
+        self.assertIsNone(seasons.current(date(2026, 11, 2)))
+        self.assertIsNone(seasons.current(date(2026, 10, 31), enabled=False))
+        os.environ["QUEST_SEASON"] = "halloween"
+        self.assertEqual(seasons.current(date(2026, 3, 1)), "halloween")
+        os.environ["QUEST_SEASON"] = "none"
+        self.assertIsNone(seasons.current(date(2026, 10, 31)))
+
+    def test_the_hallowed_harvest(self):
+        halloween = datetime(2026, 10, 30, 12, 0).timestamp()
+        s = new_state()
+        g = game(s, now=halloween)
+        self.assertEqual(g.season, "halloween")
+        self.assertIn("Hallowed Harvest", " ".join(g.msgs))
+        self.assertIn("trick", [q["id"] for q in s["daily"]["quests"]])
+        g2 = game(s, now=halloween + 60)
+        self.assertNotIn("Hallowed Harvest", " ".join(g2.msgs))          # announced once
+        g2.boss_failure("test", "proj", 2)
+        self.assertEqual(s["boss"]["season"], "halloween")
+        self.assertIn(s["boss"]["name"], ["Headless Heisenbug", "Ghost of Tests Past", "Phantom Assertion"])
+        g2.boss_cleared("test", "proj")
+        self.assertIn("trick_or_treat", s["achievements"])
+        found = set()
+        for seed in range(200):
+            gg = game(new_state(), now=halloween, seed=seed)
+            entry = gg.roll_loot(1.0)
+            found.add(items.ITEMS[entry["id"]].get("season"))
+        self.assertIn("halloween", found)
+
+    def test_out_of_season_nothing_seasonal(self):
+        for rarity in items.RARITIES:
+            self.assertFalse([i for i in items.droppable(rarity) if i.get("season")])
+        g = game()
+        self.assertFalse([x for x in g.shop_stock() if items.ITEMS[x["id"]].get("season")])
+        self.assertEqual(len(items.SETS["hallowed_harvest"]["pieces"]), 4)
+
+    def test_the_treasure_goblin(self):
+        from claude_statusline.quest import game as game_mod
+        s = new_state()
+        old = game_mod.GOBLIN_CHANCE
+        game_mod.GOBLIN_CHANCE = 1.0
+        try:
+            game(s).tool({"tool_name": "Read", "session_id": "s"})
+        finally:
+            game_mod.GOBLIN_CHANCE = old
+        self.assertTrue(s["goblin"])
+        self.assertEqual(view.build(s, NOON)["goblin"], s["goblin"]["until"])
+        gold = s["gold"]
+        game(s, now=NOON + 120).tool(bash("git commit -m x", out="[main 1a2b3c4] x"))
+        self.assertIsNone(s["goblin"])
+        self.assertGreater(s["gold"], gold)
+        self.assertIn("goblin", s["achievements"])
+        s["goblin"] = {"since": NOON, "until": NOON + 600}
+        game(s, now=NOON + 700)
+        self.assertIsNone(s["goblin"])                                    # it got away

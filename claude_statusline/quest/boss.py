@@ -102,8 +102,8 @@ def count_failures(text):
     return None
 
 
-def spawn(kind, project, failures, now, rng=None):
+def spawn(kind, project, failures, now, rng=None, names=None):
     rng = rng or random.Random()
     hp = max(1, min(MAX_HP, failures or 3))
-    return {"name": rng.choice(NAMES[kind]), "kind": kind, "icon": KIND_ICON[kind],
+    return {"name": rng.choice(names or NAMES[kind]), "kind": kind, "icon": KIND_ICON[kind],
             "project": project, "hp": hp, "max_hp": hp, "spawned": now, "attempts": 1}

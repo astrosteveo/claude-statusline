@@ -1056,6 +1056,8 @@ class App:
                       choices=["auto", "on", "off"]),
                 Field("avatar_cols", ["quest", "avatar_cols"], "int", "the picture's width in cells", lo=4, hi=20),
                 Field("party", ["quest", "party"], "bool", "game mode: subagents at work walk with your pet"),
+                Field("seasons", ["quest", "seasons"], "bool", "seasonal events: haunted bosses and loot in late "
+                      "October"),
                 Field("event_seconds", ["quest", "event_seconds"], "float",
                       "how long news (loot, level-ups) stays", step=5.0, lo=0.0)]
 
@@ -1076,7 +1078,7 @@ class App:
         out = [self.row(self.T(" ⚔ Claude Quest", "gold", bold=True),
                         self.T("  an RPG that plays itself while you work: XP for every tool, loot as "
                                "replies land, bosses from failing tests", "muted", italic=True)), Text()]
-        out += self.draw_form(self.quest_fields(), "quest", W, 11, y0 + 2)
+        out += self.draw_form(self.quest_fields(), "quest", W, 12, y0 + 2)
         out.append(Text())
         from ..quest import state_path
         if os.path.exists(state_path()):

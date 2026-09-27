@@ -334,3 +334,18 @@ class PartySceneTests(unittest.TestCase):
                 os.environ.pop("XDG_RUNTIME_DIR", None)
             else:
                 os.environ["XDG_RUNTIME_DIR"] = old_rt
+
+
+class SeasonSceneTests(unittest.TestCase):
+    def test_the_text_world_dresses_up(self):
+        comp = compile_config({"style": "minimal", "icons": "unicode", "quest": {"enabled": True, "placement": "game"}})
+        save(season="halloween", goblin=NOW + 300)
+        rows = [f.text.plain() for f in render_lines({}, comp, ctx=Context({}, comp, cols=120, now=NOW, env=ENV,
+                                                                          live=False))[1:]]
+        self.assertIn("●", rows[-1])                               # pumpkins
+        self.assertIn("g$", rows[-1])                              # the goblin
+        self.assertTrue("^v^" in rows[0] or "v^v" in rows[0])      # bats
+        save()
+        rows = [f.text.plain() for f in render_lines({}, comp, ctx=Context({}, comp, cols=120, now=NOW, env=ENV,
+                                                                          live=False))[1:]]
+        self.assertNotIn("●", rows[-1])

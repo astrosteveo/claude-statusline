@@ -59,6 +59,7 @@ def migrate(s):
     s.setdefault("dungeons", {})
     s.setdefault("raids", {})
     s.setdefault("party", {})
+    s.setdefault("goblin", None)
     s.setdefault("log", [])
     s.setdefault("sessions", {})
     counters = s.setdefault("counters", {})

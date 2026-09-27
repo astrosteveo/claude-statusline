@@ -23,7 +23,7 @@ SITUATIONS = ["idle", "work", "battle", "celebrate", "sleep", "yourturn"]
 SCENE_BASE = 100
 SLOTS = 16
 CELEBRATE = {"levelup", "achievement", "loot", "chest", "quest", "victory", "eat", "strut", "use", "dungeon",
-             "compact"}
+             "compact", "season"}
 PARTY_MAX = 3
 PARTY_LOOK = [("o>", "blue"), ("ô>", "pink"), ("ö>", "teal")]     # the companions in the text world
 FIGHT = {"boss", "hit", "raid"}
@@ -41,6 +41,12 @@ def party_of(view, cfg=None):
         return 0
     party = view.get("party")
     return min(PARTY_MAX, len(party)) if isinstance(party, list) else 0
+
+
+def extras(view, now):
+    """(season or None, is a treasure goblin about?) from the game's snapshot."""
+    season = view.get("season")
+    return (season if isinstance(season, str) else None), num(view.get("goblin"), 0) > now
 
 
 def props(view, project):
@@ -181,9 +187,12 @@ def kitty_rows(ctx, state, view, width, rows, sit, boss, raid, dungeon):
     cols = max(STEP, width // STEP * STEP)
     tod = time_of_day(ctx.now)
     party = party_of(view, ctx.quest_cfg)
-    look = f"{view.get('stage')}:{view.get('gear_sig', '')}:{boss or '-'}:{int(raid)}:{int(dungeon)}:{tod}:{party}"
+    season, goblin = extras(view, ctx.now)
+    look = (f"{view.get('stage')}:{view.get('gear_sig', '')}:{boss or '-'}:{int(raid)}:{int(dungeon)}:{tod}:"
+            f"{party}:{season or '-'}:{int(goblin)}")
     args = ["--tod", tod, "--party", str(party)] + (["--boss", boss] if boss else []) + \
-        (["--raid"] if raid else []) + (["--dungeon"] if dungeon else [])
+        (["--raid"] if raid else []) + (["--dungeon"] if dungeon else []) + \
+        (["--season", season] if season else []) + (["--goblin"] if goblin else [])
     got = _ensure_scene(ctx, terminals, cols, rows, look, args)
     if not got:
         return None
@@ -224,6 +233,16 @@ def text_rows(ctx, state, view, width, rows, sit, boss, raid, dungeon):
         if not night:
             cloud = (tick // 2) % (width + 6) - 6
             _put(grid, 0, cloud, "≈≈≈", "subtext")
+    season, goblin = extras(view, now)
+    if season == "halloween":                                     # pumpkins on the ground, bats in the sky
+        for c in range(9, width - 8, 23):
+            _put(grid, ground, c, "●", "orange")
+        if rows >= 2:
+            for i, c in enumerate(range(width // 5, width, max(12, width // 4))):
+                _put(grid, 0, (c + tick * (1 + i % 2)) % max(1, width - 3), "^v^" if (tick + i) % 2 else "v^v", "purple")
+    if goblin and width > 20:                                     # the treasure goblin, scurrying past
+        c = width - 12 - (tick * 3) % max(1, width // 2)
+        _put(grid, ground, c, "g$", "gold")
     if dungeon and width > 30:
         c = int(width * 0.62)
         if rows >= 2:
