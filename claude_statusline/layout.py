@@ -177,6 +177,13 @@ def resolve_segment(name, tables, problems, pal, seen, where_line):
             if tag != "link" and not known_tag(tag, colors):
                 problems.append(problem("warning", f"segment.{name}.{key}", f"<{tag}> is not a colour"))
         trees[key] = tree
+    if type_ == "command":
+        if not (opts.get("command") or "").strip():
+            problems.append(problem("error", f"segment.{name}.command", "a command segment needs a command"))
+        if opts["every"] < 2:
+            problems.append(problem("warning", f"segment.{name}.every", "at least 2 seconds; 2 is used"))
+        if not 0 < opts["timeout"] <= 10:
+            problems.append(problem("warning", f"segment.{name}.timeout", "from 0 to 10 seconds; clamped"))
     tone = opts.get("color") or seg.tone
     if opts.get("color") and not (opts["color"] in pal or parse_color(opts["color"])):
         problems.append(problem("error", f"segment.{name}.color", f"unknown colour {opts['color']!r}"))
@@ -280,7 +287,7 @@ def _check_section(cfg_raw, problems):
         if isinstance(default, dict) and not isinstance(body, dict):
             problems.append(problem("error", section, "must be a table"))
             continue
-        if section in ("layout", "bar", "thresholds", "git", "quest", "activity"):
+        if section in ("layout", "bar", "thresholds", "git", "quest", "activity", "commands"):
             for key, val in body.items():
                 where = f"{section}.{key}"
                 if where in RETIRED:
@@ -514,5 +521,5 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         "layout": dict(cfg["layout"], wide_glyphs=[g for g in wide if isinstance(g, str)]),
         "bar": bar, "thresholds": dict(cfg["thresholds"]), "git": dict(cfg["git"]),
         "glyphs": dict(cfg["glyphs"]) if isinstance(cfg.get("glyphs"), dict) else {},
-        "quest": quest, "activity": activity, "lines": lines,
+        "quest": quest, "activity": activity, "commands": dict(cfg["commands"]), "lines": lines,
     }

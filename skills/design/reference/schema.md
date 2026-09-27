@@ -44,6 +44,12 @@ mode = "base"            # a segment option (statusline.py segments dir)
 type = "text"            # an instance of the text segment
 text = "prod"
 color = "red"
+
+[segment.oncall]
+type = "command"         # your own command's first line of output
+command = "oncall-now --short"
+every = 60               # seconds between runs, in the background (at least 2)
+timeout = 2              # killed after this long (at most 10)
 ```
 
 Every segment takes:
@@ -104,6 +110,9 @@ game_rows = 3         # game mode: rows of scene under the quest ticker
 game_hud = ["context", "limit_5h", "limit_7d"]   # one gauge beside each row; any segment works
 game_hud_width = "auto"   # "auto" (the gauges' width, more on wide terminals) or 0 to 60
 game_details = "auto"     # session details on the ticker's row: "auto" or a list of segments
+
+[commands]
+enabled = true        # false hides every command segment and runs nothing
 
 [activity]
 enabled = false       # `statusline.py activity enable` registers the hooks and sets this

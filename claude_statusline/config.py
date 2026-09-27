@@ -71,6 +71,8 @@ DEFAULTS = {
     },
     "glyphs": {},
     "colors": {},
+    # Command segments: false hides them all and runs nothing.
+    "commands": {"enabled": True},
     # Live activity: hooks that tell the bar what Claude is doing (statusline.py activity enable).
     "activity": {
         "enabled": False,

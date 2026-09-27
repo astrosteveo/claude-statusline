@@ -105,6 +105,18 @@ game_hud_width = "auto"  # columns kept for the gauges (wider on wide terminals)
 game_details = "auto"    # session details on the ticker's row: "auto" is the model, then the
                          # segments of your lines less what the gauges show; or a list, [] for none
 
+# --- your own commands -------------------------------------------------------------
+# A command segment shows the first line its command printed, colours and all. It runs
+# in the background at most every `every` seconds and is killed after `timeout`; the bar
+# only ever reads what it printed last. Place it on a line like any segment.
+# [segment.oncall]
+# type = "command"
+# command = "oncall-now --short"
+# every = 60
+# timeout = 2
+[commands]
+enabled = true           # false: every command segment hidden, nothing run
+
 # --- live activity ----------------------------------------------------------------
 # What Claude is doing now: the turn, the tools running, subagents, the task list,
 # the permission mode. `statusline.py activity enable` registers the hooks.

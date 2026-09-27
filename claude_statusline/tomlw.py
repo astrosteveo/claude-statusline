@@ -27,7 +27,7 @@ def value(v) -> str:
 
 
 ORDER = ("preset", "theme", "style", "icons", "color")
-SECTION_ORDER = ("layout", "bar", "thresholds", "activity", "quest", "git", "glyphs", "colors")
+SECTION_ORDER = ("layout", "bar", "thresholds", "commands", "activity", "quest", "git", "glyphs", "colors")
 
 
 def dumps(cfg: dict, header: str = "", comments: dict | None = None) -> str:

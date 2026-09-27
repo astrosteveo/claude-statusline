@@ -72,7 +72,7 @@ is the segment list; `reference/examples.md` has whole configs to start from.
 | "show what Claude is doing" / "running tools" / "subagents" | `activity enable`; `turn`, `tools`, `agents`, `tasks`, `mode` get a line of their own |
 | "the RPG" / "Claude Quest" | `quest enable`; its line appears at the bottom; `/quest` plays |
 | "no pet picture" | `set quest.avatar off` (the text pet shows instead) |
-| "run my own script in the bar" | not supported by design (constraints.md: the refresh budget) |
+| "run my own script in the bar" | a `[segment.<name>]` with `type = "command"`, `command = "…"`, `every`, `timeout`; it runs in the background (constraints.md) |
 
 ## Rules
 

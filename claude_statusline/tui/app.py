@@ -683,8 +683,11 @@ class App:
             if seg.name in ("pet", "avatar"):
                 continue
             items.append({"name": seg.name, "doc": seg.doc, "placed": seg.name in placed, "quest": seg.quest})
+        items = [it for it in items if it["name"] != "command"]
         items.append({"name": "+ text label", "doc": "your own words, as a new text segment", "placed": False,
                       "quest": False, "label": True})
+        items.append({"name": "+ command", "doc": "your own command's output, run in the background; set it "
+                      "on the Segments page", "placed": False, "quest": False, "label": "command"})
         self.picker = {"items": items, "i": 0, "filter": "", "title": "add a segment"}
 
     def picker_items(self):
@@ -721,11 +724,13 @@ class App:
             self.picker = None
             name = it["name"]
             if it.get("label"):
+                kind = "command" if it["label"] == "command" else "label"
                 n = 1
-                while dig(self.raw, ["segment", f"label{n}"]) is not None:
+                while dig(self.raw, ["segment", f"{kind}{n}"]) is not None:
                     n += 1
-                name = f"label{n}"
-                put(self.raw, ["segment", name], {"type": "text", "text": "hello"})
+                name = f"{kind}{n}"
+                put(self.raw, ["segment", name], {"type": "command", "command": "date +%H:%M", "every": 30.0}
+                    if kind == "command" else {"type": "text", "text": "hello"})
             if target:
                 names = next(r[2] for r in self.game_rows() if r[1] == target)
                 names.insert(min(self.layout_pos + 1, len(names)), name)
@@ -748,7 +753,8 @@ class App:
             if it.get("quest") and not self.comp["quest"].get("enabled"):
                 self.say(f"added {name} — it shows once Claude Quest is on (Quest page)", "yellow", 6)
             elif it.get("label"):
-                self.say(f"added {name}: set its text on the Segments page", "green", 6)
+                self.say(f"added {name}: set its {'command' if it['label'] == 'command' else 'text'} on the "
+                         f"Segments page", "green", 6)
             else:
                 self.say(f"added {name}", "green")
         elif len(k.name) == 1 and k.name.isprintable():
@@ -1116,6 +1122,7 @@ class App:
                 Field("alert at", ["thresholds", "orange"], "int", "…orange", step=5, lo=0, hi=100),
                 Field("critical at", ["thresholds", "red"], "int", "…red", step=5, lo=0, hi=100),
                 Field("git", ["git", "enabled"], "bool", "read git state (cached, in the background)"),
+                Field("commands", ["commands", "enabled"], "bool", "run command segments (in the background)"),
                 Field("git refresh", ["git", "cache_ttl"], "float", "seconds between git reads", step=0.5,
                       lo=0.5),
                 Field("heartbeat", [], "bool", "a tick at the end of line 1 that moves on every refresh",

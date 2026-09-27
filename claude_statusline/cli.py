@@ -457,6 +457,20 @@ def describe_lines(comp):
             f"{rows} rows of scene with gauges {', '.join(gauges) or 'none'}")
 
 
+def describe_command(spec, comp):
+    from . import commands
+    opts = spec["opts"]
+    if not commands.enabled(comp):
+        return "off ([commands] enabled = false or CLAUDE_STATUSLINE_NO_COMMANDS)"
+    entry = commands.read(commands.key_of(opts.get("command") or "", os.getcwd(), opts.get("per")))
+    if entry is None:
+        return f"not run yet here · every {opts['every']:g}s, timeout {opts['timeout']:g}s"
+    status = "ok" if entry.get("exit") == 0 else f"exit {entry.get('exit')}" + (
+        f" ({entry['error']})" if entry.get("error") else "")
+    return (f"ran {time.time() - entry['at']:.0f}s ago in {entry.get('took', 0):.2f}s, {status} · "
+            f"every {opts['every']:g}s, timeout {opts['timeout']:g}s")
+
+
 def cmd_doctor(argv):
     from . import settings as st
     from .config import CONFIG_SEARCH, compiled, config_path, runtime_dir
@@ -488,6 +502,9 @@ def cmd_doctor(argv):
          + (" · hooks registered" if st.activity_hooks_present(cfg) else " · hooks not registered")),
         ("runtime", runtime_dir()),
     ]
+    for spec in [s for ln in comp["lines"] for s in ln["left"] + ln["right"] + (ln.get("details") or [])
+                 if s["type"] == "command"]:
+        rows.append((f"command", f"{spec['name']}: {describe_command(spec, comp)}"))
     for k, v in rows:
         print(f"  {k:<11} {v}")
     if comp["problems"]:

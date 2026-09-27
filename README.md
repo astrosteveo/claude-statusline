@@ -126,6 +126,7 @@ colour in `[colors]`.
 | `cache` | the prompt cache, only while it is costing you |
 | `env`, `host`, `session`, `agent`, `vim`, `output_style`, `version`, `clock` | the rest of what the host knows |
 | `text` | your own label; place several with `type = "text"` |
+| `command` | the first line of your own command's output, run in the background (below) |
 | `turn`, `tools`, `agents`, `tasks`, `mode` | live activity: what Claude is doing now (below) |
 | `heartbeat` | a tick that moves while the bar refreshes (off unless placed: a debugging aid) |
 | `quest`, `quest_boss`, `quest_raid`, `quest_dungeon`, `quest_daily`, `quest_buffs`, `quest_event`, `quest_streak`, `quest_gold`, `quest_pet` | Claude Quest |
@@ -139,6 +140,29 @@ colour in `[colors]`.
 detail together (the reset clock, then the pace and token counts, then bars
 at half width, then no bars) and only then does the lowest-priority segment
 drop. Give what you care about a higher `priority`.
+
+## Your own commands
+
+```toml
+[[line]]
+left = ["model", "dir", "git", "oncall"]
+
+[segment.oncall]
+type = "command"
+command = "oncall-now --short"     # anything that prints a line; colours are kept
+every = 60                          # seconds between runs
+timeout = 2                         # killed after this long
+```
+
+A command segment shows the first line its command printed. The bar never
+runs the command itself or waits for it: a detached runner does, at most
+every `every` seconds (at least 2) and for at most `timeout` seconds (at most
+10), and the bar reads its last output from a cache. The command runs with
+`/bin/sh` in the session's directory, with `STATUSLINE_CWD`,
+`STATUSLINE_PROJECT_DIR`, `STATUSLINE_MODEL` and `STATUSLINE_SESSION_ID` set;
+`per = "global"` shares one output across directories. `[commands] enabled =
+false` (or `CLAUDE_STATUSLINE_NO_COMMANDS=1`) turns them all off, and
+`doctor` shows each one's last run.
 
 ## Spend today
 

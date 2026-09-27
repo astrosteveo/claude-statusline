@@ -31,6 +31,7 @@ Every segment also takes `format` (its body template), `priority`, `icon` ("" hi
 | `tasks` | 44 | The task list Claude keeps (TaskCreate or TodoWrite, where the model has them): the task in hand and how many are done (live activity). |
 | `session` | 40 | The session name, once one is set (/rename). |
 | `agent` | 38 | The agent, when Claude Code runs with --agent. |
+| `command` | 35 | The first line of your own command's output, run in the background at most every `every` seconds and stopped after `timeout`; the bar only reads what it printed last. Place several with `type = "command"`. `[commands] enabled = false` turns them all off. |
 | `vim` | 35 | The vim mode, when vim keybindings are on (pair with hideVimModeIndicator). |
 | `tokens` | 32 | Tokens this session: sent to the model and received from it. |
 | `output_style` | 30 | The output style, unless it is the default. |
@@ -595,6 +596,29 @@ Tone: `purple`. Default format: `<purple>{name}</purple>`
 | field | holds |
 |-------|-------|
 | `{name}` | the agent's name |
+
+## command
+
+The first line of your own command's output, run in the background at most every `every` seconds and stopped after `timeout`; the bar only reads what it printed last. Place several with `type = "command"`. `[commands] enabled = false` turns them all off.
+
+Tone: `subtext`. Default format: `{text}`
+
+| option | type | default | meaning |
+|--------|------|---------|---------|
+| `command` | str | `""` | The shell command (run with /bin/sh -c in the session's directory). |
+| `every` | float | `30.0` | Seconds between runs (at least 2). |
+| `timeout` | float | `2.0` | Seconds a run may take before it is killed (at most 10). |
+| `per` | str | `"project"` | project: a separate output for each directory · global: one for all One of: project, global. |
+| `max` | int | `40` | Longest output shown; longer ends in … |
+| `stale` | float | `600.0` | Hide output older than this many seconds (a command that stopped working). |
+
+| field | holds |
+|-------|-------|
+| `{text}` | the first line it printed, with its colours |
+| `{plain}` | the same without colours |
+| `{age}` | seconds since it ran |
+| `{exit}` | its exit status |
+| `{took}` | seconds it ran for |
 
 ## vim
 

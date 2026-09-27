@@ -27,10 +27,16 @@ Once a second, forever, per session. A refresh takes about 10 ms, 4 of
 which are Python starting up: the payload is parsed without importing
 `json`, the config is compiled once and cached, segment modules load only when
 placed, and git state comes from a cache that a detached background process
-refreshes, so the bar never waits for git. This is why the catalog is closed:
-a user-supplied command in a segment would run every second with no cache,
-and nothing about the bar's cost could be promised. If someone needs data the
-payload does not carry, the honest answer is that it is not supported.
+refreshes, so the bar never waits for git.
+
+Your own commands follow git's pattern. A `type = "command"` segment shows
+the first line its command last printed, read from a cache; when that is
+older than `every` seconds (at least 2), one detached runner starts, and it
+kills the command after `timeout` seconds (at most 10). A slow or broken
+command costs the bar nothing but stale or missing output.
+`[commands] enabled = false` or `CLAUDE_STATUSLINE_NO_COMMANDS=1` turns every
+one off. Data the payload does not carry and no quick command can print is
+still out of reach.
 
 ## Width
 
@@ -95,7 +101,7 @@ with `--sample quiet` for the sparse case and `--sample hot` for the loud one;
 
 ## Not possible
 
-- User-authored segments or shell commands.
+- A command that runs on every refresh, or that the bar waits for.
 - A different layout per terminal width (the fitter degrades one layout).
 - Conditional segments beyond "shown when there is something to show".
 - Detecting the terminal's font, background colour, mouse or keys from the bar.
