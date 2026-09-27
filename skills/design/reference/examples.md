@@ -127,3 +127,43 @@ preset = "minimal"
 enabled = true
 placement = "inline"
 ```
+
+## Game mode, with your details on top
+
+The whole bar is the game. Its top row keeps the model, git and cost beside
+the quest ticker; they give way before any game section does.
+
+```toml
+theme = "midnight"
+style = "capsules"
+
+[quest]
+enabled = true
+placement = "game"
+game_details = ["model", "git", "pr", "cost"]    # or "auto": the model, then your lines
+game_rows = 3
+```
+
+## Live activity and your own command
+
+What Claude is doing now on a line of its own, plus one line of your own.
+
+```toml
+preset = "classic"
+
+[activity]
+enabled = true          # statusline.py activity enable registers the hooks
+
+[[line]]
+left = ["model", "dir", "git", "spend", "oncall"]
+
+[[line]]
+left = ["context"]
+right = ["cache", "limit_5h", "limit_7d"]
+
+[segment.oncall]
+type = "command"
+command = "oncall-now --short"
+every = 60
+timeout = 2
+```

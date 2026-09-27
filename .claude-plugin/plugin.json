@@ -1,7 +1,7 @@
 {
   "name": "claude-statusline",
-  "version": "3.0.0",
-  "description": "A fast, themeable status line for Claude Code: 19 themes, 8 styles, an interactive configurator, and Claude Quest, an RPG that plays itself while you work.",
+  "version": "4.0.0",
+  "description": "A fast, themeable status line for Claude Code: 19 themes, 8 styles, live activity, an interactive configurator, and Claude Quest, an RPG that plays itself while you work.",
   "author": {"name": "Steven Mosley"},
   "homepage": "https://github.com/astrosteveo/claude-statusline",
   "repository": "https://github.com/astrosteveo/claude-statusline",

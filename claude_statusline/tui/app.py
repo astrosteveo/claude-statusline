@@ -223,7 +223,8 @@ class App:
         # preview box
         inner = W - 4
         lines, target, ctx = self.preview(inner)
-        label = f" preview · {self.sample} · {target} columns · {ctx.style} · {ctx.iconset} "
+        sample = os.path.splitext(os.path.basename(self.sample))[0]
+        label = f" preview · {sample} · {target} columns · {ctx.style} · {ctx.iconset} "
         top = self.row(self.T(" ╭─", "subtle"), self.T(label, "muted"),
                        self.T("─" * max(0, W - 5 - cells(label)) + "╮", "subtle"))
         rows.append(self.pad(top, W))

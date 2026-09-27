@@ -5,8 +5,8 @@
     {
       "name": "claude-statusline",
       "displayName": "Claude Statusline",
-      "description": "A fast, themeable status line for Claude Code: 19 themes, 8 styles, an interactive configurator, and Claude Quest.",
-      "version": "3.0.0",
+      "description": "A fast, themeable status line for Claude Code: 19 themes, 8 styles, live activity, an interactive configurator, and Claude Quest.",
+      "version": "4.0.0",
       "source": {"source": "github", "repo": "astrosteveo/claude-statusline"}
     }
   ]

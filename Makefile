@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-install lint install uninstall configure preview doctor bench catalog gallery clean
+.PHONY: help test test-unit test-install lint install uninstall configure preview doctor bench catalog gallery trailer demo clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -38,6 +38,12 @@ catalog:  ## Regenerate the skill's segment catalog from the code
 
 gallery:  ## Redraw docs/gallery.png (needs pycairo)
 	@python3 tools/gallery.py
+
+trailer:  ## Rebuild dist/trailer.mp4 and docs/game-mode.gif (needs pycairo, ffmpeg, gifski)
+	@python3 tools/trailer
+
+demo:  ## A scripted session in this terminal
+	@python3 statusline.py demo
 
 clean:  ## Remove caches
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +

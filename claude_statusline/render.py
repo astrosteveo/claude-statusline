@@ -118,8 +118,7 @@ def _game_lines(ctx, lines):
         return decor.group(segs, ctx, side)
 
     scene = [ln for ln in lines if ln.get("scene") is not None]
-    hud_w, hud = _hud(ctx, scene, group)
-    width = max(10, ctx.avail - (hud_w + 1 if hud else 0))
+    width, hud_w, hud = scene_geometry(ctx, lines, group)
     rows = scene_rows(ctx, width, len(scene)) if scene else []
     fits = []
     for line in lines:
@@ -134,6 +133,14 @@ def _game_lines(ctx, lines):
             text = Text(text.spans + [(" " * (1 + max(0, pad)), PAD)] + gauge.spans)
         fits.append(Fit(text, 0, [], ctx.avail))
     return fits
+
+
+def scene_geometry(ctx, lines, group=None):
+    """(scene width in columns, gauge column width, {row: gauge}) for game mode's scene rows."""
+    group = group or (lambda segs, side: decor.group(segs, ctx, side))
+    scene = [ln for ln in lines if ln.get("scene") is not None]
+    hud_w, hud = _hud(ctx, scene, group)
+    return max(10, ctx.avail - (hud_w + 1 if hud else 0)), hud_w, hud
 
 
 def _top_row(ctx, line, group):

@@ -12,8 +12,8 @@ from __future__ import annotations
 import os
 import time
 
-# 2026-10-30, 21:00 local time: the Hallowed Harvest, after dark.
-BASE = time.mktime((2026, 10, 30, 21, 0, 0, 0, 0, -1))
+# 2026-10-30, 19:40 local time: the Hallowed Harvest, at dusk.
+BASE = time.mktime((2026, 10, 30, 19, 40, 0, 0, 0, -1))
 DAY = time.mktime((2026, 10, 30, 14, 0, 0, 0, 0, -1))
 LOOK = {"theme": "midnight", "style": "capsules", "icons": "nerd"}
 
@@ -74,10 +74,13 @@ def event(now, text, kind, ago=1):
 
 TALK = [
     ("you", "The parser test is flaky again. Find out why, fix it, and open a PR."),
-    ("claude", "I'll look at the parser and run the tests."),
-    ("tool", "Read  parser.py"),
+    ("claude", "I'll read the parser and the failing test, then run the suite."),
+    ("tool", "Read  src/parser.py"),
+    ("tool", "Read  tests/test_parser.py"),
     ("tool", "Bash  pytest tests/test_parser.py -q"),
     ("out", "2 failed, 41 passed in 1.84s"),
+    ("claude", "Both failures read the tokenizer's cache after another test has filled it. The cache"),
+    ("claude", "outlives each test, so the order they run in decides the result."),
 ]
 
 
@@ -115,7 +118,7 @@ def _looks(t):
                  "19 themes and 8 styles, all drawn from the same segments.", now, f"{theme} · {style}")
 
 
-GAME = dict(LOOK, quest={"enabled": True, "placement": "game"},
+GAME = dict(LOOK, quest={"enabled": True, "placement": "game", "game_rows": 4},
             line=[{"left": ["model", "dir", "git", "pr", "cost", "spend"]},
                   {"left": ["context"], "right": ["limit_5h", "limit_7d"]}])
 
@@ -144,7 +147,7 @@ def _game(t):
         q = save(now, level=39, xp_in=120, xp_need=3850, last_tool=now - 30,
                  last_event=event(now, "⬆️ LEVEL UP! You are now level 39, Master. (+780 gold)", "levelup",
                                   ago=t - 13))
-        cap = "Loot drops, levels rise, and the pet celebrates."
+        cap = "A level-up, and the pet celebrates."
     else:
         q = save(now, level=39, xp_in=460, xp_need=3850, last_tool=now - 1,
                  dungeons=[{"project": "widget-factory", "number": 214, "name": "Crypt of the Nitpick",

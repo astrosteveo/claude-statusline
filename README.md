@@ -15,9 +15,16 @@ while you work.
   it, gives up detail gracefully when the terminal is narrow, and never clips.
 - **Fast**: about 10 ms a refresh, 4 of them Python starting up. Git runs in
   the background, so the bar never waits for it.
+- **Live activity**: the tools Claude is running, the subagents at work,
+  how long the turn has run, and the permission mode, from background hooks.
+- **Your own data**: command segments that run your scripts in the
+  background, today's spend across sessions, a prompt-cache countdown.
 - **Claude Quest**: XP for every tool Claude uses, loot as replies land,
   bosses summoned by failing tests, daily quests, a shop, and a pet that
-  lives in the corner of your bar. One switch turns it on or off.
+  lives in the corner of your bar. In game mode the whole bar is the game,
+  with your session details on its top row. One switch turns it on or off.
+
+![game mode](docs/game-mode.gif)
 
 Pure Python 3.11+, standard library only (the kitty pet picture uses pycairo).
 
@@ -308,6 +315,12 @@ list it in `layout.wide_glyphs`.
 raised. `CLAUDE_STATUSLINE_DEBUG=1 statusline.py render --sample busy` prints
 the traceback.
 
+**Upgrading from 3.x.** Configs and saves carry over unchanged. Run
+`statusline.py quest enable` once more if Quest is on, so its hooks include
+the subagent and compaction events; `doctor` says when they are out of date.
+Game mode now puts your session details on its top row (`[quest]
+game_details = []` turns that off).
+
 **Upgrading from 2.x.** 2.x configs still render. `statusline.py migrate --write`
 tidies one (hand-placed avatar rows become automatic placement, bar glyph
 overrides become bar styles) and keeps a backup. The new default look is
@@ -319,7 +332,13 @@ overrides become bar styles) and keeps a backup. The new default look is
 make test       # unit tests and installer tests
 make catalog    # regenerate the skill's segment catalog
 make gallery    # redraw docs/gallery.png (needs pycairo)
+make trailer    # rebuild dist/trailer.mp4 and docs/game-mode.gif (needs pycairo, ffmpeg, gifski)
 ```
+
+The trailer is built from the product: tools/trailer plays the scripted
+sessions of `statusline.py demo` through the real engine, draws the real
+configurator, composites the kitty scene from the frames the game's uploader
+draws, and synthesizes its own chiptune score.
 
 The suite renders every preset in every style, icon set and theme against
 sample, empty and deliberately malformed payloads at many widths and checks
