@@ -313,6 +313,8 @@ class SegmentTests(unittest.TestCase):
         self.assertIsNone(self.one("cache", {"prompt_cache": warm}, countdown=0.0))
         hour = dict(warm, ttl="1h", expires_at=NOW + 290)
         self.assertEqual(self.one("cache", {"prompt_cache": hour}), "⊙ cools 4m50s")
+        cold = {"warm": False, "last_miss_cause": {"causes": ["ttl_expired_5m"]}}
+        self.assertEqual(self.one("cache", {"prompt_cache": cold}), "⊙ cold · expired after 5m")
         missed = {"warm": True, "hit_ratio": 0.62, "last_miss_cause": {"causes": ["tools_changed", "odd_new_cause"]}}
         self.assertEqual(self.one("cache", {"prompt_cache": missed}), "⊙ hit 62% · tools changed, odd new cause")
 

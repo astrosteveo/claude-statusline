@@ -44,6 +44,20 @@ class Command(Segment):
         every = max(commands.MIN_EVERY, num(opts["every"], 30.0))
         timeout = max(0.1, min(commands.MAX_TIMEOUT, num(opts["timeout"], 2.0)))
         key = commands.key_of(command, ctx.cwd, opts["per"])
+        entry = ctx.memo(("command", key), lambda: self._fetch(ctx, command, key, every, timeout))
+        if entry is None or not entry.get("spans"):
+            return None
+        age = ctx.now - num(entry.get("at"), 0)
+        if age > max(opts["stale"], every * 2):
+            return None
+        cap = opts["max"] if level < LEAN else (max(8, opts["max"] // 2) if level < NARROW else 12)
+        text = Text([(t, (fg, bg, attrs, None)) for t, fg, bg, attrs in entry["spans"]]).clip(max(4, cap))
+        return {"text": text, "plain": text.plain(), "age": f"{age:.0f}", "exit": str(entry.get("exit")),
+                "took": f"{num(entry.get('took'), 0):.2f}"}
+
+    def _fetch(self, ctx, command, key, every, timeout):
+        """Once a refresh: the cached output, starting a run when it is stale."""
+        from .. import commands
         entry = commands.read(key)
         stale = entry is None or ctx.now - num(entry.get("at"), 0) >= every
         if stale:
@@ -55,12 +69,4 @@ class Command(Segment):
                 commands.request(key, command, ctx.cwd, timeout, env)
             elif ctx.sync_git and entry is None:        # a preview: run it once, bounded by the timeout
                 entry = commands.run(key, command, ctx.cwd, timeout, env)
-        if entry is None or not entry.get("spans"):
-            return None
-        age = ctx.now - num(entry.get("at"), 0)
-        if age > max(opts["stale"], every * 2):
-            return None
-        cap = opts["max"] if level < LEAN else (max(8, opts["max"] // 2) if level < NARROW else 12)
-        text = Text([(t, (fg, bg, attrs, None)) for t, fg, bg, attrs in entry["spans"]]).clip(max(4, cap))
-        return {"text": text, "plain": text.plain(), "age": f"{age:.0f}", "exit": str(entry.get("exit")),
-                "took": f"{num(entry.get('took'), 0):.2f}"}
+        return entry

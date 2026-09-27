@@ -678,7 +678,7 @@ COMMANDS = {
     "demo": lambda a: __import__("claude_statusline.demo", fromlist=["run"]).run(a),
 }
 ALIASES = {"-h": "help", "--help": "help", "--version": "version", "-V": "version", "--doctor": "doctor",
-           "--ruler": "ruler", "--demo": "demo"}
+           "--ruler": "ruler", "--demo": "preview"}
 
 
 def run(argv) -> int:

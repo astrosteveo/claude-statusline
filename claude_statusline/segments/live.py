@@ -19,9 +19,9 @@ def activity(ctx):
         fake = ctx.data.get("_activity")
         if isinstance(fake, dict):
             return _from_sample(fake, ctx.now)
-        from ..activity import load
-        s = load(ctx.data.get("session_id"))
-        if s is None or ctx.now - num(s.get("at"), 0) > 12 * 3600:
+        from ..activity import STALE, shown
+        s = shown(ctx.data.get("session_id"))
+        if s is None or ctx.now - num(s.get("at"), 0) > STALE:
             return None
         return s
     return ctx.memo("activity", get)
@@ -85,7 +85,8 @@ class Tools(LiveSegment):
         s = self.data(ctx)
         if not s:
             return None
-        running = sorted((v for v in s["tools"].values() if not v[3] and ctx.now - v[2] < 1800),
+        from ..activity import TOOL_EXPIRES
+        running = sorted((v for v in s["tools"].values() if not v[3] and ctx.now - v[2] < TOOL_EXPIRES),
                          key=lambda v: v[2])             # the longest-running first: it is what holds things up
         in_turn = s["turn"] and s["turn"] > s["stop"]
         since = s["turn"] if in_turn else ctx.now - RECENT_SECONDS

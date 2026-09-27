@@ -67,8 +67,8 @@ def note(led, sid, cost, duration_ms, now):
         base = 0.0 if duration_ms is not None and duration_ms < NEW_SESSION_MS else cost
         led["sessions"][sid] = [base, cost, now]
     else:
-        if cost < entry[1]:                 # a cost that went down: a new session under an old id
-            entry[0] = max(0.0, entry[0] - (entry[1] - cost))
+        if cost < entry[1]:                 # a cost that went down: the session restarted from zero under its
+            entry[0] -= entry[1]            # old id; keep what it already spent today by lowering the baseline
         entry[1], entry[2] = cost, now
     led["sessions"] = {k: v for k, v in led["sessions"].items() if now - v[2] < FORGET_SESSION}
 
@@ -89,7 +89,8 @@ def totals(led, now, sid=None, cost=None, duration_ms=None):
         if entry is None:
             base = 0.0 if duration_ms is not None and duration_ms < NEW_SESSION_MS else cost
             entry = [base, cost, 0]
-        sessions[sid] = [entry[0], max(cost, entry[0]), 0]
+        base = entry[0] - entry[1] if cost < entry[1] else entry[0]
+        sessions[sid] = [base, cost, 0]
     now_total = sum(max(0.0, last - base) for base, last, _ in sessions.values())
     week = {day_of(now - i * 86400) for i in range(1, 7)}
     month = today[:7]

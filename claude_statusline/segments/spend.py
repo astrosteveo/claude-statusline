@@ -124,7 +124,8 @@ class Cache(Segment):
             if isinstance(causes, list) and causes and level < LEAN else ""
         base = {"ratio": pct, "tokens": tokens, "ttl": str(node.get("ttl") or ""), "left": "", "cause": ""}
         if node.get("warm") is False:
-            return dict(base, detail="cold" + (f" {tokens}" if tokens and level < LEAN else ""), _state="orange")
+            return dict(base, detail="cold" + (f" {tokens}" if tokens and level < LEAN else ""), cause=cause,
+                        _state="orange")
         if ratio is not None and ratio < opts["min_ratio"]:
             return dict(base, detail=f"hit {pct}", cause=cause, _state="yellow")
         expires = num(node.get("expires_at"))
@@ -174,7 +175,8 @@ class Spend(Segment):
             return None
         budget = max(0.0, num(opts["budget"], 0.0))
         pct = 100.0 * t["today"] / budget if budget else None
-        width = 0 if not budget or level >= TEXT else (opts["width"] if level < NARROW else max(3, opts["width"] // 2))
+        width = 0 if not budget or level >= TEXT or opts["width"] <= 0 else \
+            (opts["width"] if level < NARROW else max(3, opts["width"] // 2))
         return {"label": opts["label"] if level < NARROW else "", "today": money(t["today"]),
                 "week": money(t["week"]) if opts["week"] and level < LESS else "",
                 "month": money(t["month"]) if opts["month"] and level < LESS else "",

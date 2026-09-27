@@ -58,6 +58,13 @@ class CommandTests(unittest.TestCase):
             time.sleep(0.1)
         self.assertEqual(text.plain(), "done")
 
+    def test_one_read_a_refresh(self):
+        from unittest import mock
+        self.render(raw("echo hi"))                                   # a preview fills the cache
+        with mock.patch.object(C, "read", wraps=C.read) as spy:
+            self.render(raw("echo hi"), live=False, sync=False)
+        self.assertEqual(spy.call_count, 1)
+
     def test_a_slow_command_is_killed(self):
         t = time.time()
         entry = C.run("k1", "echo early; sleep 30 & sleep 30", self.dir, 0.5)

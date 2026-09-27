@@ -37,7 +37,7 @@ def path(session_id):
 def fresh():
     return {"v": VERSION, "at": 0.0, "turn": 0.0, "stop": 0.0, "failed": "", "tools": {}, "ended": {},
             "recent": [], "agents": {}, "pending": [], "compact": [0.0, 0.0, ""], "compactions": 0,
-            "tasks": {}, "mode": "", "calls": 0}
+            "tasks": {}, "mode": "", "calls": 0, "closed": 0.0}
 
 
 # --- what a tool call is about ---------------------------------------------------------
@@ -82,6 +82,9 @@ def tool_label(name):
 def apply(s, event, now):
     """Fold one hook event into the state `s` (changed in place). False to delete the file."""
     name = event.get("hook_event_name")
+    if s.get("closed") and name != "SessionStart":
+        return True                        # async events that arrive after the session ended change nothing
+    s["closed"] = 0.0
     mode = event.get("permission_mode")
     if isinstance(mode, str) and mode:
         s["mode"] = mode
@@ -147,7 +150,8 @@ def apply(s, event, now):
             s["tasks"][tid] = [str(event.get("task_subject") or ""), "completed" if done else
                                (s["tasks"].get(tid, [0, "pending"])[1])]
     elif name == "SessionEnd":
-        return False
+        s["closed"] = now
+        s["tools"], s["agents"] = {}, {}
     _prune(s, now)
     s["at"] = now
     return True
@@ -202,6 +206,12 @@ def load(session_id):
     return s
 
 
+def shown(session_id):
+    """The session's activity for the bar: None once the session has ended."""
+    s = load(session_id)
+    return None if s is None or s.get("closed") else s
+
+
 def record(event, now=None):
     """Fold `event` into its session's file, under the session's lock."""
     import fcntl
@@ -216,14 +226,7 @@ def record(event, now=None):
         s = load(sid)
         if s is None or now - float(s.get("at") or 0) > STALE:
             s = fresh()
-        keep = apply(s, event, now)
-        if not keep:
-            for p in (dest, dest + ".lock"):
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
-            return
+        apply(s, event, now)
         tmp = f"{dest}.{os.getpid()}"
         with open(tmp, "wb") as fh:
             fh.write(marshal.dumps(s))
@@ -258,8 +261,9 @@ def hook_main() -> int:
     return 0
 
 
-def sweep(max_age=STALE):
-    """Remove the files of sessions that ended without saying so."""
+def sweep(max_age=STALE, locks=False):
+    """Remove the files of sessions long gone. Locks go too only when the hooks are off
+    (`disable`), since a hook running now may hold one."""
     from .config import runtime_dir
     now = time.time()
     try:
@@ -267,7 +271,7 @@ def sweep(max_age=STALE):
     except OSError:
         return
     for n in names:
-        if n.startswith("activity-"):
+        if n.startswith("activity-") and (locks or not n.endswith(".lock")):
             p = os.path.join(runtime_dir(), n)
             try:
                 if now - os.stat(p).st_mtime > max_age:
@@ -329,7 +333,7 @@ def disable(log=print) -> int:
     else:
         log("  hooks: none registered")
     log(f"  config: [activity] enabled = false in {set_config_enabled(False)}")
-    sweep(0)
+    sweep(0, locks=True)
     return 0
 
 

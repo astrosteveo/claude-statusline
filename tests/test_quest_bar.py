@@ -328,6 +328,14 @@ class PartySceneTests(unittest.TestCase):
             second = G._ensure_scene(ctx, terms, 100, 3, "drake:x:-:0:0:day:2", [])  # the party grows
             self.assertEqual(second, first)                         # the old picture until the new one is in
             self.assertEqual(len(spawned), 2)
+            # a new scene hashed into the slot on screen: that slot is being overwritten, so no picture
+            with open(os.path.join(runtime, "claude-statusline", "scene-shown-4242"), "w") as fh:
+                fh.write(f"{G.SCENE_BASE + len(G.SITUATIONS) * G.slot_of('x:100x3:1')}|100|3")
+            import time as t_
+            ver = int(max(os.stat(os.path.join(os.path.dirname(G.__file__), "quest", "art", f)).st_mtime
+                          for f in ("scene.py", "avatar.py", "sprites.py", "gear.py")))
+            same = next(f"k{i}" for i in range(500) if G.slot_of(f"k{i}:100x3:{ver}") == G.slot_of("x:100x3:1"))
+            self.assertIsNone(G._ensure_scene(ctx, terms, 100, 3, same, []))
         finally:
             gitstatus.spawn_detached = old_spawn
             if old_rt is None:

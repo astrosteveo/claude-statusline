@@ -104,7 +104,14 @@ class ApplyTests(unittest.TestCase):
         s = run_events([tool("Bash", "t1"), ev("SubagentStart", agent_id="x", agent_type="Plan")])
         A.apply(s, ev("Notification"), NOW + A.AGENT_EXPIRES + 1)
         self.assertEqual((s["tools"], s["agents"]), ({}, {}))
-        self.assertFalse(A.apply(s, ev("SessionEnd"), NOW + 2))
+
+    def test_nothing_after_the_session_ends(self):
+        s = run_events([tool("Bash", "t1"), ev("SessionEnd")])
+        self.assertTrue(s["closed"])
+        A.apply(s, tool("Read", "late", file_path="/x"), NOW + 5)      # an async hook arriving late
+        self.assertEqual(s["tools"], {})
+        A.apply(s, ev("SessionStart"), NOW + 9)                          # resumed: back to work
+        self.assertFalse(s["closed"])
 
 
 class RecordedTests(unittest.TestCase):
@@ -128,7 +135,8 @@ class RecordedTests(unittest.TestCase):
         self.assertEqual(s["agents"], {})                       # ... and is gone once it stops
         self.assertEqual(s["tools"], {})
         self.assertEqual(s["mode"], "bypassPermissions")
-        self.assertFalse(A.apply(s, events[-1], NOW + 99))      # SessionEnd
+        A.apply(s, events[-1], NOW + 99)                        # SessionEnd
+        self.assertTrue(s["closed"])
 
 
 class FileTests(unittest.TestCase):
@@ -145,8 +153,9 @@ class FileTests(unittest.TestCase):
             t.join()
         self.assertEqual(len(A.load(sid)["tools"]), 30)
         A.record(ev("SessionEnd", session_id=sid), NOW + 50)
-        self.assertIsNone(A.load(sid))
-        self.assertFalse(os.path.exists(A.path(sid)))
+        self.assertIsNone(A.shown(sid))                                   # the bar shows nothing for it
+        A.record(dict(tool("Read", "late"), session_id=sid), NOW + 51)
+        self.assertIsNone(A.shown(sid))
 
     def test_session_ids_cannot_escape_the_directory(self):
         self.assertEqual(os.path.dirname(A.path("../../etc/x")), os.path.dirname(A.path("s")))

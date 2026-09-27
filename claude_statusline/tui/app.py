@@ -1196,8 +1196,11 @@ class App:
             from .. import activity
             log = []
             try:
-                (activity.enable if live_after else activity.disable)(log=log.append)
-                note += " · live activity " + ("on: hooks registered" if live_after else "off: hooks removed")
+                code = (activity.enable if live_after else activity.disable)(log=log.append)
+                if code:
+                    note += " · live activity: " + (log[0].strip() if log else "settings.json could not be changed")
+                else:
+                    note += " · live activity " + ("on: hooks registered" if live_after else "off: hooks removed")
             except Exception as exc:
                 note += f" · live activity: {exc}"
             self.saved = copy.deepcopy(self.raw)

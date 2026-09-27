@@ -35,6 +35,12 @@ class LedgerTests(unittest.TestCase):
         # this session's live cost counts before the bar next writes it
         self.assertAlmostEqual(L.totals(led, NOON + 1001, "b", 3.0, 700_000)["today"], 7.0)
 
+    def test_a_session_restarting_under_its_id_keeps_its_spend(self):
+        led = ledger_at(("a", 0.0, 1_000, NOON), ("a", 12.0, 600_000, NOON + 60), ("a", 1.0, 30_000, NOON + 120))
+        self.assertAlmostEqual(L.totals(led, NOON + 130)["today"], 13.0)
+        led = ledger_at(("a", 0.0, 1_000, NOON), ("a", 12.0, 600_000, NOON + 60))
+        self.assertAlmostEqual(L.totals(led, NOON + 70, "a", 1.0, 30_000)["today"], 13.0)
+
     def test_a_resumed_session_counts_from_when_it_was_seen(self):
         led = ledger_at(("old", 40.0, 9_000_000, NOON), ("old", 42.0, 9_100_000, NOON + 500))
         self.assertAlmostEqual(L.totals(led, NOON + 600)["today"], 2.0)
@@ -94,6 +100,8 @@ class SegmentTests(unittest.TestCase):
         self.assertNotIn("61%", narrow)                               # the percentage goes first
         self.assertNotIn("month", narrow)
         self.assertIsNone(self.line({}))
+        for cols in (200, 60, 40, 30):                                # width 0: never a bar
+            self.assertNotIn("█", self.line(data, cols=cols, budget=100.0, width=0) or "")
 
     def test_previews_never_write(self):
         os.environ["XDG_STATE_HOME"] = tempfile.mkdtemp(prefix="sl-state-")

@@ -166,10 +166,10 @@ def _ensure_scene(ctx, terminals, cols, rows, look, args):
             except OSError:
                 pass
         return base, cols
-    try:                        # kitty is still receiving this scene: keep showing the last one it has
-        with open(shown) as fh:
+    try:                        # kitty is still receiving this scene: keep showing the last one it has,
+        with open(shown) as fh:  # unless it lives in the slot being overwritten right now
             old_base, old_cols, old_rows = (int(x) for x in fh.read().split("|"))
-        if old_rows == rows:
+        if old_rows == rows and old_base != base:
             return old_base, old_cols
     except (OSError, ValueError):
         pass

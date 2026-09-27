@@ -78,16 +78,14 @@ class Fit:
         self.levels = {}            # fit_details: segment -> the level it was drawn at
 
 
-def fit_line(left, right, avail, gap, group, compose, top=TEXT, keep_last=True) -> Fit:
+def fit_line(left, right, avail, gap, group, compose) -> Fit:
     """`left`/`right` are lists of Placed; `group(segs, side)` dresses one side,
-    `compose(l, r, avail, gap)` joins them. Levels run from full to `top`.
-    With `keep_last` false, a line whose last segment cannot fit comes back
-    empty instead of cut short."""
+    `compose(l, r, avail, gap)` joins them."""
     keep_l, keep_r = list(left), list(right)
     dropped = []
     while True:
         last = None
-        for level in range(top + 1):
+        for level in range(len(LEVELS)):
             segs_l = [p.at(_lv(p, level)) for p in keep_l]
             segs_r = [p.at(_lv(p, level)) for p in keep_r]
             lt = group([s for s in segs_l if s is not None], "left")
@@ -101,13 +99,9 @@ def fit_line(left, right, avail, gap, group, compose, top=TEXT, keep_last=True) 
             last = (lt, rt, need)
         present = [p for p in keep_l + keep_r if p.at(FULL) is not None]
         if len(present) <= 1:
-            if not keep_last:
-                if present:
-                    dropped.append(present[0].name)
-                return Fit(group([], "left"), top, dropped, avail)
             lt, rt, need = last
             text = compose(lt, rt, avail, gap).clip(avail)
-            return Fit(text, top, dropped, avail, overflow=need - avail, parts=(lt, rt))
+            return Fit(text, TEXT, dropped, avail, overflow=need - avail, parts=(lt, rt))
         victim = min(present, key=lambda p: p.prio)
         dropped.append(victim.name)
         if victim in keep_l:
