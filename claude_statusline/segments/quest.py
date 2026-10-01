@@ -366,6 +366,12 @@ class Event(QuestSegment):
         ev = (state or {}).get("last_event")
         if not isinstance(ev, dict):
             return None
+        if ctx.quest_cfg.get("placement") == "game":    # the news column beside the scene already says it
+            from ..render import news_width
+            said = {str(n.get("text")) for n in (state.get("news") or [])[-12:] if isinstance(n, dict)}
+            if str(ev.get("text") or "").split("\n")[0].strip() in said and \
+                    news_width(ctx, int(num(ctx.quest_cfg.get("game_rows"), 3))):
+                return None
         keep = float(ctx.quest_cfg.get("event_seconds", 30.0))
         if ctx.now - num(ev.get("at"), 0) > keep:
             return None

@@ -38,6 +38,7 @@ HINT = "ctrl+shift+click to change"
 
 # id, label, config key, kind. Leaving game mode is not here: the gear would go with it.
 ITEMS = (
+    ("layout", "Layout", "preset", "choice"),
     ("theme", "Theme", "theme", "choice"),
     ("style", "Style", "style", "choice"),
     ("icons", "Icons", "icons", "choice"),
@@ -55,11 +56,14 @@ TAB_LABEL = {"quests": "Quests", "bag": "Bag", "shop": "Shop", "hero": "Hero", "
 # What a game tab's buttons do (quest/pages.py). They spend gold and items, so their links carry the
 # open menu's token: a link printed by anything else in the terminal cannot act.
 ACTIONS = ("reroll", "buy", "use", "wear", "sell", "spares", "forge", "title", "confirm", "cancel")
-PICKERS = ("theme", "style", "icons", "bars")      # long enough to list on a page of their own
+PICKERS = ("layout", "theme", "style", "icons", "bars")      # long enough to list on a page of their own
 ROWS = (1, 8)
 
 
 def choices(item):
+    if item == "layout":
+        from .layout import list_presets
+        return list_presets()
     if item == "theme":
         from .themes import THEMES
         return list(THEMES)
@@ -82,6 +86,8 @@ def choices(item):
 def current(comp, item):
     """The setting's value in a compiled config."""
     quest = comp.get("quest") or {}
+    if item == "layout":
+        return comp.get("preset")
     if item == "bars":
         return (comp.get("bar") or {}).get("style")
     if item == "rows":
@@ -402,6 +408,10 @@ def _change(item, verb, arg):
         i = options.index(cur) if cur in options else -1
         new = options[(i + (1 if arg == "up" else -1)) % len(options)]
     if new == cur:
+        return new
+    if item == "layout":            # a preset brings its own settings, which yours must not hide
+        from .cli import apply_preset
+        apply_preset(new)
         return new
     path = write_path()
     _, text, _ = tomlw.edit(path, key, new)

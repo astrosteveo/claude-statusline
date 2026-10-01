@@ -22,6 +22,7 @@ look and try
       preview/render/themes/styles also take --theme T --style S --icons I --preset P --config PATH --plain
 
 change
+  use <preset>                    switch to a preset, its game settings included (e.g. use arcade)
   set <key> <value>               e.g. set theme nord · set style capsules · set segment.dir.mode base
   get <key> | unset <key>         read or remove one setting
   activity enable | disable       live activity on or off (background hooks; tools, agents, turn…)
@@ -573,6 +574,77 @@ def cmd_set(argv, unset=False):
     return 0
 
 
+def apply_preset(name, path=None):
+    """Switch to preset `name`: set `preset`, and take out your own keys that the preset sets in
+    its sections, so they do not hide it. Returns (path, keys removed, backup or None)."""
+    import shutil
+    from . import tomlw
+    from .config import write_path
+    from .layout import list_presets, load_preset, preset_sections
+    if name not in list_presets():
+        raise ValueError(f"no preset {name!r}; one of {', '.join(list_presets())}")
+    path = path or write_path()
+    backup = None
+    if os.path.exists(path):
+        backup = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+        shutil.copy2(path, backup)
+    removed = []
+    for section, body in preset_sections(load_preset(name)).items():
+        for key in body:
+            old, text, _ = tomlw.edit(path, f"{section}.{key}", None)
+            if text != old:
+                tomlw.write(path, text)
+                removed.append(f"{section}.{key}")
+    if load_preset(name).get("line"):
+        old = _text(path)
+        text = _drop_lines(old)
+        if text != old:
+            tomlw.write(path, text)
+            removed.append("your [[line]] tables")
+    _, text, _ = tomlw.edit(path, "preset", name)
+    tomlw.write(path, text)
+    return path, removed, backup
+
+
+def _text(path):
+    try:
+        with open(path) as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
+def _drop_lines(text):
+    """`text` without its [[line]] tables (each runs to the next table header)."""
+    out, skipping = [], False
+    for ln in text.split("\n"):
+        head = ln.strip()
+        if head.startswith("["):
+            skipping = head.replace(" ", "") == "[[line]]"
+        if not skipping:
+            out.append(ln)
+    return "\n".join(out)
+
+
+def cmd_use(argv):
+    from .layout import list_presets, preset_summary
+    if not argv:
+        print("usage: statusline.py use <preset>   (presets: " + ", ".join(list_presets()) + ")")
+        return 2
+    try:
+        path, removed, backup = apply_preset(argv[0])
+    except ValueError as exc:
+        print(exc)
+        return 1
+    print(f"preset {argv[0]}: {preset_summary(argv[0])}")
+    print(f"  set preset = \"{argv[0]}\" in {path}")
+    if removed:
+        print(f"  took out your {', '.join(removed)}, which the preset sets")
+    if backup:
+        print(f"  backup {backup}")
+    return 0
+
+
 def cmd_get(argv):
     pos, _, _ = _opts(argv)
     if not pos:
@@ -671,7 +743,7 @@ COMMANDS = {
     "themes": cmd_themes, "styles": cmd_styles, "icons": cmd_icons, "bars": cmd_bars,
     "segments": cmd_segments, "presets": cmd_presets,
     "validate": cmd_validate, "doctor": cmd_doctor, "ruler": cmd_ruler, "bench": cmd_bench,
-    "set": cmd_set, "unset": lambda a: cmd_set(a, unset=True), "get": cmd_get,
+    "set": cmd_set, "unset": lambda a: cmd_set(a, unset=True), "get": cmd_get, "use": cmd_use,
     "migrate": cmd_migrate,
     "click": lambda a: __import__("claude_statusline.menu", fromlist=["click"]).click(a[0]) if a else
     (print("usage: statusline.py click <claude-statusline://… link>"), 2)[1],

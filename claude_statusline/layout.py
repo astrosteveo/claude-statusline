@@ -46,7 +46,7 @@ GAME_TICKER = {"left": ["quest", "quest_boss", "quest_raid", "quest_dungeon", "q
                "right": ["quest_streak", "quest_gold", "quest_settings"]}
 # How a gauge (a segment with a label and a percentage) looks beside the game scene:
 # compact at first, and with a small bar, the pace and the reset when the column is wide.
-GAME_HUD_LOOK = {"width": 0, "format": "[<subtext>{label}</subtext> ]<level><bold>{pct}%</bold></level>"}
+GAME_HUD_LOOK = {"width": 0, "format": "[<subtext>{label}</subtext> ][<level><bold>{pct}%</bold></level>]"}
 GAME_HUD_RICH = {"width": 8, "format": "[<subtext>{label:<3}</subtext> ][{bar} ]<level><bold>{pct:>3}%</bold></level>"
                                        "[ <muted>{detail}</muted>][ <pacecolor>{pace}</pacecolor>]"
                                        "[ <muted>{reset}[·{clock}]</muted>]"}
@@ -80,6 +80,14 @@ def load_preset(name):
             return tomllib.load(fh)
     except Exception:
         return None
+
+
+PRESET_SECTIONS = ("quest", "bar", "activity", "layout", "thresholds")
+
+
+def preset_sections(preset) -> dict:
+    """The settings sections a preset carries besides its lines and segments."""
+    return {k: v for k, v in (preset or {}).items() if k in PRESET_SECTIONS and isinstance(v, dict)}
 
 
 def preset_summary(name) -> str:
@@ -324,7 +332,9 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
     raw = raw if isinstance(raw, dict) else {}
     _check_section(raw, problems)
     safe = {k: v for k, v in raw.items() if not (isinstance(DEFAULTS.get(k), dict) and not isinstance(v, dict))}
-    cfg = deep_merge(DEFAULTS, safe)
+    # A preset may set sections too ([quest], [bar]…): they sit between the defaults and your own keys.
+    early = load_preset(safe.get("preset", DEFAULTS["preset"])) or {}
+    cfg = deep_merge(deep_merge(DEFAULTS, preset_sections(early)), safe)
 
     theme = cfg.get("theme")
     if theme not in THEMES:

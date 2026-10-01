@@ -156,7 +156,7 @@ if [ "$SEED_CONFIG" -eq 1 ] && [ ! -e "$CONFIG" ]; then
 #   statusline.py themes        every theme drawn with your layout (also: styles, icons, bars)
 #   statusline.py set <k> <v>   e.g. set theme nord, set style powerline, set quest.enabled true
 
-preset = "classic"      # classic, compact, dashboard, focus, minimal
+preset = "classic"      # classic, compact, dashboard, focus, minimal, arcade
 theme = "claude"        # claude, midnight, catppuccin, tokyo-night, nord, dracula, gruvbox, …
 style = "$STYLE"     # minimal, classic, dots, chips, capsules, pills, powerline, slant
 icons = "$ICONS"        # nerd, unicode, emoji, none

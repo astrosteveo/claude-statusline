@@ -1,0 +1,29 @@
+# arcade — the full game in eight rows of scene, with every gauge and the session around it.
+#
+# The scene fills the middle, the game's news runs beside it, and a gauge sits
+# on each row at the right: context, the 5-hour and 7-day limits, cost, burn
+# rate, tokens, the prompt cache and lines changed. The top row is the quest
+# ticker, then the session: model, folder, git, pull request, worktree, the
+# session's name, today's spend, the environment and the clock. Your theme,
+# style and icons stay yours; any key you set yourself wins over these.
+
+[[line]]
+left = ["model", "dir", "git", "pr", "worktree", "session"]
+
+[[line]]
+left = ["spend", "env", "output_style"]
+right = ["clock"]
+
+[quest]
+enabled = true
+placement = "game"
+game_rows = 8
+game_hud = ["context", "limit_5h", "limit_7d", "cost", "burn", "tokens", "cache", "diff"]
+game_hud_width = "auto"
+game_news = "auto"
+game_details = "auto"
+avatar = "auto"
+party = true
+
+[bar]
+style = "smooth"

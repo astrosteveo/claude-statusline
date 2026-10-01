@@ -344,6 +344,11 @@ def news_rows(ctx, width, rows):
                    .clip(width))
     while len(out) < rows:
         out.append(Text([("│", bar)]))
+    for i, t in enumerate(out):              # a glyph with a variation selector can clip one cell long
+        cut = width
+        while t.width > width and cut > 1:
+            cut -= 1
+            t = out[i] = t.clip(cut)
     return [Text(t.spans + [(" " * (width - t.width), (None, None, 0, None))]) if t.width < width else t
             for t in out]
 

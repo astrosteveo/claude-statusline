@@ -91,7 +91,7 @@ statusline.py preview --width 80,120,160
 theme = "midnight"      # colours
 style = "capsules"      # minimal, classic, dots, chips, capsules, pills, powerline, slant
 icons = "nerd"          # nerd, unicode, emoji, none
-preset = "classic"      # classic, compact, dashboard, focus, minimal
+preset = "classic"      # classic, compact, dashboard, focus, minimal, arcade
 
 [[line]]                # your own lines replace the preset's
 left = ["model", "dir", "git", "pr", "cost"]
@@ -250,6 +250,15 @@ running while tools fire, fighting bosses, celebrating loot and dozing when
 you step away; elsewhere it is a little text sprite.
 
 ### Game mode
+
+The `arcade` preset is the whole game, set up for you: eight rows of scene,
+the news beside it, eight gauges (context, the 5-hour and 7-day limits, cost,
+burn rate, tokens, the prompt cache, lines changed) and your session on the
+top row. `statusline.py use arcade` switches to it, or pick Layout in the
+game's menu. It keeps your theme, style and icons, takes out the keys of
+yours it sets (and your own `[[line]]` tables), and backs up your config
+first. A preset may carry `[quest]`, `[bar]`, `[activity]`, `[layout]` and
+`[thresholds]` settings; anything you set yourself afterwards wins.
 
 ```toml
 [quest]
