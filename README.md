@@ -349,6 +349,11 @@ The bar runs once a second in every session, so it is built to be cheap:
 - segment modules load only when placed;
 - git runs in a detached background process that refreshes a cache, so a
   slow repository slows nothing; the branch comes straight from `HEAD`.
+- Claude Quest's hooks run in the background except at the start of a
+  session and the end of a turn, so no tool call waits for the game; the
+  save is written with the fast C encoder;
+- a settings menu left open closes from its file's age, before anything is
+  read.
 
 `statusline.py bench` measures it on your machine.
 

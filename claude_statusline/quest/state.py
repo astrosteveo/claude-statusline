@@ -115,7 +115,9 @@ class Locked:
                 self.state["log"] = self.state["log"][-LOG_KEEP:]
                 tmp = f"{self.path}.{os.getpid()}.tmp"
                 with open(tmp, "w") as fh:
-                    json.dump(self.state, fh, indent=1, ensure_ascii=False)
+                    # Compact: with `indent` Python falls back to its slow pure-Python encoder,
+                    # which cost a hook more than everything else it does.
+                    json.dump(self.state, fh, ensure_ascii=False, separators=(",", ":"))
                 os.replace(tmp, self.path)
         finally:
             fcntl.flock(self.fd, fcntl.LOCK_UN)

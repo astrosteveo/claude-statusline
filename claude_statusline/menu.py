@@ -134,14 +134,25 @@ def state_path(sid):
 
 
 def _load(sid, now):
+    """The session's open menu, or None. A menu left idle is closed here, from its file's age,
+    before anything is parsed, so a forgotten one costs nothing on later refreshes."""
+    path = state_path(sid)
     try:
-        with open(state_path(sid)) as fh:
+        with open(path, "rb") as fh:
+            if time.time() - os.fstat(fh.fileno()).st_mtime > IDLE:
+                raise TimeoutError
             raw = fh.read()
+    except TimeoutError:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        return None
     except OSError:
         return None
-    import json
+    from .fastjson import loads
     try:
-        st = json.loads(raw)
+        st = loads(raw)
     except ValueError:
         return None
     if not isinstance(st, dict) or now - num(st.get("at"), 0) > IDLE:

@@ -49,14 +49,12 @@ def load_state(ctx):
         if isinstance(fake, dict):
             return fake
         import marshal
-        import zlib
         from ..quest import state_path
         try:
-            with open(state_path(), "rb") as fh:
-                raw = fh.read()
+            st = os.stat(state_path())
         except OSError:
             return None
-        key = (len(raw), zlib.crc32(raw))
+        key = (st.st_size, st.st_mtime_ns)       # every save is a new file (os.replace), so a new mtime
         cache = _runtime("quest-state.bin")
         try:
             with open(cache, "rb") as fh:
@@ -65,6 +63,11 @@ def load_state(ctx):
                 return blob["state"]
         except Exception:
             pass
+        try:
+            with open(state_path(), "rb") as fh:
+                raw = fh.read()
+        except OSError:
+            return None
         try:
             from ..fastjson import loads
             data = loads(raw)
@@ -576,8 +579,8 @@ def _ensure_uploaded(ctx, look, terminals, cols, rows):
                 fh.write(f"{key}|{time.time()}")
         except OSError:
             continue
-        import shutil
-        python = shutil.which("python3") or "python3"
+        import sys                  # not shutil.which: importing shutil costs more than drawing the bar
+        python = sys.executable or "python3"
         code = ("import sys; sys.path.insert(0, sys.argv[1]); "
                 "from claude_statusline.quest.art.avatar import main; sys.exit(main(sys.argv[2:]))")
         from ..gitstatus import spawn_detached

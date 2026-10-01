@@ -9,6 +9,10 @@ What the game says goes to the save's news. In game mode that is all: the bar
 shows it, and nothing is printed into the conversation. With the game on a
 line of its own (or inline), the bar has no room for it, so it is also sent
 as a systemMessage, after a banner when a session starts.
+
+Most hooks run in the background (settings.QUEST_ASYNC), where a message
+would go nowhere, so what they say waits in the save and goes out with the
+next session start or end of a turn.
 """
 import os
 import sys
@@ -84,6 +88,13 @@ def handle(event):
             g.compacted(str(event.get("trigger") or ""))
         g.finish()
         store.add_news(state, g.msgs, g.now)
+        from ..settings import QUEST_ASYNC
+        waiting = state.pop("pending_chat", None) or []
+        deferred = chat and name in QUEST_ASYNC
+        if deferred:
+            state["pending_chat"] = (waiting + g.msgs)[-20:]
+        elif chat:
+            g.msgs[:0] = waiting
         if chat and name == "SessionStart" and event.get("source", "startup") in ("startup", "resume"):
             from . import ui, view
             banner = ui.banner(view.build(state, g.now), g.streak())
@@ -94,6 +105,8 @@ def handle(event):
             field_launcher.autostart()
         except Exception:
             pass
+    if deferred:
+        return None
     msgs = ([banner] if banner else []) + (g.msgs if chat else [])
     return "\n".join(msgs) if msgs else None
 

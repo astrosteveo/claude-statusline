@@ -138,8 +138,8 @@ def _ensure_scene(ctx, terminals, cols, rows, look, args):
                 fh.write(f"{key}|{time.time()}")
         except OSError:
             continue
-        import shutil
-        python = shutil.which("python3") or "python3"
+        import sys                  # not shutil.which: importing shutil costs more than drawing the bar
+        python = sys.executable or "python3"
         code = ("import sys; sys.path.insert(0, sys.argv[1]); "
                 "from claude_statusline.quest.art.scene import main; sys.exit(main(sys.argv[2:]))")
         from .gitstatus import spawn_detached

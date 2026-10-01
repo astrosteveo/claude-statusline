@@ -16,6 +16,10 @@ ENTRY = os.path.join(CLAUDE_DIR, "statusline.py")
 
 HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "Stop", "SubagentStart",
                "SubagentStop", "PostCompact")
+# Quest's hooks that run in the background, so Claude never waits on them: everything but the
+# start of a session and the end of a turn, the two that may carry a message into the conversation.
+QUEST_ASYNC = ("UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "SubagentStart", "SubagentStop",
+               "PostCompact")
 # Commands earlier Claude Quest installs registered; replaced on enable, removed on disable.
 LEGACY_HOOK_MARKS = ("claude/quest/quest.py", "claude-quest hook", "claude_quest")
 
@@ -103,19 +107,17 @@ def _is_quest_hook(command: str) -> bool:
 
 
 def quest_hooks_missing(data: dict) -> list:
-    """Events Claude Quest wants a hook on that settings.json lacks (an older `quest enable`)."""
+    """Events Claude Quest wants a hook on that settings.json lacks, or has in an older form (an
+    earlier `quest enable`: before 4.5 every hook made Claude wait for it)."""
     hooks = data.get("hooks") if isinstance(data.get("hooks"), dict) else {}
     want = entry_command("quest", "hook")
-    return [ev for ev in HOOK_EVENTS if not any(h.get("command") == want for e in hooks.get(ev) or []
-                                                  if isinstance(e, dict) for h in e.get("hooks") or []
-                                                  if isinstance(h, dict))]
+    return [ev for ev in HOOK_EVENTS if not any(
+        h.get("command") == want and bool(h.get("async")) == (ev in QUEST_ASYNC)
+        for e in hooks.get(ev) or [] if isinstance(e, dict) for h in e.get("hooks") or [] if isinstance(h, dict))]
 
 
 def quest_hooks_present(data: dict) -> bool:
-    hooks = data.get("hooks") if isinstance(data.get("hooks"), dict) else {}
-    want = entry_command("quest", "hook")
-    return all(any(h.get("command") == want for e in hooks.get(ev) or [] if isinstance(e, dict)
-                   for h in e.get("hooks") or [] if isinstance(h, dict)) for ev in HOOK_EVENTS)
+    return not quest_hooks_missing(data)
 
 
 def strip_quest_hooks(data: dict) -> int:
@@ -154,7 +156,10 @@ def add_quest_hooks(data: dict):
     hooks = data.setdefault("hooks", {})
     command = entry_command("quest", "hook")
     for event in HOOK_EVENTS:
-        entry = {"hooks": [{"type": "command", "command": command, "timeout": 5}]}
+        hook = {"type": "command", "command": command, "timeout": 5}
+        if event in QUEST_ASYNC:
+            hook["async"] = True
+        entry = {"hooks": [hook]}
         if event.startswith("PostToolUse"):
             entry = {"matcher": "*", **entry}
         hooks.setdefault(event, []).append(entry)

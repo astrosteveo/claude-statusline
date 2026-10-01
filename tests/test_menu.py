@@ -108,6 +108,14 @@ class ClickTests(Sandbox):
         other = Context({"session_id": "another-session"}, game(), cols=160, now=NOW, env=ENV, live=True)
         self.assertIsNone(menu.read_state(other))
 
+    def test_a_forgotten_menu_file_is_cleared_unread(self):
+        self.click("open", now=time.time())
+        path = menu.state_path(SID)
+        old = time.time() - menu.IDLE - 60
+        os.utime(path, (old, old))
+        self.assertIsNone(menu.read_state(Context({"session_id": SID}, game(), now=time.time(), env=ENV, live=True)))
+        self.assertFalse(os.path.exists(path))
+
     def test_closes_itself_when_idle(self):
         self.click("open", now=NOW - menu.IDLE - 1)
         self.assertIsNone(menu.read_state(self.ctx()))
@@ -343,6 +351,31 @@ class HookTests(Sandbox):
         with open(self.config, "w") as fh:
             fh.write('[quest]\nenabled = true\nplacement = "line"\n')
         self.assertIsNotNone(self.event("SessionStart", source="startup"))
+
+    def test_background_hooks_save_their_words_for_the_turns_end(self):
+        with open(self.config, "w") as fh:
+            fh.write('[quest]\nenabled = true\nplacement = "line"\n')
+        self.event("SessionStart", source="startup")
+        self.assertIsNone(self.event("UserPromptSubmit", prompt="thanks so much!"))
+        from claude_statusline.quest import state as store
+        with store.Locked() as s:
+            self.assertTrue(s["pending_chat"])
+        said = self.event("Stop")
+        self.assertTrue(said)
+        with store.Locked() as s:
+            self.assertNotIn("pending_chat", s)
+
+    def test_only_turn_boundaries_make_claude_wait(self):
+        from claude_statusline import settings
+        data = {}
+        settings.add_quest_hooks(data)
+        sync = sorted(ev for ev, es in data["hooks"].items() for e in es for h in e["hooks"] if not h.get("async"))
+        self.assertEqual(sync, ["SessionStart", "Stop"])
+        self.assertTrue(settings.quest_hooks_present(data))
+        for e in data["hooks"]["PostToolUse"]:
+            for h in e["hooks"]:
+                h.pop("async")
+        self.assertEqual(settings.quest_hooks_missing(data), ["PostToolUse"])
 
 
 class GearTests(Sandbox):
