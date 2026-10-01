@@ -4,6 +4,11 @@ Registered for SessionStart, UserPromptSubmit, PostToolUse, PostToolUseFailure,
 Stop, SubagentStart, SubagentStop and PostCompact by `statusline.py quest enable`. It must never break a session, so
 any error is swallowed and the hook exits 0. When Claude Quest is switched
 off in the status line config, the hook does nothing at all.
+
+What the game says goes to the save's news. In game mode that is all: the bar
+shows it, and nothing is printed into the conversation. With the game on a
+line of its own (or inline), the bar has no room for it, so it is also sent
+as a systemMessage, after a banner when a session starts.
 """
 import os
 import sys
@@ -13,15 +18,21 @@ EVENTS = ("SessionStart", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure
           "SubagentStop", "PostCompact")
 
 
-def enabled() -> bool:
-    """Whether the status line config has Claude Quest switched on."""
-    if os.environ.get("CLAUDE_QUEST_FORCE"):
-        return True
+def _quest_cfg() -> dict:
     try:
         from ..config import compiled
-        return bool(compiled()["quest"].get("enabled"))
+        return compiled()["quest"]
     except Exception:
-        return False
+        return {}
+
+
+def enabled() -> bool:
+    """Whether the status line config has Claude Quest switched on."""
+    return bool(os.environ.get("CLAUDE_QUEST_FORCE")) or bool(_quest_cfg().get("enabled"))
+
+
+def game_mode() -> bool:
+    return _quest_cfg().get("placement") == "game"
 
 
 def _spawn(argv):
@@ -32,8 +43,8 @@ def _spawn(argv):
 
 
 def deliver(toasts):
-    """Desktop notifications and a sound, after the save is safely written."""
-    if os.environ.get("CLAUDE_QUEST_QUIET") or not toasts:
+    """Desktop notifications and a sound, after the save is safely written ([quest] notify)."""
+    if os.environ.get("CLAUDE_QUEST_QUIET") or not toasts or _quest_cfg().get("notify") is False:
         return
     sounds = []
     for title, body, sound in toasts:
@@ -53,6 +64,7 @@ def handle(event):
     from . import state as store
     from .game import Game
     banner = None
+    chat = not game_mode()
     with store.Locked() as state:
         g = Game(state)
         g.tick()
@@ -71,7 +83,8 @@ def handle(event):
         elif name == "PostCompact":
             g.compacted(str(event.get("trigger") or ""))
         g.finish()
-        if name == "SessionStart" and event.get("source", "startup") in ("startup", "resume"):
+        store.add_news(state, g.msgs, g.now)
+        if chat and name == "SessionStart" and event.get("source", "startup") in ("startup", "resume"):
             from . import ui, view
             banner = ui.banner(view.build(state, g.now), g.streak())
     deliver(g.toasts)
@@ -81,7 +94,7 @@ def handle(event):
             field_launcher.autostart()
         except Exception:
             pass
-    msgs = ([banner] if banner else []) + g.msgs
+    msgs = ([banner] if banner else []) + (g.msgs if chat else [])
     return "\n".join(msgs) if msgs else None
 
 

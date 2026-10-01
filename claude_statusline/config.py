@@ -92,6 +92,9 @@ DEFAULTS = {
         "game_rows": 3,
         "game_hud": ["context", "limit_5h", "limit_7d"],
         "game_hud_width": "auto",
+        # The game's news beside the scene: "auto" (on terminals 120 columns or wider,
+        # with 3 or more rows of scene), "off", or its width in columns.
+        "game_news": "auto",
         # The session details on game mode's top row: "auto" (the model, then
         # your lines' segments, less what the gauges show) or a list.
         "game_details": "auto",
@@ -105,6 +108,8 @@ DEFAULTS = {
         "party": True,
         # Seasonal events (the Hallowed Harvest, late October): bosses, loot, the scene.
         "seasons": True,
+        # Desktop pop-ups and sounds for big moments (level-ups, rare loot, bosses).
+        "notify": True,
     },
 }
 

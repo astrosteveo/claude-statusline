@@ -1,10 +1,12 @@
 """Game mode's settings menu: the links, what a click does, the drawing, the gear, the link opener."""
 import contextlib
 import io
+import json
 import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -53,7 +55,8 @@ class Sandbox(unittest.TestCase):
         env = mock.patch.dict(os.environ, {
             "CLAUDE_STATUSLINE_CONFIG": self.config, "CLAUDE_STATUSLINE_NOCACHE": "1",
             "XDG_RUNTIME_DIR": os.path.join(self.dir, "run"), "XDG_DATA_HOME": os.path.join(self.dir, "data"),
-            "XDG_CONFIG_HOME": os.path.join(self.dir, "conf"), "CLAUDE_QUEST_HOME": os.path.join(self.dir, "quest")})
+            "XDG_CONFIG_HOME": os.path.join(self.dir, "conf"), "CLAUDE_QUEST_HOME": os.path.join(self.dir, "quest"),
+            "CLAUDE_QUEST_QUIET": "1"})
         env.start()
         self.addCleanup(env.stop)
         self.addCleanup(shutil.rmtree, self.dir, True)
@@ -78,7 +81,9 @@ class ParseTests(unittest.TestCase):
         for url in ("https://example.com/open", f"claude-statusline://{SID}/", f"claude-statusline://{SID}/explode",
                     f"claude-statusline://{SID}/open/now", f"claude-statusline://{SID}/step/theme",
                     f"claude-statusline://{SID}/step/preset/up", f"claude-statusline://{SID}/pick/party",
-                    f"claude-statusline://{SID}/page/x", f"claude-statusline://{SID}/page/100",
+                    f"claude-statusline://{SID}/page/x", f"claude-statusline://{SID}/page/1000",
+                    f"claude-statusline://{SID}/tab/attic", f"claude-statusline://{SID}/do/abc/rm/x",
+                    f"claude-statusline://{SID}/do/abc/buy",
                     f"claude-statusline://{SID}/open?x=1", f"claude-statusline://{SID}/open#x",
                     "claude-statusline://../open", "claude-statusline://a.b/open", "claude-statusline://a:1/open",
                     f"claude-statusline://{SID}/set/theme/..%2f..", f"claude-statusline://{SID}/set/theme/$(id)",
@@ -94,7 +99,7 @@ class ClickTests(Sandbox):
     def test_open_and_close(self):
         self.assertIsNone(menu.read_state(self.ctx()))
         self.click("open")
-        self.assertEqual(menu.read_state(self.ctx())["page"], 0)
+        self.assertEqual(menu.read_state(self.ctx())["tab"], "quests")
         self.click("close")
         self.assertIsNone(menu.read_state(self.ctx()))
 
@@ -174,7 +179,8 @@ class DrawTests(Sandbox):
         return Context(data, comp, cols=cols, now=NOW, env=ENV, live=False)
 
     def test_fits_every_height_and_width(self):
-        states = [{"page": 0}, {"page": 1}] + [{"pick": p, "ppage": 1} for p in menu.PICKERS]
+        states = [{"tab": "settings"}, {"tab": "settings", "pages": {"settings": 1}}] + \
+            [{"tab": "settings", "pick": p, "ppage": 1} for p in menu.PICKERS]
         for rows in range(1, 9):
             comp = game(rows)
             for cols in (60, 120, 200):
@@ -190,36 +196,153 @@ class DrawTests(Sandbox):
 
     def test_every_setting_is_reachable(self):
         comp = game(8)
-        ctx = self.ctx(comp, 220, {"page": 0})
-        urls = links(menu.rows(ctx, ctx.avail, 8, {"page": 0}))
+        st = {"tab": "settings"}
+        ctx = self.ctx(comp, 220, st)
+        urls = links(menu.rows(ctx, ctx.avail, 8, st))
         for item in menu.ITEMS:
             self.assertTrue(any(f"/{item[0]}/" in u for u in urls), item[0])
         self.assertTrue(any(u.endswith("/close") for u in urls))
 
     def test_pages_when_the_rows_run_out(self):
         comp = game(2)
-        ctx = self.ctx(comp, 80, {"page": 0})
-        first = menu.rows(ctx, ctx.avail, 2, {"page": 0})
+        st = {"tab": "settings"}
+        ctx = self.ctx(comp, 100, st)
+        first = menu.rows(ctx, ctx.avail, 2, st)
         self.assertIn("1/", first[0].plain())
-        last = menu.rows(ctx, ctx.avail, 2, {"page": 99})
+        last = menu.rows(ctx, ctx.avail, 2, {"tab": "settings", "pages": {"settings": 99}})
         self.assertNotEqual(first[1].plain(), last[1].plain())
 
     def test_the_list_marks_the_current_choice(self):
         comp = compile_config({"theme": "nord", "quest": {"enabled": True, "placement": "game", "game_rows": 8}})
-        ctx = self.ctx(comp, 200, {"pick": "theme"})
-        out = menu.rows(ctx, ctx.avail, 8, {"pick": "theme"})
+        st = {"tab": "settings", "pick": "theme"}
+        ctx = self.ctx(comp, 200, st)
+        out = menu.rows(ctx, ctx.avail, 8, st)
         self.assertIn("● nord", "".join(t.plain() for t in out))
         self.assertTrue(any(u.endswith("/back") for u in links(out)))
 
     def test_takes_the_scenes_place(self):
         comp = game(3)
         data = samples.load("busy", NOW)
-        data["_menu"] = {"page": 0}
+        data["_menu"] = {"tab": "settings"}
         ctx = Context(data, comp, cols=160, now=NOW, env=ENV, live=False)
         fits = render_lines(data, comp, ctx=ctx)
         self.assertEqual(len(fits), 4)
         self.assertIn("Settings", fits[1].text.plain())
         self.assertIn("Theme", fits[2].text.plain())
+
+
+class GameTabTests(Sandbox):
+    """The quests, bag, shop and hero tabs, with a save of their own."""
+
+    def setUp(self):
+        super().setUp()
+        from claude_statusline.quest import state as store
+        from claude_statusline.quest.game import Game
+        with store.Locked() as s:
+            g = Game(s)
+            g.tick()
+            for item in ("paper_hat", "beanie", "beanie", "cookie", "cookie"):
+                g.grant(item, "a test", found=False)
+            g.grant_title("the Tested")
+            s["gold"] = 5000
+            g.finish()
+        self.store = store
+
+    def save(self):
+        with self.store.Locked() as s:
+            return json.loads(json.dumps(s))
+
+    def click(self, path):
+        return menu.handle(f"claude-statusline://{SID}/{path}")
+
+    def menu_state(self):
+        return menu.read_state(Context({"session_id": SID}, game(), now=time.time(), env=ENV, live=True))
+
+    def token(self):
+        return self.menu_state()["token"]
+
+    def test_every_tab_fits_and_links_parse(self):
+        for tab in ("quests", "bag", "shop", "hero"):
+            st = {"tab": tab, "token": "abc123"}
+            for rows in (1, 3, 8):
+                for cols in (60, 120, 200):
+                    data = {"session_id": SID, "_menu": st}
+                    ctx = Context(data, game(rows), cols=cols, now=time.time(), env=ENV, live=False)
+                    out = menu.rows(ctx, ctx.avail, rows, st)
+                    self.assertEqual(len(out), rows)
+                    for t in out:
+                        self.assertLessEqual(t.width, ctx.avail, (tab, rows, cols))
+                    for url in links(out):
+                        menu.parse(url)
+
+    def test_buttons_need_the_open_menus_token(self):
+        with self.assertRaises(ValueError):
+            self.click("do/abc/wear/paper_hat")           # the menu is closed
+        self.click("open")
+        with self.assertRaises(ValueError):
+            self.click("do/forged/wear/paper_hat")
+        self.click(f"do/{self.token()}/wear/paper_hat")
+        self.assertIn("head", self.save()["equipped"])
+
+    def test_sells_spare_copies_only(self):
+        self.click("open")
+        tok = self.token()
+        self.click(f"do/{tok}/sell/paper_hat")
+        self.assertIn("only", self.menu_state()["note"])
+        gold = self.save()["gold"]
+        self.click(f"do/{tok}/sell/beanie")
+        self.assertGreater(self.save()["gold"], gold)
+
+    def test_selling_every_spare_takes_two_clicks(self):
+        self.click("open")
+        tok = self.token()
+        with self.assertRaises(ValueError):
+            self.click(f"do/{tok}/spares/all")
+        self.click(f"do/{tok}/confirm/spares")
+        self.click(f"do/{tok}/spares/all")
+        ids = [e["id"] for e in self.save()["bag"]]
+        self.assertEqual(ids.count("cookie"), 1)
+
+    def test_buying_checks_the_day(self):
+        self.click("open")
+        tok = self.token()
+        self.click(f"do/{tok}/buy/0-19990101")
+        self.assertIn("new stock", self.menu_state()["note"])
+        gold = self.save()["gold"]
+        today = time.strftime("%Y%m%d")
+        self.click(f"do/{tok}/buy/0-{today}")
+        self.assertLess(self.save()["gold"], gold)
+
+    def test_wears_a_title(self):
+        self.click("open")
+        tok = self.token()
+        i = self.save()["titles"].index("the Tested")
+        self.click(f"do/{tok}/title/{i}")
+        self.assertEqual(self.save()["title"], "the Tested")
+        self.click(f"do/{tok}/title/rank")
+        self.assertIsNone(self.save()["title"])
+
+    def test_what_the_game_says_reaches_the_news(self):
+        self.click("open")
+        self.click(f"do/{self.token()}/use/cookie")
+        self.assertTrue(self.save()["news"])
+
+
+class HookTests(Sandbox):
+    def event(self, name, **kw):
+        from claude_statusline.quest import hooks
+        return hooks.handle({"hook_event_name": name, **kw})
+
+    def test_game_mode_keeps_the_conversation_quiet(self):
+        self.assertIsNone(self.event("SessionStart", source="startup"))
+        from claude_statusline.quest import state as store
+        with store.Locked() as s:
+            self.assertIsInstance(s["news"], list)
+
+    def test_other_placements_still_say_it(self):
+        with open(self.config, "w") as fh:
+            fh.write('[quest]\nenabled = true\nplacement = "line"\n')
+        self.assertIsNotNone(self.event("SessionStart", source="startup"))
 
 
 class GearTests(Sandbox):

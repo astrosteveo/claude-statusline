@@ -294,7 +294,7 @@ def _check_section(cfg_raw, problems):
                     problems.append(problem("warning", where, f"no longer used: {RETIRED[where]}"))
                 elif key not in default:
                     problems.append(problem("error", where, "unknown key" + _hint(key, default)))
-                elif where in ("quest.avatar", "quest.game_hud_width", "quest.game_details"):   # checked below
+                elif where in ("quest.avatar", "quest.game_hud_width", "quest.game_details", "quest.game_news"):   # checked below
                     continue
                 elif default[key] is not None and not isinstance(val, type(default[key])) and not (
                         isinstance(default[key], float) and isinstance(val, int) and not isinstance(val, bool)):
@@ -406,6 +406,11 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         if width != "auto" and (not isinstance(width, int) or isinstance(width, bool) or not 0 <= width <= 60):
             problems.append(problem("error", "quest.game_hud_width", '"auto" or a whole number from 0 to 60'))
             quest["game_hud_width"] = "auto"
+        news = quest.get("game_news", "auto")
+        if news not in ("auto", "off") and (not isinstance(news, int) or isinstance(news, bool) or
+                                            not 0 <= news <= 80):
+            problems.append(problem("error", "quest.game_news", '"auto", "off" or a whole number from 0 to 80'))
+            quest["game_news"] = "auto"
         if len(hud) > rows:
             problems.append(problem("warning", "quest.game_hud", f"only {rows} fit beside {rows} rows of scene"))
         details = quest.get("game_details", "auto")

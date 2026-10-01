@@ -273,6 +273,13 @@ one at a time, lowest priority first: less detail, then just the icon, then
 gone. `game_details` sets the list yourself (`[]` for none); the
 configurator's Layout page edits it.
 
+What the game says (loot, level-ups, quests, bosses) goes to a news column
+beside the scene, newest first, and nothing is printed into the conversation.
+`game_news` sets its width (`"auto"`: on terminals 120 columns or wider, with
+three or more rows of scene; `"off"`; or columns). With the game on a line of
+its own or inline, there is no room for it, so the messages still go to the
+conversation. `notify = false` turns off the desktop pop-ups and sounds.
+
 Beside each row of scene sits one gauge from `game_hud` (context, 5h and 7d
 by default; any segment works). On a wide terminal the gauges also show a
 bar, the pace and the reset time.
@@ -283,13 +290,23 @@ bar, the pace and the reset time.
 statusline.py clicks enable      # once; Linux, with xdg-open
 ```
 
-Game mode's top row then ends in a gear. Ctrl+shift+click it in kitty and the
-settings menu takes the scene's place: the theme, style, icons and bar style,
-the rows of scene, the picture, the party and the seasons. Click ‹ or › to
-step through a setting, the value itself to see every choice at once, and ✕
-to close. Each change is written to your config and shows on the next
-refresh, a second later. The menu opens only in the session you clicked, and
-closes itself after five minutes without a click.
+Game mode's top row then ends in a gear. Ctrl+shift+click it in kitty and a
+menu takes the scene's place, with a tab for each part of the game:
+
+- **Quests**: today's and this week's, with a reroll button while today's free
+  reroll lasts.
+- **Bag**: use, wear or sell (spare copies only), sell every spare, forge. The
+  last two ask before they act.
+- **Shop**: today's stock, with a buy button for what you can afford.
+- **Hero**: your level, pet, gear, bosses, dungeons and raids; click a title
+  to wear it.
+- **Settings**: the theme, style, icons and bar style, the rows of scene, the
+  picture, the news, the party, the seasons and pop-ups. Click ‹ or › to step
+  through a setting, or the value itself to see every choice at once.
+
+What a click did shows on the menu's top row, and each change shows on the
+next refresh, a second later. The menu opens only in the session you
+clicked, and closes itself after five minutes without a click.
 
 Claude Code sends the status line no clicks, so the buttons are links, and
 `clicks enable` makes `statusline.py click` the opener of

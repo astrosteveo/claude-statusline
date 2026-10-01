@@ -126,6 +126,11 @@ def _game_lines(ctx, lines):
     else:
         width, hud_w, hud = scene_geometry(ctx, lines, group)
         rows = scene_rows(ctx, width, len(scene)) if scene else []
+        news_w = news_width(ctx, len(scene))
+        if news_w:
+            from .gamemode import news_rows
+            rows = [Text(r.spans + [(" ", PAD)] + n.spans)
+                    for r, n in zip(rows, news_rows(ctx, news_w, len(scene)))]
     fits = []
     for line in lines:
         if line.get("scene") is None:
@@ -146,7 +151,21 @@ def scene_geometry(ctx, lines, group=None):
     group = group or (lambda segs, side: decor.group(segs, ctx, side))
     scene = [ln for ln in lines if ln.get("scene") is not None]
     hud_w, hud = _hud(ctx, scene, group)
-    return max(10, ctx.avail - (hud_w + 1 if hud else 0)), hud_w, hud
+    news_w = news_width(ctx, len(scene))
+    return max(10, ctx.avail - (hud_w + 1 if hud else 0) - (news_w + 1 if news_w else 0)), hud_w, hud
+
+
+def news_width(ctx, rows):
+    """Columns for the news beside the scene. They follow the terminal's width alone, never the
+    news, so the scene's picture keeps its size (a new size means drawing it again)."""
+    setting = ctx.quest_cfg.get("game_news", "auto")
+    if setting == "off" or not rows:
+        return 0
+    if setting == "auto":
+        if rows < 3 or ctx.avail < 120:
+            return 0
+        return min(64, ctx.avail * 28 // 100 // 4 * 4)
+    return max(0, min(int(setting), ctx.avail // 2))
 
 
 def _top_row(ctx, line, group):

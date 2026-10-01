@@ -1053,12 +1053,15 @@ class App:
                       getter=self.details_mode, setter=self.set_details_mode),
                 Field("game_hud_width", ["quest", "game_hud_width"], "choice",
                       "game mode: columns for the gauges beside the scene", choices=["auto", 0, 12, 16, 20, 24, 28]),
+                Field("game_news", ["quest", "game_news"], "choice",
+                      "game mode: the game's news beside the scene", choices=["auto", "off", 32, 40, 48, 56, 64]),
                 Field("avatar", ["quest", "avatar"], "choice", "the animated pet picture, in kitty",
                       choices=["auto", "on", "off"]),
                 Field("avatar_cols", ["quest", "avatar_cols"], "int", "the picture's width in cells", lo=4, hi=20),
                 Field("party", ["quest", "party"], "bool", "game mode: subagents at work walk with your pet"),
                 Field("seasons", ["quest", "seasons"], "bool", "seasonal events: haunted bosses and loot in late "
                       "October"),
+                Field("notify", ["quest", "notify"], "bool", "desktop pop-ups and sounds for big moments"),
                 Field("event_seconds", ["quest", "event_seconds"], "float",
                       "how long news (loot, level-ups) stays", step=5.0, lo=0.0)]
 

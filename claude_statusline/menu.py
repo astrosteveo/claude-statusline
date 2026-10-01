@@ -44,10 +44,17 @@ ITEMS = (
     ("bars", "Bars", "bar.style", "choice"),
     ("rows", "Rows", "quest.game_rows", "int"),
     ("picture", "Picture", "quest.avatar", "choice"),
+    ("news", "News", "quest.game_news", "choice"),
     ("party", "Party", "quest.party", "bool"),
     ("seasons", "Seasons", "quest.seasons", "bool"),
+    ("popups", "Pop-ups", "quest.notify", "bool"),
 )
 ITEM = {i[0]: i for i in ITEMS}
+TABS = ("quests", "bag", "shop", "hero", "settings")
+TAB_LABEL = {"quests": "Quests", "bag": "Bag", "shop": "Shop", "hero": "Hero", "settings": "Settings"}
+# What a game tab's buttons do (quest/pages.py). They spend gold and items, so their links carry the
+# open menu's token: a link printed by anything else in the terminal cannot act.
+ACTIONS = ("reroll", "buy", "use", "wear", "sell", "spares", "forge", "title", "confirm", "cancel")
 PICKERS = ("theme", "style", "icons", "bars")      # long enough to list on a page of their own
 ROWS = (1, 8)
 
@@ -67,6 +74,8 @@ def choices(item):
         return list(STYLES)
     if item == "picture":
         return ["auto", "on", "off"]
+    if item == "news":
+        return ["auto", "off"]
     return []
 
 
@@ -82,6 +91,11 @@ def current(comp, item):
         return {True: "on", False: "off"}.get(v, v) if isinstance(v, bool) else v
     if item in ("party", "seasons"):
         return quest.get(item) is not False
+    if item == "popups":
+        return quest.get("notify") is not False
+    if item == "news":
+        v = quest.get("game_news", "auto")
+        return v if v in ("auto", "off") else "auto"
     return comp.get(item)
 
 
@@ -239,27 +253,50 @@ def _join(left, right, width, middle=None):
     return Text(t.spans + [(" " * pad, (None, None, 0, None))] + right.spans)
 
 
-def rows(ctx, width, count, st):
-    """The menu as `count` Texts at most `width` cells wide: a title row, then the settings
-    (or every choice of one setting) in a grid, with pages when they do not fit."""
-    sid = session_of(ctx.data) or "preview"
+def _tab_of(st):
+    return st.get("tab") if st.get("tab") in TABS else TABS[0]
+
+
+def _page_of(st, tab):
+    if tab == "settings" and st.get("pick") in PICKERS:
+        return int(num(st.get("ppage"), 0))
+    pages = st.get("pages") if isinstance(st.get("pages"), dict) else {}
+    return int(num(pages.get(tab), 0))
+
+
+def _settings_cells(ctx, sid, st):
     comp = ctx.comp
     pick = st.get("pick") if st.get("pick") in PICKERS else None
     if pick:
         cur = current(comp, pick)
         names = choices(pick)
-        cell_w = 2 + max(len(n) for n in names)
         cells = [_t(ctx, ("● " if n == cur else "  ") + n, "accent" if n == cur else "text",
                     link(sid, "set", pick, n), bold=n == cur) for n in names]
-        title, page = ITEM[pick][1], int(num(st.get("ppage"), 0))
+        return cells, 2 + max(len(n) for n in names), f"pick a {ITEM[pick][1].lower()}"
+    label_w = max(len(i[1]) for i in ITEMS)
+    cells = [_control(ctx, sid, i[0], comp, label_w) for i in ITEMS]
+    return cells, max(c.width for c in cells), HINT
+
+
+def rows(ctx, width, count, st):
+    """The menu as `count` Texts at most `width` cells wide: the tabs, then the tab's cells in a
+    grid, with pages when they do not fit."""
+    sid = session_of(ctx.data) or "preview"
+    tab = _tab_of(st)
+    token = st.get("token") if _word(st.get("token")) else "none"
+    pick = tab == "settings" and st.get("pick") in PICKERS
+    if tab == "settings":
+        cells, cell_w, hint = _settings_cells(ctx, sid, st)
     else:
-        label_w = max(len(i[1]) for i in ITEMS)
-        cells = [_control(ctx, sid, i[0], comp, label_w) for i in ITEMS]
-        cell_w = max(c.width for c in cells)
-        title, page = "Settings", int(num(st.get("page"), 0))
+        from .quest import pages as game_pages
+        cells, cell_w = game_pages.cells(ctx, tab, lambda action, arg: link(sid, "do", token, action, arg), width)
+        hint = game_pages.HINT[tab]
+    note = st.get("note") if ctx.now - num(st.get("note_at"), 0) < 90 else None
+    confirm = st.get("confirm") if tab == "bag" and isinstance(st.get("confirm"), str) else None
     close = _t(ctx, "✕ close", "subtext", link(sid, "close"))
     back = _t(ctx, "‹ back", "subtext", link(sid, "back")) if pick else Text()
     glyph = GEAR.get(ctx.iconset, "⚙")
+    page = _page_of(st, tab)
 
     def right(pager):
         t = Text()
@@ -270,22 +307,46 @@ def rows(ctx, width, count, st):
                 t.extend(part)
         return t
 
-    if count == 1:              # one row: the gear, as many cells as fit, then the pager and the close
+    def confirm_row():
+        from .quest.pages import confirm_text
+        action, _, arg = confirm.partition("-")
+        t = _t(ctx, confirm_text(confirm) + " ", "gold", bold=True)
+        t.extend(_t(ctx, "[yes]", "green", link(sid, "do", token, action, arg or "all"), bold=True))
+        t.add(" ").extend(_t(ctx, "[no]", "subtext", link(sid, "do", token, "cancel", "x")))
+        return t.clip(width)
+
+    if count == 1:              # one row: ‹ tab ›, as many cells as fit, then the pager and the close
+        i = TABS.index(tab)
+        left = _t(ctx, glyph + " ", "accent", bold=True)
+        left.extend(_t(ctx, "‹", "accent", link(sid, "tab", TABS[i - 1])))
+        left.extend(_t(ctx, f" {TAB_LABEL[tab]} ", "accent", bold=True))
+        left.extend(_t(ctx, "›", "accent", link(sid, "tab", TABS[(i + 1) % len(TABS)])))
+        if confirm:
+            return [_join(left, right(Text()), width, confirm_row())]
         reserve = right(_t(ctx, "‹ 9/9 ›", "text")).width
-        mid = max(1, width - 1 - reserve - 2 * GAP)
+        mid = max(1, width - left.width - reserve - 2 * GAP)
         pages = _pages(cells, cell_w, mid, 1)
         page = max(0, min(page, len(pages) - 1))
         middle = _row(pages[page][0], cell_w, mid) if pages[page] else Text()
-        return [_join(_t(ctx, glyph, "accent", bold=True), right(_pager(ctx, sid, page, len(pages))), width, middle)]
-    pages = _pages(cells, cell_w, width, count - 1)
+        return [_join(left, right(_pager(ctx, sid, page, len(pages))), width, middle)]
+    head = _t(ctx, glyph, "accent", bold=True)
+    for name in TABS:
+        head.add("  ")
+        head.extend(Text([(TAB_LABEL[name], (ctx.color("accent" if name == tab else "subtext"), None,
+                                             (BOLD | UNDERLINE) if name == tab else 0, link(sid, "tab", name)))]))
+    body = count - 1 - (1 if confirm else 0)
+    pages = _pages(cells, cell_w, width, max(1, body))
     page = max(0, min(page, len(pages) - 1))
-    head = _t(ctx, f"{glyph} {title}", "accent", bold=True)
-    hint = _t(ctx, "pick one" if pick else HINT, "muted")
     tail = right(_pager(ctx, sid, page, len(pages)))
-    if head.width + GAP + hint.width + 1 + tail.width <= width:
-        head = head.add(" " * GAP).extend(hint)
+    extra = _t(ctx, note, "text") if note else _t(ctx, hint, "muted")
+    room = width - head.width - GAP - 1 - tail.width
+    if room >= 12:
+        head = head.add(" " * GAP).extend(extra.clip(room))
     out = [_join(head, tail, width)]
-    out += [_row(r, cell_w, width) for r in pages[page]]
+    if confirm:
+        out.append(confirm_row())
+    if body > 0:
+        out += [_row(r, cell_w, width) for r in pages[page]]
     while len(out) < count:
         out.append(Text.of(" "))            # kept as a blank row, so the bar keeps its height
     return out[:count]
@@ -361,25 +422,61 @@ def parse(url):
     if not _word(sid, "-"):
         raise ValueError("bad session id")
     parts = [p for p in u.path.split("/") if p]
-    if not parts or len(parts) > 3 or not all(_word(p) for p in parts):
+    if not parts or len(parts) > 4 or not all(_word(p) for p in parts):
         raise ValueError("bad path")
     verb, args = parts[0], parts[1:]
-    shape = {"open": 0, "close": 0, "back": 0, "page": 1, "pick": 1, "step": 2, "set": 2}
+    shape = {"open": 0, "close": 0, "back": 0, "page": 1, "pick": 1, "step": 2, "set": 2, "tab": 1, "do": 3}
     if shape.get(verb) != len(args):
         raise ValueError(f"unknown action {verb!r}")
     if verb in ("pick", "step", "set") and args[0] not in ITEM:
         raise ValueError(f"unknown setting {args[0]!r}")
     if verb == "pick" and args[0] not in PICKERS:
         raise ValueError(f"{args[0]} has no list")
-    if verb == "page" and not (args[0].isdigit() and int(args[0]) < 100):
+    if verb == "page" and not (args[0].isdigit() and int(args[0]) < 1000):
         raise ValueError("bad page")
+    if verb == "tab" and args[0] not in TABS:
+        raise ValueError(f"unknown tab {args[0]!r}")
+    if verb == "do" and args[1] not in ACTIONS:
+        raise ValueError(f"unknown action {args[1]!r}")
     return sid, verb, args
+
+
+def _note(st, text, now):
+    st["note"], st["note_at"] = text, now
+
+
+def _do(st, token, action, arg, now):
+    """A game tab's button. Returns pop-ups to deliver once the locks are let go."""
+    if st.get("token") != token:
+        raise ValueError("that button belongs to a menu that is no longer open")
+    if action == "confirm":
+        if arg != "spares" and not (arg.startswith("forge-") and arg[6:] in ("common", "uncommon", "rare", "epic")):
+            raise ValueError("nothing to confirm")
+        st["confirm"] = arg
+        return []
+    if action == "cancel":
+        st.pop("confirm", None)
+        return []
+    if action in ("spares", "forge"):
+        want = "spares" if action == "spares" else f"forge-{arg}"
+        if st.pop("confirm", None) != want:
+            raise ValueError("press the button first, then yes")
+    from .quest.game import GameError
+    from .quest.pages import act
+    try:
+        msgs, toasts = act(action, arg, now)
+    except GameError as exc:
+        _note(st, f"✋ {exc}", now)
+        return []
+    _note(st, (msgs[-1].split("\n")[0] if msgs else "Done."), now)
+    return toasts
 
 
 def handle(url, now=None):
     """Carry out one click. Returns what it did; raises ValueError for a link it does not accept."""
     sid, verb, args = parse(url)
     now = time.time() if now is None else now
+    toasts = []
     with _Lock():
         if verb == "close":
             try:
@@ -388,14 +485,25 @@ def handle(url, now=None):
                 pass
             return "closed the menu"
         st = _load(sid, now)
+        if verb == "do" and st is None:
+            raise ValueError("the menu is closed")
         if verb == "open" or st is None:
-            st = {"page": 0}
+            import secrets
+            st = {"tab": (st or {}).get("tab", TABS[0]), "token": secrets.token_hex(8)}
         did = "opened the menu"
-        if verb == "page":
-            st["ppage" if st.get("pick") else "page"] = int(args[0])
+        if verb == "tab":
+            st["tab"] = args[0]
+            for k in ("pick", "confirm"):
+                st.pop(k, None)
+            did = f"the {args[0]} tab"
+        elif verb == "page":
+            if st.get("pick") and _tab_of(st) == "settings":
+                st["ppage"] = int(args[0])
+            else:
+                st.setdefault("pages", {})[_tab_of(st)] = int(args[0])
             did = f"page {int(args[0]) + 1}"
         elif verb == "pick":
-            st["pick"], st["ppage"] = args[0], 0
+            st["tab"], st["pick"], st["ppage"] = "settings", args[0], 0
             did = f"listed every {args[0]}"
         elif verb == "back":
             st.pop("pick", None)
@@ -403,8 +511,14 @@ def handle(url, now=None):
         elif verb in ("step", "set"):
             did = f"{ITEM[args[0]][2]} = {_change(args[0], verb, args[1])}"
             st.pop("pick", None)
+        elif verb == "do":
+            toasts = _do(st, args[0], args[1], args[2], now)
+            did = st.get("note") if st.get("note_at") == now else f"{args[1]} {args[2]}"
         st["at"] = now
         _save(sid, st)
+    if toasts:
+        from .quest.hooks import deliver
+        deliver(toasts)
     return did
 
 

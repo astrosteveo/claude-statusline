@@ -13,6 +13,7 @@ from . import home, items, lock_path, state_path
 STATS_CACHE = os.path.expanduser("~/.claude/stats-cache.json")
 VERSION = 2
 LOG_KEEP = 200
+NEWS_KEEP = 20
 
 COUNTERS = ["commits", "pushes", "tests", "edits", "reads", "prompts", "agents", "bosses",
             "items_found", "items_used", "shell", "web", "thanks", "quests_done",
@@ -61,6 +62,7 @@ def migrate(s):
     s.setdefault("party", {})
     s.setdefault("goblin", None)
     s.setdefault("log", [])
+    s.setdefault("news", [])
     s.setdefault("sessions", {})
     counters = s.setdefault("counters", {})
     for key in COUNTERS:
@@ -118,3 +120,13 @@ class Locked:
         finally:
             fcntl.flock(self.fd, fcntl.LOCK_UN)
             self.fd.close()
+
+
+def add_news(s, lines, now):
+    """What the game said, one line each, for game mode's news (newest last)."""
+    news = s.setdefault("news", [])
+    for text in lines:
+        for line in str(text).split("\n"):
+            if line.strip():
+                news.append({"at": now, "text": line.strip()})
+    del news[:-NEWS_KEEP]

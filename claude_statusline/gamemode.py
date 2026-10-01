@@ -321,6 +321,33 @@ def text_rows(ctx, state, view, width, rows, sit, boss, raid, dungeon):
     return out
 
 
+def _age(seconds):
+    s = max(0, int(seconds))
+    return "now" if s < 60 else f"{s // 60}m" if s < 3600 else f"{s // 3600}h" if s < 86400 else f"{s // 86400}d"
+
+
+def news_rows(ctx, width, rows):
+    """The game's latest news, newest first, `rows` Texts each `width` cells wide."""
+    from .segments.quest import load_state
+    state = load_state(ctx) or {}
+    news = [n for n in state.get("news") or [] if isinstance(n, dict) and n.get("text")]
+    bar = (ctx.color("subtle"), None, 0, None)
+    out = []
+    for n in reversed(news[-rows:]):
+        age = ctx.now - num(n.get("at"), 0)
+        role = "text" if age < 120 else "subtext" if age < 3600 else "muted"
+        t = Text([("│ ", bar), (f"{_age(age):>3} ", (ctx.color("muted"), None, 0, None)),
+                  (str(n["text"]), (ctx.color(role), None, 0, None))]).clip(width)
+        out.append(t)
+    if not out:
+        out.append(Text([("│ ", bar), ("No news yet: it arrives as you work.", (ctx.color("muted"), None, 0, None))])
+                   .clip(width))
+    while len(out) < rows:
+        out.append(Text([("│", bar)]))
+    return [Text(t.spans + [(" " * (width - t.width), (None, None, 0, None))]) if t.width < width else t
+            for t in out]
+
+
 def scene_rows(ctx, width, rows):
     """The scene, `rows` Texts each `width` cells wide."""
     from .segments.quest import load_state, view_of
