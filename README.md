@@ -314,8 +314,20 @@ Claude Code sends the status line no clicks, so the buttons are links, and
 opens only web links; ctrl+shift+click is kitty's own. A link only ever picks
 from the menu's choices, whoever printed it. `clicks disable` undoes it.
 
+Inside Claude Code, `/quest` takes a game command (`/quest bag`) or a request
+in your own words (`/quest what should I buy?`, `/quest equip my best gear`):
+Claude answers those with the `claude-quest` skill, which `quest enable`
+installs and which also wakes up whenever you ask about the game in chat.
+`quest enable` also registers the game's tools with Claude Code (the
+`claude-quest` MCP server: `quest_status`, `quest_bag`, `quest_shop`,
+`quest_best_gear`, `quest_act`), so Claude reads your hero as data and acts
+in a single call each.
+`claude-quest best` scores every combination of the gear you own on your own
+history (your tool calls, commits, pushes and test runs, with set bonuses)
+and `best equip` wears the winner.
+
 Play with `/quest` inside Claude Code or `claude-quest` in a terminal: `sheet`,
-`bag`, `equip`, `use`, `sell`, `forge`, `shop`, `buy`, `quests`, `boss`, `dungeons`, `raid`, `pet`,
+`bag`, `best`, `equip`, `use`, `sell`, `forge`, `shop`, `buy`, `quests`, `boss`, `dungeons`, `raid`, `pet`,
 `titles`, `achievements`, `log`, `guide`.
 
 ## Performance

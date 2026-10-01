@@ -20,15 +20,22 @@ COMMAND_FILE = os.path.join(COMMANDS, "quest.md")
 BIN = os.path.expanduser("~/.local/bin")
 MARK = "<!-- claude-statusline: quest command -->"
 
+SKILL_DIR = os.path.join(st.CLAUDE_DIR, "skills", "claude-quest")
+SKILL_FILE = os.path.join(SKILL_DIR, "SKILL.md")
+
 COMMAND_TEXT = """---
-description: Claude Quest — your hero, bag, quests, shop, boss and pet (try /quest help)
-argument-hint: "[sheet|bag|inspect|equip|use|sell|forge|shop|buy|quests|boss|dungeons|raid|pet|titles|log|guide|help] [args]"
+description: Claude Quest — your hero, bag, quests, shop, boss and pet. A game command (try /quest help) or ask in your own words
+argument-hint: "[sheet|bag|best|equip|use|sell|forge|shop|buy|quests|boss|pet|titles|guide|help] [args] — or a request"
 allowed-tools: Bash(python3 -S ~/.claude/statusline.py quest:*)
 ---
 {mark}
-!`python3 -S ~/.claude/statusline.py quest $ARGUMENTS`
+!`python3 -S ~/.claude/statusline.py quest route $ARGUMENTS`
 
-Show the output above to the user exactly as printed, in a code block, with no commentary.
+If the output above starts with "REQUEST:", the user asked for something in their own words, and the
+character sheet below it is their hero now. Use the claude-quest skill to answer or do it, running
+`python3 -S ~/.claude/statusline.py quest <command>` as needed, and reply in a few plain sentences.
+
+Otherwise, show the output above to the user exactly as printed, in a code block, with no commentary.
 """
 
 
@@ -105,6 +112,56 @@ def set_config_enabled(on: bool) -> str:
     return path
 
 
+def install_skill(log=print):
+    """The claude-quest skill, so Claude can play the game for you. A skill of your own by that
+    name is kept."""
+    from .skill import text
+    if os.path.exists(SKILL_FILE) and not _ours(SKILL_FILE):
+        log(f"  kept your own {SKILL_FILE}; the claude-quest skill is not installed")
+        return
+    os.makedirs(SKILL_DIR, exist_ok=True)
+    body = text()
+    with open(SKILL_FILE, "w") as fh:
+        fh.write(body.replace("\n---\n", f"\n---\n{MARK}\n", 1))
+    log(f"  skill: claude-quest, in {SKILL_DIR}")
+
+
+MCP_NAME = "claude-quest"
+
+
+def _claude(*args):
+    """Run the `claude` CLI quietly; True when it worked. Tests and machines without it skip this."""
+    import shutil
+    import subprocess
+    if os.environ.get("CLAUDE_QUEST_NO_MCP") or not shutil.which("claude"):
+        return False
+    try:
+        return subprocess.run(["claude", *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                              timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def install_tools(log=print):
+    """The game's tools for Claude (quest/mcp.py), registered for every project."""
+    _claude("mcp", "remove", MCP_NAME, "--scope", "user")
+    if _claude("mcp", "add", "--scope", "user", MCP_NAME, "--", "python3", "-S", st.ENTRY, "quest", "mcp"):
+        log(f"  tools: the {MCP_NAME} MCP server (quest_status, quest_bag, quest_shop, quest_best_gear, "
+            "quest_act), for sessions started from now on")
+    else:
+        log(f"  tools: not registered (needs the claude CLI); by hand: claude mcp add --scope user {MCP_NAME} "
+            f"-- python3 -S {st.ENTRY} quest mcp")
+
+
+def tools_registered():
+    try:
+        with open(os.path.expanduser("~/.claude.json")) as fh:
+            import json
+            return MCP_NAME in (json.load(fh).get("mcpServers") or {})
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def enable(log=print) -> int:
     if not os.path.exists(st.ENTRY):
         log(f"  note: {st.ENTRY} is missing; run install.sh first so the hooks have something to call")
@@ -125,6 +182,8 @@ def enable(log=print) -> int:
         with open(COMMAND_FILE, "w") as fh:
             fh.write(COMMAND_TEXT.format(mark=MARK))
         log(f"  /quest: {COMMAND_FILE}")
+    install_skill(log)
+    install_tools(log)
     link = os.path.join(BIN, "claude-quest")
     try:
         os.makedirs(BIN, exist_ok=True)
@@ -157,6 +216,15 @@ def disable(log=print) -> int:
     if os.path.exists(COMMAND_FILE) and (_ours(COMMAND_FILE) or _legacy_command(COMMAND_FILE)):
         os.unlink(COMMAND_FILE)
         log(f"  /quest: removed {COMMAND_FILE}")
+    if _ours(SKILL_FILE):
+        os.unlink(SKILL_FILE)
+        try:
+            os.rmdir(SKILL_DIR)
+        except OSError:
+            pass
+        log(f"  skill: removed {SKILL_DIR}")
+    if _claude("mcp", "remove", MCP_NAME, "--scope", "user"):
+        log(f"  tools: removed the {MCP_NAME} MCP server")
     link = os.path.join(BIN, "claude-quest")
     if os.path.islink(link):
         os.unlink(link)
@@ -184,6 +252,8 @@ def status(log=print) -> int:
     stale = bool(missing) and missing != list(st.HOOK_EVENTS)
     log(f"  hooks          {'registered' if hooks else ('out of date (missing ' + ', '.join(missing) + '): run `statusline.py quest enable`' if stale else 'not registered')} in {st.SETTINGS}")
     log(f"  /quest         {'installed' if os.path.exists(COMMAND_FILE) else 'not installed'}")
+    log(f"  skill          {'claude-quest, in ' + SKILL_DIR if _ours(SKILL_FILE) else 'not installed'}")
+    log(f"  tools          {'the ' + MCP_NAME + ' MCP server' if tools_registered() else 'not registered'}")
     log(f"  save           {state_path() if os.path.exists(state_path()) else '(none yet)'}")
     if os.path.exists(state_path()):
         from .state import load_readonly

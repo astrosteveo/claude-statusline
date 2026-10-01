@@ -99,7 +99,7 @@ class QuestSwitchTests(unittest.TestCase):
                 {"type": "command", "command": "python3 ~/.claude/quest/quest.py hook"}]}]}}, fh)
         with open(os.path.join(claude, "statusline.py"), "w") as fh:
             fh.write("# stand-in\n")
-        self.env = {"HOME": self.home, "CLAUDE_CONFIG_DIR": claude, "XDG_CONFIG_HOME": os.path.join(self.home, ".config"),
+        self.env = {"HOME": self.home, "CLAUDE_QUEST_NO_MCP": "1", "CLAUDE_CONFIG_DIR": claude, "XDG_CONFIG_HOME": os.path.join(self.home, ".config"),
                     "XDG_RUNTIME_DIR": self.home, "CLAUDE_QUEST_HOME": os.path.join(claude, "quest"),
                     "CLAUDE_STATUSLINE_CONFIG": ""}
         self.claude = claude
@@ -117,6 +117,9 @@ class QuestSwitchTests(unittest.TestCase):
         self.assertEqual(len(cmds), len(settings.HOOK_EVENTS))
         self.assertTrue(all("statusline.py quest hook" in c for c in cmds))
         self.assertTrue(os.path.exists(os.path.join(self.claude, "commands", "quest.md")))
+        skill = os.path.join(self.claude, "skills", "claude-quest", "SKILL.md")
+        with open(skill) as fh:
+            self.assertTrue(fh.read().startswith("---\nname: claude-quest\n"))
         cfg = os.path.join(self.home, ".config", "claude-statusline", "config.toml")
         with open(cfg, "rb") as fh:
             self.assertTrue(tomllib.load(fh)["quest"]["enabled"])
@@ -133,6 +136,7 @@ class QuestSwitchTests(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertNotIn("hooks", self.settings())
         self.assertFalse(os.path.exists(os.path.join(self.claude, "commands", "quest.md")))
+        self.assertFalse(os.path.exists(skill))
         with open(cfg, "rb") as fh:
             self.assertFalse(tomllib.load(fh)["quest"]["enabled"])
         self.assertTrue(os.path.exists(save))                          # the save is kept

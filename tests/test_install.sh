@@ -18,6 +18,7 @@ fresh() {
   mkdir -p "$HOME/.claude"
   export HOME
   export XDG_RUNTIME_DIR="$HOME"
+  export CLAUDE_QUEST_NO_MCP=1
   unset CLAUDE_CONFIG_DIR XDG_CONFIG_HOME CLAUDE_STATUSLINE_CONFIG CLAUDE_QUEST_HOME
 }
 run() { (cd "$REPO" && TERM=xterm-256color ./install.sh "$@" >/dev/null 2>&1); }
@@ -83,6 +84,7 @@ check "--no-config makes no config"        '[ ! -f "$HOME/.config/claude-statusl
 fresh; run --quest
 check "--quest registers eight hooks"      'jq_ "sum(len(e[\"hooks\"]) for ev in c[\"hooks\"].values() for e in ev) == 8"'
 check "--quest installs /quest"            '[ -f "$HOME/.claude/commands/quest.md" ]'
+check "--quest installs the skill"         '[ -f "$HOME/.claude/skills/claude-quest/SKILL.md" ]'
 check "--quest switches it on"             'grep -q "enabled = true" "$HOME/.config/claude-statusline/config.toml"'
 check "--quest links claude-quest"         '[ -L "$HOME/.local/bin/claude-quest" ]'
 check "claude-quest runs the game"         '"$HOME/.local/bin/claude-quest" guide | grep -q "How Claude Quest works"'

@@ -7,5 +7,8 @@ def main(argv=None):
     if argv[:1] == ["hook"]:
         from .hooks import run
         return run()
+    if argv[:1] == ["mcp"]:
+        from .mcp import serve
+        return serve()
     from .cli import main as cli
     return cli(argv)

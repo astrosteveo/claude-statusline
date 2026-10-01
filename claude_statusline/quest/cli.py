@@ -3,6 +3,7 @@
     claude-quest [sheet]              your character
     claude-quest bag                  what you carry, numbered
     claude-quest inspect <item>       one item in detail
+    claude-quest best [equip]         the gear that earns you the most XP, scored on how you play
     claude-quest equip <item>         wear gear
     claude-quest unequip <slot|item>  take it off
     claude-quest use <item>           drink, read, eat or open a consumable
@@ -46,6 +47,84 @@ def _hearts(hp, max_hp):
     if max_hp <= 10:
         return c("red", "♥" * hp) + c("dim", "♡" * (max_hp - hp))
     return c("red", "♥") + f" {hp}/{max_hp}"
+
+
+# ------------------------------------------------------------------ best gear
+
+# Base XP for one action in each school, roughly the average of its tools (rules.XP_BY_TOOL).
+SCHOOL_BASE = {"shell": 3, "edit": 6, "read": 1, "agent": 12, "web": 2.5}
+SCHOOL_COUNTER = {"shell": "shell", "edit": "edits", "read": "reads", "agent": "agents", "web": "web"}
+
+
+def loadout_xp(s, load, now):
+    """The XP `load` ({slot: bag entry}) would have earned over this hero's whole history:
+    every tool call, prompt, commit, push and test run, with the gear's bonuses and set bonuses
+    (buffs left out: they pass)."""
+    trial = dict(s, equipped={slot: e["uid"] for slot, e in load.items()}, buffs=[])
+    fx = effects.total(trial, now)
+    k = s["counters"]
+    xp = sum(k.get(SCHOOL_COUNTER[school], 0) * base * (1 + fx.get("xp", 0) + fx.get(f"xp_{school}", 0))
+             for school, base in SCHOOL_BASE.items())
+    xp += k.get("prompts", 0) * rules.PROMPT_XP * (1 + fx.get("xp", 0))
+    xp += k.get("commits", 0) * (rules.COMMIT_XP + fx.get("commit_xp", 0))
+    xp += k.get("pushes", 0) * (rules.PUSH_XP + fx.get("push_xp", 0))
+    xp += k.get("tests", 0) * (rules.TEST_XP + fx.get("test_xp", 0))
+    return xp
+
+
+def best_loadout(g):
+    """(best {slot: bag entry}, its XP, the XP of what is worn now). Every combination of the gear
+    you own is tried; one entry per kind of item is enough."""
+    import itertools
+    s = g.s
+    owned = {}
+    for e in s["bag"]:
+        item = items.ITEMS.get(e["id"])
+        if item and item["kind"] == "gear":
+            owned.setdefault(item["slot"], {}).setdefault(e["id"], e)
+    worn = {slot: effects.entry(s, uid) for slot, uid in s["equipped"].items()}
+    worn = {slot: e for slot, e in worn.items() if e}
+    for slot, e in worn.items():                 # what you wear counts as yours, and wins ties
+        owned.setdefault(slot, {})[e["id"]] = e
+    slots = sorted(owned)
+    choices = [[None] + list(owned[slot].values()) for slot in slots]
+    best, best_xp = dict(worn), loadout_xp(s, worn, g.now)
+    now_xp = best_xp
+    for combo in itertools.product(*choices):
+        load = {slot: e for slot, e in zip(slots, combo) if e is not None}
+        xp = loadout_xp(s, load, g.now)
+        if xp > best_xp + 1e-6:
+            best, best_xp = load, xp
+    return best, best_xp, now_xp
+
+
+def show_best(g, equip=False):
+    best, best_xp, now_xp = best_loadout(g)
+    k = g.s["counters"]
+    worn = {slot: effects.entry(g.s, uid) for slot, uid in g.s["equipped"].items()}
+    print(c("bold", "⚔️  Your best gear") + c("dim", f"  scored on your {k.get('shell', 0):,} shell commands, "
+                                                       f"{k.get('edits', 0):,} edits, {k.get('commits', 0):,} commits "
+                                                       f"and {k.get('pushes', 0):,} pushes"))
+    for slot in items.SLOTS:
+        e = best.get(slot)
+        if not e:
+            continue
+        item = items.ITEMS[e["id"]]
+        same = worn.get(slot) and worn[slot]["id"] == e["id"]
+        print(f"  {slot:<6} {item_line(item)}  " + (c("dim", "(wearing)") if same else c("green", "← change")))
+    gain = (best_xp / now_xp - 1) * 100 if now_xp else 0
+    if gain < 0.05:
+        print(c("dim", "  You are already wearing your best gear."))
+        return
+    if not equip:
+        print(f"  About {c('green', f'+{gain:.1f}%')} XP over what you wear now. "
+              + c("dim", "`claude-quest best equip` puts it on."))
+        return
+    for slot in items.SLOTS:
+        e = best.get(slot)
+        if e and not (worn.get(slot) and worn[slot]["id"] == e["id"]):
+            g.equip(items.ITEMS[e["id"]]["name"])
+    g.say(f"⚔️  About +{gain:.1f}% XP from now on.")
 
 
 # ------------------------------------------------------------------ views
@@ -336,9 +415,38 @@ READS = {"sheet", "bag", "loot", "inv", "inventory", "inspect", "quests", "shop"
          "achievements", "log", "guide", "pet", "dungeons", "dungeon", "raid", "raids"}
 
 
+COMMANDS = {"sheet", "bag", "loot", "inv", "inventory", "inspect", "best", "equip", "unequip", "remove", "use",
+            "sell", "forge", "shop", "buy", "quests", "reroll", "boss", "dungeons", "dungeon", "raid", "raids",
+            "pet", "name", "titles", "title", "achievements", "log", "guide", "help", "field", "enable", "disable",
+            "status", "reset"}
+
+
+def route(args):
+    """`/quest <anything>`: a game command runs as it is; words that are not one are a request
+    for Claude, sent with the character sheet so it can start from the hero's state."""
+    said = ""
+    if not args or args[0].lower() in COMMANDS or args[0].lower() in ("-h", "--help"):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = main(args)
+        if code == 0 or len(args) < 3:          # it worked, or it was a command typed slightly wrong
+            print(out.getvalue(), end="")
+            return code
+        said = out.getvalue().strip()           # "equip my best gear": words, not an item's name
+    print("REQUEST: " + " ".join(args))
+    if said:
+        print(f"(read as a game command, the game said: {said})")
+    print()
+    return main(["sheet"])
+
+
 def main(argv):
     cmd = argv[0].lower() if argv else "sheet"
     args = argv[1:]
+    if cmd == "route":
+        return route(argv[1:])
     if cmd in ("help", "-h", "--help"):
         print(__doc__.strip())
         return 0
@@ -370,6 +478,10 @@ def main(argv):
                 show_bag(g)
             elif cmd == "inspect":
                 show_item(g, " ".join(args))
+            elif cmd == "best":
+                if args and args[0] != "equip":
+                    raise GameError("Try `claude-quest best` to see your best gear, `best equip` to wear it.")
+                show_best(g, equip=bool(args))
             elif cmd == "equip":
                 g.equip(" ".join(args))
             elif cmd in ("unequip", "remove"):
