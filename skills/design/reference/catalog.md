@@ -39,6 +39,7 @@ Every segment also takes `format` (its body template), `priority`, `icon` ("" hi
 | `version` | 15 | The Claude Code version. |
 | `text` | 10 | Your own label. Set `text` (and colour it in `format`); several can be placed with `type`. |
 | `avatar` | 100 | One row of the kitty picture of your pet, for placing it by hand ([quest] placement = "manual"). With the default placement the picture is placed for you at the right edge. (Claude Quest) |
+| `quest_settings` | 90 | A gear at the end of game mode's top row that opens the settings menu in place of the scene. Needs `statusline.py clicks enable` (Linux); ctrl+shift+click it in kitty. (Claude Quest) |
 | `quest_boss` | 60 | The boss you are fighting: a failing test, build or lint run, with its HP as hearts. (Claude Quest) |
 | `quest_event` | 50 | The latest thing that happened (loot, a level-up, a quest done), for a little while. (Claude Quest) |
 | `quest_dungeon` | 46 | The PR dungeon of this project: opened by `gh pr create`, a room per push, a trap when checks fail, cleared by merging. (Claude Quest) |
@@ -714,6 +715,18 @@ Tone: `text`. Default format: `{cells}`
 |-------|-------|
 | `{cells}` | the placeholder cells for this row |
 | `{action}` | what the pet is doing |
+
+## quest_settings
+
+A gear at the end of game mode's top row that opens the settings menu in place of the scene. Needs `statusline.py clicks enable` (Linux); ctrl+shift+click it in kitty.
+
+Tone: `subtext`. Default format: `<link>{gear}[ {label}]</link>`
+
+| field | holds |
+|-------|-------|
+| `{gear}` | the gear |
+| `{label}` | settings, or close while the menu is open (dropped when narrow) |
+| `{url}` | the link that opens the menu (or closes it) |
 
 ## quest_boss
 

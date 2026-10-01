@@ -167,6 +167,31 @@ class Gold(QuestSegment):
 
 
 @register
+class Settings(Segment):
+    name = "quest_settings"
+    doc = ("A gear at the end of game mode's top row that opens the settings menu in place of the scene. "
+           "Needs `statusline.py clicks enable` (Linux); ctrl+shift+click it in kitty.")
+    priority = 90
+    tone = "subtext"
+    quest = True
+    format = "<link>{gear}[ {label}]</link>"
+    fields_doc = {"gear": "the gear", "label": "settings, or close while the menu is open (dropped when narrow)",
+                  "url": "the link that opens the menu (or closes it)"}
+
+    def fields(self, ctx, opts, level):
+        from ..menu import gear
+        got = gear(ctx)
+        if got is None:
+            return None
+        glyph, url, is_open = got
+        return {"gear": glyph, "label": ("close" if is_open else "settings") if level < LEAN else "",
+                "url": url, "_open": is_open}
+
+    def tone_at(self, ctx, opts, f):
+        return "accent" if f["_open"] else None
+
+
+@register
 class Boss(QuestSegment):
     name = "quest_boss"
     doc = "The boss you are fighting: a failing test, build or lint run, with its HP as hearts."

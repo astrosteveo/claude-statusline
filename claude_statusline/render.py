@@ -118,8 +118,14 @@ def _game_lines(ctx, lines):
         return decor.group(segs, ctx, side)
 
     scene = [ln for ln in lines if ln.get("scene") is not None]
-    width, hud_w, hud = scene_geometry(ctx, lines, group)
-    rows = scene_rows(ctx, width, len(scene)) if scene else []
+    from . import menu
+    open_menu = menu.state(ctx) if scene else None
+    if open_menu is not None:        # the settings menu takes the scene's rows, gauges and all
+        hud = None
+        rows = menu.rows(ctx, ctx.avail, len(scene), open_menu)
+    else:
+        width, hud_w, hud = scene_geometry(ctx, lines, group)
+        rows = scene_rows(ctx, width, len(scene)) if scene else []
     fits = []
     for line in lines:
         if line.get("scene") is None:

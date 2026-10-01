@@ -161,7 +161,11 @@ def read_toml(path):
 
 
 def runtime_dir() -> str:
+    # A session started without XDG_RUNTIME_DIR (a daemon-hosted one, say) must still find the
+    # folder the hooks and the click handler write to, so look for the usual one ourselves.
     base = os.environ.get("XDG_RUNTIME_DIR")
+    if not base and hasattr(os, "getuid"):
+        base = f"/run/user/{os.getuid()}"
     if not base or not os.path.isdir(base):
         base = os.path.join("/tmp", f"claude-statusline-{os.getuid()}") if hasattr(os, "getuid") else "/tmp"
         path = base

@@ -277,6 +277,26 @@ Beside each row of scene sits one gauge from `game_hud` (context, 5h and 7d
 by default; any segment works). On a wide terminal the gauges also show a
 bar, the pace and the reset time.
 
+#### Settings from the game
+
+```sh
+statusline.py clicks enable      # once; Linux, with xdg-open
+```
+
+Game mode's top row then ends in a gear. Ctrl+shift+click it in kitty and the
+settings menu takes the scene's place: the theme, style, icons and bar style,
+the rows of scene, the picture, the party and the seasons. Click ‹ or › to
+step through a setting, the value itself to see every choice at once, and ✕
+to close. Each change is written to your config and shows on the next
+refresh, a second later. The menu opens only in the session you clicked, and
+closes itself after five minutes without a click.
+
+Claude Code sends the status line no clicks, so the buttons are links, and
+`clicks enable` makes `statusline.py click` the opener of
+`claude-statusline://` links. Plain ctrl+click belongs to Claude Code, which
+opens only web links; ctrl+shift+click is kitty's own. A link only ever picks
+from the menu's choices, whoever printed it. `clicks disable` undoes it.
+
 Play with `/quest` inside Claude Code or `claude-quest` in a terminal: `sheet`,
 `bag`, `equip`, `use`, `sell`, `forge`, `shop`, `buy`, `quests`, `boss`, `dungeons`, `raid`, `pet`,
 `titles`, `achievements`, `log`, `guide`.
@@ -314,6 +334,14 @@ list it in `layout.wide_glyphs`.
 **It only shows the model and directory.** That is the fallback: something
 raised. `CLAUDE_STATUSLINE_DEBUG=1 statusline.py render --sample busy` prints
 the traceback.
+
+**Clicking the gear does nothing.** Use ctrl+shift+click: plain ctrl+click
+is Claude Code's, and it ignores `claude-statusline://` links. `statusline.py
+clicks status` shows what the links run; run `clicks enable` again after
+moving the checkout. `clicks.log` in the runtime folder (`doctor` shows it)
+records every click and what it did. If the log stays empty, Claude Code may
+not have detected link support in your terminal: start it with
+`FORCE_HYPERLINK=1 claude`.
 
 **Upgrading from 3.x.** Configs and saves carry over unchanged. Run
 `statusline.py quest enable` once more if Quest is on, so its hooks include

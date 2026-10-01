@@ -27,6 +27,8 @@ change
   activity enable | disable       live activity on or off (background hooks; tools, agents, turn…)
   quest enable | disable | status Claude Quest on or off (hooks, the /quest command, the quest line)
   quest <command>                 play: sheet, bag, equip, use, shop, quests, boss, pet… (quest help)
+  clicks enable | disable | status game mode's settings menu: open claude-statusline:// links (Linux)
+  click <link>                    what a click on one of those links runs
 
 check
   validate [path]                 every problem in a config, with suggestions; exit 1 on errors
@@ -472,6 +474,13 @@ def describe_command(spec, comp):
             f"every {opts['every']:g}s, timeout {opts['timeout']:g}s")
 
 
+def _clicks_status():
+    lines = []
+    from .menu import status
+    status(log=lines.append)
+    return lines[0].split(None, 1)[1] if lines else "?"
+
+
 def cmd_doctor(argv):
     from . import settings as st
     from .config import CONFIG_SEARCH, compiled, config_path, runtime_dir
@@ -503,6 +512,7 @@ def cmd_doctor(argv):
             else " · hooks not registered")),
         ("activity", ("on" if comp["activity"].get("enabled") else "off")
          + (" · hooks registered" if st.activity_hooks_present(cfg) else " · hooks not registered")),
+        ("clicks", _clicks_status()),
         ("runtime", runtime_dir()),
     ]
     for spec in [s for ln in comp["lines"] for s in ln["left"] + ln["right"] + (ln.get("details") or [])
@@ -541,21 +551,14 @@ def cmd_set(argv, unset=False):
         return 2
     from .config import read_toml, write_path
     from .layout import compile_config
-    from .tomlw import set_key
+    from . import tomlw
     path = os.path.expanduser(vals["config"]) if vals.get("config") else write_path()
     key_ = pos[0]
     val = None if unset else _parse_value(" ".join(pos[1:]))
     try:
-        with open(path) as fh:
-            text = fh.read()
-    except FileNotFoundError:
-        text = ""
-    new = set_key(text, key_, val)
-    import tomllib
-    try:
-        raw_new = tomllib.loads(new)
-    except Exception as exc:
-        print(f"refusing: the edit would leave {path} unreadable ({exc})")
+        text, new, raw_new = tomlw.edit(path, key_, val)
+    except ValueError as exc:
+        print(f"refusing: {exc}")
         return 1
     before = {(p[1], p[2]) for p in compile_config(read_toml(path)[0] if text else {})["problems"]}
     after = compile_config(raw_new)["problems"]
@@ -565,13 +568,8 @@ def cmd_set(argv, unset=False):
             print(f"  error: {p[1]}: {p[2]}")
         print("not written (use --force to write anyway)")
         return 1
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = f"{path}.{os.getpid()}.tmp"
-    with open(tmp, "w") as fh:
-        fh.write(new if new.endswith("\n") else new + "\n")
-    os.replace(tmp, path)
-    from .tomlw import value
-    print(f"{'removed' if unset else 'set'} {key_}{'' if unset else ' = ' + value(val)} in {path}")
+    tomlw.write(path, new)
+    print(f"{'removed' if unset else 'set'} {key_}{'' if unset else ' = ' + tomlw.value(val)} in {path}")
     return 0
 
 
@@ -675,6 +673,9 @@ COMMANDS = {
     "validate": cmd_validate, "doctor": cmd_doctor, "ruler": cmd_ruler, "bench": cmd_bench,
     "set": cmd_set, "unset": lambda a: cmd_set(a, unset=True), "get": cmd_get,
     "migrate": cmd_migrate,
+    "click": lambda a: __import__("claude_statusline.menu", fromlist=["click"]).click(a[0]) if a else
+    (print("usage: statusline.py click <claude-statusline://… link>"), 2)[1],
+    "clicks": lambda a: __import__("claude_statusline.menu", fromlist=["main"]).main(a),
     "demo": lambda a: __import__("claude_statusline.demo", fromlist=["run"]).run(a),
 }
 ALIASES = {"-h": "help", "--help": "help", "--version": "version", "-V": "version", "--doctor": "doctor",

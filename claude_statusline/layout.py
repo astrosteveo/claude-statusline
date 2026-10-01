@@ -43,7 +43,7 @@ LEGACY_FEATURES = {
 
 GAME_TICKER = {"left": ["quest", "quest_boss", "quest_raid", "quest_dungeon", "quest_daily", "quest_buffs",
                         "quest_event"],
-               "right": ["quest_streak", "quest_gold"]}
+               "right": ["quest_streak", "quest_gold", "quest_settings"]}
 # How a gauge (a segment with a label and a percentage) looks beside the game scene:
 # compact at first, and with a small bar, the pace and the reset when the column is wide.
 GAME_HUD_LOOK = {"width": 0, "format": "[<subtext>{label}</subtext> ]<level><bold>{pct}%</bold></level>"}

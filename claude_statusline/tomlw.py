@@ -122,6 +122,32 @@ def set_key(text: str, dotted: str, val) -> str:
     return (body + "\n\n" if body else "") + f"[{header_name}]\n{key(name)} = {value(val)}\n"
 
 
+def edit(path: str, dotted: str, val):
+    """(old text, new text, new parsed) for setting one key in the file at
+    `path` (None removes it). Raises ValueError if the result would not parse."""
+    import tomllib
+    try:
+        with open(path) as fh:
+            text = fh.read()
+    except FileNotFoundError:
+        text = ""
+    new = set_key(text, dotted, val)
+    try:
+        return text, new, tomllib.loads(new)
+    except Exception as exc:
+        raise ValueError(f"the edit would leave {path} unreadable ({exc})") from None
+
+
+def write(path: str, text: str):
+    """Replace the file at `path` with `text` in one step."""
+    import os
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w") as fh:
+        fh.write(text if text.endswith("\n") else text + "\n")
+    os.replace(tmp, path)
+
+
 def _comment_pos(rest: str):
     """Where a trailing # comment starts in a value, ignoring #s inside strings."""
     quote = None
