@@ -21,7 +21,7 @@ type = "cycle"
 of = ["limit_5h", "limit_7d"]
 
 [panels]
-show = ["files", "graph", "branches", "stash"]
+show = ["files", "graph", ["branches", "ci", "servers", "stash"]]
 rows = 6
 
 [quest]

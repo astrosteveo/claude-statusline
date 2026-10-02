@@ -81,6 +81,8 @@ DEFAULTS = {
         "cache_ttl": 3.0,
         # Commits read for the graph.
         "commits": 40,
+        # A desktop pop-up when a CI run on this branch's commit finishes.
+        "notify": True,
     },
     # Live activity: hooks that tell the bar what Claude is doing (statusline.py activity enable).
     "activity": {

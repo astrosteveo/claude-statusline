@@ -61,7 +61,7 @@ def data(cwd, cfg, git_cfg, sync=False, spawn=True):
         elif spawn:
             spawn_refresh("gitpanels", lock, [root, gitdir, common, commits, timeout, lock])
     out = dict(out) if out else {"pending": True}
-    out["root"] = root
+    out["root"], out["gitdir"], out["common"] = root, gitdir, common
     out["progress"] = progress(gitdir)
     return out
 

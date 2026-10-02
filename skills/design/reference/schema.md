@@ -125,10 +125,11 @@ enabled = true
 cache_ttl = 2.0       # the background refresh's period
 
 [panels]              # git panels under the bar
-show = []             # files, graph, branches, stash: left to right; empty turns them off
+show = []             # files, graph, branches, stash, ci, servers; a list stacks them in a column
 rows = 6              # 1 to 16
 cache_ttl = 3.0
 commits = 40
+notify = true         # a pop-up when a CI run on your commit finishes
 
 [colors]              # override any role or alias
 accent = "#ff8800"

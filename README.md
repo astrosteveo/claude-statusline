@@ -224,17 +224,26 @@ window:
 | `graph` | the commit graph of your branches: hash, branches and tags, subject, age |
 | `branches` | your branches, newest first: how far each is ahead of or behind its upstream, `local` with none, `gone` when the upstream was deleted, `merged` once the default branch has it |
 | `stash` | the stashes; shown only while there is one |
+| `ci` | GitHub Actions on this branch, the latest run of each workflow: failures first, running ones with a live timer, each a link to its run. Shown while there are runs; needs `gh` and a github.com remote |
+| `servers` | the dev servers this project runs (any process listening on a port whose working folder is in the repository, Claude's background servers included), each a `http://localhost` link. Shown while one runs; Linux only, and ports Docker publishes do not show |
 
 ```toml
 [panels]
-show = ["files", "graph", "branches", "stash"]   # left to right; empty turns them off
+show = ["files", "graph", ["branches", "ci", "servers", "stash"]]   # a list stacks in one column
 rows = 6              # 1 to 16; the block keeps this height whatever git holds
 cache_ttl = 3.0       # seconds a refresh stays fresh; a commit, fetch or stash shows at once
 commits = 40          # commits read for the graph
+notify = true         # a desktop pop-up when a CI run on your commit finishes
 ```
 
-A background process reads git, as for the `git` segment, so the bar never
-waits; the first refresh in a repository says `Reading git…`. The columns
+In a stack, each panel takes the rows it needs; when they do not all fit,
+the rows are shared out and the panels page. CI is asked every 15 seconds
+while a run is going and every minute otherwise, and at once after a commit
+or a push; offline it keeps its last answer and says `stale`. The pop-up
+comes only for runs on your branch's commit that the bar saw running.
+
+Background processes read git, `gh` and `ss`, as for the `git` segment, so
+the bar never waits; the first refresh in a repository says `Reading git…`. The columns
 follow the terminal's width, and a panel that no longer fits drops, the last
 named first. Each file is a `file://` link, and each commit links to the
 web when Claude Code knows the repository (Ctrl+Shift+click in kitty). The

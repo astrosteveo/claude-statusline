@@ -493,15 +493,24 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
 
     panels = dict(cfg["panels"])
     show = panels.get("show")
-    if not isinstance(show, list) or not all(isinstance(n, str) for n in show):
-        problems.append(problem("error", "panels.show", "a list of panel names"))
+    if not isinstance(show, list) or not all(isinstance(c, str) or isinstance(c, list) and
+                                             all(isinstance(n, str) for n in c) for c in show):
+        problems.append(problem("error", "panels.show", "a list of panel names, or of lists of them to stack"))
         show = []
     from .panels import PANELS
-    for n in show:
-        if n not in PANELS:
-            problems.append(problem("error", "panels.show", f"unknown panel {n!r}; one of "
-                                                            f"{', '.join(PANELS)}" + _hint(n, PANELS)))
-    panels["show"] = show = [n for n in dict.fromkeys(show) if n in PANELS]
+    used, cols = set(), []
+    for c in show:
+        col = []
+        for n in ([c] if isinstance(c, str) else c):
+            if n not in PANELS:
+                problems.append(problem("error", "panels.show", f"unknown panel {n!r}; one of "
+                                                                f"{', '.join(PANELS)}" + _hint(n, PANELS)))
+            elif n not in used:
+                used.add(n)
+                col.append(n)
+        if col:
+            cols.append(col[0] if isinstance(c, str) else col)
+    panels["show"] = show = cols
     prows = panels.get("rows")
     if not isinstance(prows, int) or isinstance(prows, bool) or not 1 <= prows <= 16:
         problems.append(problem("error", "panels.rows", "a whole number from 1 to 16"))
@@ -512,6 +521,9 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
             problems.append(problem("error", f"panels.{key}", f"a number from {low} up"))
             panels[key] = DEFAULTS["panels"][key]
     panels["commits"] = int(panels["commits"])
+    if not isinstance(panels.get("notify"), bool):
+        problems.append(problem("error", "panels.notify", "true or false"))
+        panels["notify"] = True
     if show and game:
         problems.append(problem("warning", "panels.show", "game mode takes the whole bar; the panels are hidden"))
 

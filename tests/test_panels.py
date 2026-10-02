@@ -214,7 +214,17 @@ class LayoutTests(unittest.TestCase):
             self.assertTrue(cols)
             self.assertEqual(sum(w for _, w in cols) + len(SEP) * (len(cols) - 1), avail)
             self.assertEqual([n for n, _ in cols], names[:len(cols)])
-        self.assertEqual(len(columns(300, names)), 4)
+        self.assertEqual(len(columns(300, names)), 6)
+
+    def test_a_stack_is_as_wide_as_its_widest_panel(self):
+        cols = columns(100, ["files", "graph", ["branches", "ci", "servers"]])
+        self.assertEqual([c for c, _ in cols], ["files", "graph", ["branches", "ci", "servers"]])
+        self.assertGreaterEqual(cols[2][1], PANELS["branches"][0])
+
+    def test_stacks_in_show(self):
+        comp = compile_config({"panels": {"show": ["files", ["ci", "files", "nope"], ["stash"]]}})
+        self.assertEqual(comp["panels"]["show"], ["files", ["ci"], ["stash"]])
+        self.assertIn("panels.show", [p[1] for p in comp["problems"]])
 
 
 if __name__ == "__main__":

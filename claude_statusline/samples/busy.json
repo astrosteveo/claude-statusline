@@ -280,6 +280,60 @@
       ]
     ],
     "progress": null,
-    "root": "/home/u/Projects/widget-factory"
+    "root": "/home/u/Projects/widget-factory",
+    "ci": {
+      "branch": "feat/parser",
+      "stale": false,
+      "runs": [
+        [
+          901,
+          "Tests",
+          "Split the lexer out of the parser",
+          "completed",
+          "failure",
+          "3f9a1c33f9a1c33f9a1c33f9a1c33f9a1c33f9a1c3",
+          "-9m",
+          "-4m",
+          "https://github.com/octocat/widget-factory/actions/runs/901",
+          "push"
+        ],
+        [
+          902,
+          "Lint",
+          "Split the lexer out of the parser",
+          "in_progress",
+          "",
+          "3f9a1c33f9a1c33f9a1c33f9a1c33f9a1c33f9a1c3",
+          "-2m",
+          "-1m",
+          "https://github.com/octocat/widget-factory/actions/runs/902",
+          "push"
+        ],
+        [
+          903,
+          "Build",
+          "Split the lexer out of the parser",
+          "completed",
+          "success",
+          "3f9a1c33f9a1c33f9a1c33f9a1c33f9a1c33f9a1c3",
+          "-9m",
+          "-6m",
+          "https://github.com/octocat/widget-factory/actions/runs/903",
+          "push"
+        ]
+      ]
+    },
+    "servers": [
+      [
+        5173,
+        "vite",
+        "-40m"
+      ],
+      [
+        8000,
+        "uvicorn app:api",
+        "-2h"
+      ]
+    ]
   }
 }

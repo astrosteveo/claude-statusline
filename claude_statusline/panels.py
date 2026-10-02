@@ -2,15 +2,19 @@
 commit graph, the branches and the stashes side by side.
 
     [panels]
-    show = ["files", "graph", "branches", "stash"]   # left to right; the last give way first
+    show = ["files", "graph", ["branches", "ci", "servers", "stash"]]
     rows = 6
+
+Left to right, and a list stacks its panels in one column. The last columns
+give way first.
 
 The block keeps its height whatever the repository holds, so the
 conversation above it never jumps: a panel with less to say is padded, and
 a clean tree says so. The columns follow the terminal's width; a panel that
 no longer fits its smallest width drops, the last named first. A rebase,
-merge or other operation in progress heads the changes panel, and the stash
-panel shows only while there is a stash.
+merge or other operation in progress heads the changes panel. The stash, CI and servers
+panels show only while they have something to say; in a stack, each takes
+the rows it needs and the last takes what is left.
 """
 from __future__ import annotations
 
@@ -20,28 +24,40 @@ from .text import BOLD, Text
 from .width import char_width, width as cells
 
 # name -> (smallest width, share of the spare columns)
-PANELS = {"files": (26, 3), "graph": (34, 4), "branches": (24, 2), "stash": (24, 2)}
-TITLES = {"files": "Changes", "graph": "History", "branches": "Branches", "stash": "Stash"}
+PANELS = {"files": (26, 3), "graph": (34, 4), "branches": (24, 2), "stash": (24, 2), "ci": (24, 2),
+          "servers": (22, 2)}
+TITLES = {"files": "Changes", "graph": "History", "branches": "Branches", "stash": "Stash", "ci": "CI",
+          "servers": "Servers"}
 SEP = " │ "
 PAD = (None, None, 0, None)
 
 
-def columns(avail, names):
-    """[(panel, width)] for the panels that fit `avail` columns, in order."""
-    names = [n for n in names if n in PANELS]
-    if not names:
+def members(col):
+    """The panels in one column of `show`: a name, or a list of names stacked."""
+    return [n for n in ([col] if isinstance(col, str) else col) if n in PANELS]
+
+
+def _size(col):
+    """(smallest width, share of the spare columns) of a column: its widest panel's."""
+    return tuple(max(PANELS[n][i] for n in members(col)) for i in (0, 1))
+
+
+def columns(avail, cols):
+    """[(column, width)] for the columns of `show` that fit `avail` columns, in order."""
+    cols = [c for c in cols if members(c)]
+    if not cols:
         return []
-    while len(names) > 1 and sum(PANELS[n][0] for n in names) + len(SEP) * (len(names) - 1) > avail:
-        names.pop()
-    if len(names) == 1:
-        return [(names[0], avail)]
-    spare = avail - sum(PANELS[n][0] for n in names) - len(SEP) * (len(names) - 1)
-    weight = sum(PANELS[n][1] for n in names)
+    while len(cols) > 1 and sum(_size(c)[0] for c in cols) + len(SEP) * (len(cols) - 1) > avail:
+        cols.pop()
+    if len(cols) == 1:
+        return [(cols[0], avail)]
+    spare = avail - sum(_size(c)[0] for c in cols) - len(SEP) * (len(cols) - 1)
+    weight = sum(_size(c)[1] for c in cols)
     out, given = [], 0
-    for i, n in enumerate(names):
-        extra = spare - given if i == len(names) - 1 else spare * PANELS[n][1] // weight
+    for i, c in enumerate(cols):
+        extra = spare - given if i == len(cols) - 1 else spare * _size(c)[1] // weight
         given += extra
-        out.append((n, PANELS[n][0] + extra))
+        out.append((c, _size(c)[0] + extra))
     return out
 
 
@@ -53,13 +69,61 @@ def panel_data(ctx):
             when = lambda v: _relative(v, ctx.now) if isinstance(v, str) else v
             return dict(fake, graph=[r[:3] + [when(r[3])] + r[4:] for r in fake.get("graph") or []],
                         branches=[r[:4] + [when(r[4])] + r[5:] for r in fake.get("branches") or []],
-                        stashes=[[r[0], when(r[1])] + r[2:] for r in fake.get("stashes") or []])
+                        stashes=[[r[0], when(r[1])] + r[2:] for r in fake.get("stashes") or []],
+                        ci=dict(fake["ci"], runs=[r[:6] + [when(r[6]), when(r[7])] + r[8:] for r in fake["ci"]["runs"]])
+                        if fake.get("ci") else None,
+                        servers=[[r[0], r[1], when(r[2])] for r in fake.get("servers") or []])
         if not ctx.comp["git"].get("enabled", True):
             return None
         from .gitpanels import data
-        return data(ctx.cwd, ctx.comp.get("panels") or {}, ctx.comp["git"], sync=ctx.sync_git,
-                    spawn=ctx.live)
+        cfg = ctx.comp.get("panels") or {}
+        d = data(ctx.cwd, cfg, ctx.comp["git"], sync=ctx.sync_git, spawn=ctx.live)
+        if d is None:
+            return None
+        shown = {n for c in cfg.get("show") or [] for n in members(c)}
+        if "ci" in shown:
+            from .ci import data as ci_data
+            d["ci"] = ci_data(d["root"], d["gitdir"], d["common"], cfg, sync=ctx.sync_git, spawn=ctx.live)
+        if "servers" in shown:
+            from .servers import data as server_data
+            d["servers"] = server_data(d["root"], sync=ctx.sync_git, spawn=ctx.live)
+        return d
     return ctx.memo("panels", get)
+
+
+def _says(d, name):
+    """Whether a panel that shows only when it has something to say has it."""
+    if name == "stash":
+        return bool(d.get("stashes"))
+    if name == "ci":
+        return bool((d.get("ci") or {}).get("runs"))
+    if name == "servers":
+        return bool(d.get("servers"))
+    return True
+
+
+def _stack(ctx, d, names, w, rows):
+    """Panels one under another. Each takes the rows it needs when they all fit; otherwise each
+    gets two (the last panels give way when even that is too many) and the rest go round them in
+    turn to those that want more, which then page."""
+    if len(names) == 1:
+        return DRAW[names[0]](ctx, d, w, rows)
+    full = [DRAW[n](ctx, d, w, rows) for n in names]
+    need = [len(f) for f in full]
+    if sum(need) <= rows:
+        return [line for f in full for line in f]
+    names, need = names[:max(1, rows // 2)], need[:max(1, rows // 2)]
+    give = [min(2, n) for n in need]
+    left = rows - sum(give)
+    while left > 0 and any(g < n for g, n in zip(give, need)):
+        for i in range(len(give)):
+            if left and give[i] < need[i]:
+                give[i] += 1
+                left -= 1
+    out = []
+    for name, n in zip(names, give):
+        out += DRAW[name](ctx, d, w, n)[:n]
+    return out
 
 
 def block(ctx, rows):
@@ -68,16 +132,18 @@ def block(ctx, rows):
     if d is None:
         return None
     cfg = ctx.comp.get("panels") or {}
-    names = [n for n in cfg.get("show") or [] if n != "stash" or d.get("stashes")]
-    cols = columns(ctx.avail, names)
+    cols = [[n for n in members(c) if not d.get("pending") and _says(d, n) or
+             d.get("pending") and n in ("files", "graph", "branches")] for c in cfg.get("show") or []]
+    cols = columns(ctx.avail, [c if len(c) > 1 else c[0] for c in cols if c])
     if not cols:
         return None
     drawn = []
-    for name, w in cols:
+    for col, w in cols:
         if d.get("pending"):                        # the titles at once, so nothing moves when git answers
-            lines = [_head(ctx, name, w=w)] + ([Text.of("Reading git…", _st(ctx, "muted"))] if not drawn else [])
+            lines = [_head(ctx, members(col)[0], w=w)] + \
+                ([Text.of("Reading git…", _st(ctx, "muted"))] if not drawn else [])
         else:
-            lines = DRAW[name](ctx, d, w, rows)
+            lines = _stack(ctx, d, members(col), w, rows)
         drawn.append([_exact(t, w) for t in (lines + [Text()] * rows)[:rows]])
     sep = Text.of(SEP, _st(ctx, "subtle"))
     out = []
@@ -183,7 +249,9 @@ def _page(ctx, name, items, rows):
     room = max(0, rows - 1)
     if len(items) <= room:
         return items, None
-    per = max(1, room - 1)
+    per = room - 1
+    if per < 1:                         # room for the title and one line: say how many there are
+        return [], Text.of(f"{len(items)} more", _st(ctx, "muted"))
     from .menu import cycle_link, views
     url = cycle_link(ctx, f"panel-{name}")
     if not url:
@@ -370,4 +438,70 @@ def stash(ctx, d, w, rows):
     return out
 
 
-DRAW = {"files": files, "graph": graph, "branches": branches, "stash": stash}
+_MARK = {"success": ("ok", "✓", "green"), "failure": ("fail", "✗", "red"), "timed_out": ("fail", "✗", "red"),
+         "startup_failure": ("fail", "✗", "red"), "cancelled": ("", "⊘", "muted"), "skipped": ("", "–", "muted"),
+         "neutral": ("", "–", "muted"), "action_required": ("wait", "●", "orange")}
+
+
+def _run_state(r):
+    """(rank, mark, role): failures first, then what is running, then the rest."""
+    if r[3] != "completed":
+        return 1, "●", "yellow"
+    _, glyph, role = _MARK.get(r[4], ("", "?", "muted"))
+    return (0 if role == "red" else 2), glyph, role
+
+
+def ci(ctx, d, w, rows):
+    c = d.get("ci") or {}
+    runs = sorted(c.get("runs") or [], key=lambda r: _run_state(r)[0])
+    tally = {}
+    for r in runs:
+        _, glyph, role = _run_state(r)
+        tally.setdefault((glyph, role), 0)
+        tally[(glyph, role)] += 1
+    right = Text()
+    for (glyph, role), n in sorted(tally.items(), key=lambda kv: ["red", "yellow", "orange"].index(kv[0][1])
+                                   if kv[0][1] in ("red", "yellow", "orange") else 3):
+        right.add((" " if right else "") + f"{glyph}{n}", _st(ctx, role))
+    head = _head(ctx, "ci", w=w) if not c.get("stale") else \
+        Text.of("CI", _st(ctx, "accent", BOLD)).add(" stale", _st(ctx, "muted"))
+    out = [_row(head, right, w) if right else head]
+    shown, more = _page(ctx, "ci", runs, rows)
+    for r in shown:
+        _, glyph, role = _run_state(r)
+        left = Text.of(glyph + " ", _st(ctx, role)).add(r[1], _st(ctx, "text", 0, r[8] or None))
+        if r[3] != "completed":
+            when = Text.of(("queued " if r[3] in ("queued", "waiting", "pending") else "") +
+                           _clock(ctx.now - r[6]) if r[6] else r[3], _st(ctx, "yellow"))
+        else:
+            when = Text.of(age(ctx, r[7] or r[6]), _st(ctx, "muted"))
+        out.append(_row(left, when, w))
+    if more:
+        out.append(more)
+    return out
+
+
+def _clock(s):
+    """A running timer: 45s, 3m05s, 1h02m."""
+    s = max(0, int(s))
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m{s % 60:02d}s"
+    return f"{s // 3600}h{s % 3600 // 60:02d}m"
+
+
+def servers(ctx, d, w, rows):
+    ss = d.get("servers") or []
+    out = [_head(ctx, "servers", len(ss), w=w)]
+    shown, more = _page(ctx, "servers", ss, rows)
+    for port, label, started in shown:
+        url = f"http://localhost:{port}"
+        left = Text.of(f":{port}", _st(ctx, "cyan", BOLD, url)).add(" " + label, _st(ctx, "text", 0, url))
+        out.append(_row(left, Text.of(age(ctx, started), _st(ctx, "muted")), w))
+    if more:
+        out.append(more)
+    return out
+
+
+DRAW = {"files": files, "graph": graph, "branches": branches, "stash": stash, "ci": ci, "servers": servers}
