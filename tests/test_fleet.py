@@ -106,7 +106,7 @@ class FleetFeatureTests(unittest.TestCase):
         _, out = self.text()
         links = {s[3] for t in out for _, s in t.spans if s and len(s) > 3 and s[3]}
         self.assertIn("claude-statusline://me/focus/c", links)                # a terminal session: its window
-        self.assertIn("http://localhost:7777/#/queue/session/g/conversation", links)   # background: its page
+        self.assertFalse(any(x.startswith("http") for x in links))           # never a page in the browser
 
 
 class FocusClickTests(unittest.TestCase):
@@ -132,16 +132,16 @@ class AttachTests(unittest.TestCase):
         self.assertEqual((a["bg"], d["bg"]), ("1fb37cf5", None))      # a desktop session can't be attached
         bad = fleet.rows({"rows": [dict(SNAP["rows"][0], id="a;b")]})[0]
         self.assertIsNone(bad["bg"])
-        for state in ("done", "failed", "stopped"):                     # attaching would start it again
-            self.assertIsNone(fleet.rows({"rows": [dict(SNAP["rows"][0], id="1fb37cf5", state=state)]})[0]["bg"])
+        for state in ("done", "failed", "stopped"):                     # finished ones attach too
+            self.assertEqual(fleet.rows({"rows": [dict(SNAP["rows"][0], id="1fb37cf5", state=state)]})[0]["bg"], "1fb37cf5")
 
     def test_links(self):
-        rows = [dict(r, id="1fb37cf5", state="blocked") if r["key"] == "a" else r for r in SNAP2["rows"]]
+        rows = [dict(r, id="1fb37cf5", state="blocked") if r["key"] == "a" else
+                dict(r, id="9ea19b9e") if r["key"] == "g" else r for r in SNAP2["rows"]]
         _, out = FleetFeatureTests.text(self, snap=dict(SNAP2, rows=rows))
         links = {s[3] for t in out for _, s in t.spans if s and len(s) > 3 and s[3]}
-        self.assertIn("claude-statusline://me/attach/1fb37cf5", links)
-        self.assertIn("claude-statusline://me/focus/c", links)
-        self.assertIn("http://localhost:7777/#/queue/session/d/conversation", links)   # the desktop app: its page
+        self.assertEqual(links, {"claude-statusline://me/attach/1fb37cf5", "claude-statusline://me/attach/9ea19b9e",
+                                 "claude-statusline://me/focus/c"})          # the desktop app's "d": no link
 
     def test_opens_a_tab_in_the_focused_kitty(self):
         calls = []
@@ -175,20 +175,18 @@ class AttachTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             fleet.attach("-rf", run=run(), sockets=["unix:/tmp/k-1"])
 
-    def test_a_session_that_finished_since_the_map_was_drawn_is_left_alone(self):
+    def test_a_session_removed_since_the_map_was_drawn_is_left_alone(self):
         launched = []
 
-        def run(state):
-            def go(argv):
-                if argv[1] == "agents":
-                    return _Done(stdout='[{"id": "1fb37cf5", "state": "%s"}]' % state if state else "[]")
-                launched.append(argv)
-                return _Done()
-            return go
-        for state in ("done", "failed", "stopped", None):
-            with self.assertRaisesRegex(ValueError, "attaching would start it again"):
-                fleet.attach("1fb37cf5", run=run(state), sockets=["unix:/tmp/k-1"])
+        def run(argv):
+            if argv[1] == "agents":
+                return _Done(stdout='[{"id": "9ea19b9e", "state": "failed"}]')
+            launched.append(argv)
+            return _Done()
+        with self.assertRaisesRegex(ValueError, "isn't a background session anymore"):
+            fleet.attach("1fb37cf5", run=run, sockets=["unix:/tmp/k-1"])
         self.assertEqual(launched, [])
+        self.assertIn("attached", fleet.attach("9ea19b9e", run=run, sockets=["unix:/tmp/k-1"]))
 
     def test_finds_kitty_sockets_as_kitty_names_them(self):
         d = tempfile.mkdtemp(prefix="sl-kitty-")

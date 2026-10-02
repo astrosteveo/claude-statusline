@@ -26,15 +26,10 @@ TTL = 3.0
 CLI_TTL = 15.0                  # `agentboard -once -json` reads every transcript: about a second of CPU
 DEFAULT_URL = "http://127.0.0.1:7777"
 URL = os.environ.get("AGENTBOARD_URL", DEFAULT_URL)
-# The page keeps its token per host, and agentboard's own link says localhost.
-PAGE_URL = "http://localhost:7777" if URL == DEFAULT_URL else URL
 START_EVERY = 60.0              # seconds between tries to start `agentboard web`
 PAYLOAD_EVERY = 5.0             # seconds between saves of the payload
 TICKS = 400                     # tool calls kept per session for the timeline
 ORDER = {"needs": 0, "turn": 1, "working": 2, "settled": 3}
-# A background session's states while it runs. Attaching to a finished one (done, failed, stopped)
-# starts it again, and it may go back to work on its own, so only these attach.
-LIVE = ("working", "blocked", "idle", "waiting", "running")
 
 
 def _paths():
@@ -251,15 +246,14 @@ def attach(bg_id, run=None, sockets=None):
     kitty, claude = shutil.which("kitty") or "/usr/bin/kitty", _claude()
     if not claude:
         raise ValueError("can't find the claude command")
-    try:                                # the map can be seconds old: ask again before attaching
+    try:                                # the map can be seconds old: a removed session would open an error
         p = run([claude, "agents", "--json", "--all"])
         jobs = json.loads(p.stdout or "[]")
         jobs = jobs if isinstance(jobs, list) else jobs.get("sessions") or []
     except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
-        raise ValueError("couldn't ask claude whether the session still runs") from None
-    state = next((j.get("state") for j in jobs if isinstance(j, dict) and j.get("id") == bg_id), None)
-    if state not in LIVE:
-        raise ValueError(f"{bg_id} isn't running ({state or 'not found'}); attaching would start it again")
+        raise ValueError("couldn't ask claude for its background sessions") from None
+    if not any(isinstance(j, dict) and j.get("id") == bg_id for j in jobs):
+        raise ValueError(f"{bg_id} isn't a background session anymore")
     socks = _kitty_sockets() if sockets is None else sockets
     if not socks:
         raise ValueError("Set allow_remote_control and listen_on in kitty.conf, then restart kitty.")
@@ -303,7 +297,8 @@ def _row(r, ticks):
     key = r.get("key") or r.get("sessionId") or ""
     mine = ticks.get(key) or []
     pct = r.get("contextPct")
-    bg = r.get("id") if r.get("kind") == "background" and r.get("state") in LIVE else None
+    # Finished ones too: attaching waits for you, though one that stopped mid-task picks it up again.
+    bg = r.get("id") if r.get("kind") == "background" else None
     return {
         "key": key,
         "bg": bg if isinstance(bg, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", bg) else None,
