@@ -240,6 +240,37 @@ named first. Each file is a `file://` link, and each commit links to the
 web when Claude Code knows the repository (Ctrl+Shift+click in kitty). The
 panels are hidden in game mode, which takes the whole bar.
 
+## Click to cycle
+
+```sh
+statusline.py clicks enable      # once; Linux, with xdg-open
+```
+
+A cycle is a slot on a line that shows one segment and moves to the next
+when you ctrl+shift+click it in kitty, so one slot's room holds several:
+
+```toml
+[[line]]
+left = ["model", "dir", "git"]
+right = ["usage", "limits"]
+
+[segment.usage]
+type = "cycle"
+of = ["context", "tokens", "cost"]   # context until you click, then tokens, then cost
+
+[segment.limits]
+type = "cycle"
+of = ["limit_5h", "limit_7d"]
+```
+
+The `dev` preset places these two. Each member keeps its own options. Where
+it has a link of its own (a branch, a pull request), that part opens the link
+and the rest of it cycles. A git panel too long for its rows ends in
+`page 1/3 ›`: click it for the next page. Clicks change only what this
+session shows, never your config, and show on the next refresh. Without
+`clicks enable` a cycle shows its first segment and a long panel ends in
+`+7 more`.
+
 ## Claude Quest
 
 ```sh

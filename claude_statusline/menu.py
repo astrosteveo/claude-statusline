@@ -175,6 +175,44 @@ def state(ctx):
     return ctx.memo(("menu",), lambda: read_state(ctx))
 
 
+def view_path(sid):
+    from .config import runtime_dir
+    return os.path.join(runtime_dir(), f"view-{sid}.json")
+
+
+def _read_views(sid):
+    try:
+        with open(view_path(sid), "rb") as fh:
+            raw = fh.read()
+        from .fastjson import loads
+        v = loads(raw)
+    except (OSError, ValueError):
+        return {}
+    return {k: n for k, n in v.items() if isinstance(n, int)} if isinstance(v, dict) else {}
+
+
+def views(ctx):
+    """{slot: clicks so far} for this session's cycle slots and panel pages. Samples may carry `_view`."""
+    def get():
+        fake = ctx.data.get("_view")
+        if isinstance(fake, dict):
+            return fake
+        sid = session_of(ctx.data) if ctx.live else None
+        return _read_views(sid) if sid else {}
+    return ctx.memo(("views",), get)
+
+
+def cycle_link(ctx, slot):
+    """The link a click on `slot` follows, or None where a click could not work."""
+    def get():
+        if isinstance(ctx.data.get("_view"), dict):
+            return session_of(ctx.data) or "sample"
+        sid = session_of(ctx.data) if ctx.live else None
+        return sid if sid and installed() else None
+    sid = ctx.memo(("clicksid",), get)
+    return link(sid, "cycle", slot) if sid else None
+
+
 def gear(ctx):
     """(glyph, link, menu open?) for the gear on game mode's top row, or None where a click could not work."""
     if not ctx.live or ctx.quest_cfg.get("placement") != "game":
@@ -446,7 +484,8 @@ def parse(url):
     if not parts or len(parts) > 4 or not all(_word(p) for p in parts):
         raise ValueError("bad path")
     verb, args = parts[0], parts[1:]
-    shape = {"open": 0, "close": 0, "back": 0, "page": 1, "pick": 1, "step": 2, "set": 2, "tab": 1, "do": 3}
+    shape = {"open": 0, "close": 0, "back": 0, "page": 1, "pick": 1, "step": 2, "set": 2, "tab": 1, "do": 3,
+             "cycle": 1}
     if shape.get(verb) != len(args):
         raise ValueError(f"unknown action {verb!r}")
     if verb in ("pick", "step", "set") and args[0] not in ITEM:
@@ -498,6 +537,17 @@ def handle(url, now=None):
     sid, verb, args = parse(url)
     now = time.time() if now is None else now
     toasts = []
+    if verb == "cycle":                 # a cycle slot or a panel's page: this session's view, never the menu
+        import json
+        with _Lock():
+            v = _read_views(sid)
+            v[args[0]] = v.get(args[0], 0) + 1
+            path = view_path(sid)
+            tmp = f"{path}.{os.getpid()}"
+            with open(tmp, "w") as fh:
+                json.dump(v, fh)
+            os.replace(tmp, path)
+        return f"moved {args[0]} on"
     with _Lock():
         if verb == "close":
             try:

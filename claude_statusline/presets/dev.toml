@@ -9,7 +9,16 @@
 
 [[line]]
 left = ["model", "dir", "git", "pr", "turn", "tools"]
-right = ["context", "limit_5h"]
+right = ["usage", "limits"]
+
+# Click to cycle (ctrl+shift+click in kitty, after `statusline.py clicks enable`).
+[segment.usage]
+type = "cycle"
+of = ["context", "tokens", "cost"]
+
+[segment.limits]
+type = "cycle"
+of = ["limit_5h", "limit_7d"]
 
 [panels]
 show = ["files", "graph", "branches", "stash"]

@@ -133,6 +133,20 @@ class TextSeg(Segment):
 
 
 @register
+class Cycle(Segment):
+    name = "cycle"
+    doc = ("A slot that shows one of several segments and moves to the next when you click it "
+           "(ctrl+shift+click in kitty; needs `statusline.py clicks enable`). Name it, list them in `of`, "
+           "and place the name: [segment.limits] type = \"cycle\", of = [\"limit_5h\", \"limit_7d\"].")
+    priority = 50
+    tone = "text"
+    options = {"of": Opt(list, [], "The segments it moves through, in order; the first shows until you click.")}
+
+    def fields(self, ctx, opts, level):
+        return None                     # render.py draws the member that is showing
+
+
+@register
 class Clock(Segment):
     name = "clock"
     doc = "The time of day."

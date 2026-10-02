@@ -23,6 +23,7 @@ Every segment also takes `format` (its body template), `priority`, `icon` ("" hi
 | `spend` | 56 | What today cost across every session this bar has drawn (local days), with the week and the month, and an optional daily budget drawn as a bar. |
 | `limit_7d_model` | 55 | The per-model weekly window, shown only when it differs from the overall one. |
 | `turn` | 52 | How long Claude has been working on your last message, or how long it has waited for you since it finished; compaction and a failed turn too (live activity). |
+| `cycle` | 50 | A slot that shows one of several segments and moves to the next when you click it (ctrl+shift+click in kitty; needs `statusline.py clicks enable`). Name it, list them in `of`, and place the name: [segment.limits] type = "cycle", of = ["limit_5h", "limit_7d"]. |
 | `env` | 50 | The active virtualenv or conda env, and the host when the session is remote. |
 | `tools` | 48 | The tools Claude is running now, with what they work on and for how long, then the ones just finished this turn (live activity). |
 | `agents` | 47 | The subagents at work: their kind, what they were asked, and for how long (live activity). |
@@ -483,6 +484,19 @@ Tone: `accent`. Default format: `<turnc>{state}</turnc>[ <muted>{time}</muted>]`
 | colour | when |
 |--------|------|
 | `<turnc>` | accent working, muted waiting, yellow compacting, red after a failure |
+
+## cycle
+
+A slot that shows one of several segments and moves to the next when you click it (ctrl+shift+click in kitty; needs `statusline.py clicks enable`). Name it, list them in `of`, and place the name: [segment.limits] type = "cycle", of = ["limit_5h", "limit_7d"].
+
+Tone: `text`. Default format: ``
+
+| option | type | default | meaning |
+|--------|------|---------|---------|
+| `of` | list | `[]` | The segments it moves through, in order; the first shows until you click. |
+
+| field | holds |
+|-------|-------|
 
 ## env
 

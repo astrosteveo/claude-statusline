@@ -21,7 +21,7 @@ import importlib
 # Segment type -> module that defines it.
 CATALOG = {
     "model": "core", "dir": "core", "session": "core", "output_style": "core", "text": "core",
-    "clock": "core", "version": "core", "vim": "core", "agent": "core",
+    "clock": "core", "version": "core", "vim": "core", "agent": "core", "cycle": "core",
     "git": "vcs", "pr": "vcs", "worktree": "vcs",
     "context": "usage", "tokens": "usage", "limit_5h": "usage", "limit_7d": "usage",
     "limit_7d_model": "usage", "limit_spend": "usage",

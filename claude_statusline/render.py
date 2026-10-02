@@ -66,8 +66,21 @@ def render_spec(spec, ctx, level, room=0, seen=None):
     return out
 
 
+def render_cycle(spec, ctx, level, room=0):
+    """A cycle slot: the member showing now, its text a link that moves to the next."""
+    from .menu import cycle_link, views
+    members = spec["cycle"]
+    out = render_spec(members[views(ctx).get(spec["slot"], 0) % len(members)], ctx, level, room)
+    url = cycle_link(ctx, spec["slot"])
+    if out is not None and url and out.body:
+        out.body = Text([(t, s if s[3] else (s[0], s[1], s[2], url)) for t, s in out.body.spans])
+    return out
+
+
 def _placed(specs, ctx):
     def make(spec):
+        if spec.get("cycle"):
+            return lambda level, room=0: render_cycle(spec, ctx, level, room)
         seen = []
         return lambda level, room=0: render_spec(spec, ctx, level, room, seen)
     return [Placed(s["name"], s["prio"], make(s), s.get("elastic", False)) for s in specs]

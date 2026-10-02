@@ -28,7 +28,7 @@ change
   activity enable | disable       live activity on or off (background hooks; tools, agents, turn…)
   quest enable | disable | status Claude Quest on or off (hooks, the /quest command, the quest line)
   quest <command>                 play: sheet, bag, equip, use, shop, quests, boss, pet… (quest help)
-  clicks enable | disable | status game mode's settings menu: open claude-statusline:// links (Linux)
+  clicks enable | disable | status clicks on the bar (cycles, panel pages, game menu): claude-statusline:// links (Linux)
   click <link>                    what a click on one of those links runs
 
 check

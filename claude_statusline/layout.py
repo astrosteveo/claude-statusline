@@ -131,6 +131,8 @@ def coerce(value, opt, where, problems):
         ok = float(value)
     elif want is str and isinstance(value, str):
         ok = value
+    elif want is list and isinstance(value, list) and all(isinstance(v, str) for v in value):
+        ok = list(value)
     if ok is None:
         problems.append(problem("error", where, f"expected {want.__name__}, got {type(value).__name__} {value!r}"))
         return opt.default
@@ -207,6 +209,8 @@ def resolve_segment(name, tables, problems, pal, seen, where_line):
                 for m in check_fill(val, pal):
                     problems.append(problem("error", f"segment.{name}.fill", m))
     seen.add(name)
+    if type_ == "cycle":
+        return _cycle(name, opts, tables, problems, pal, seen)
     tpl = trees.get("format", ())
     own_icon = bool(fields_of(tpl) & {"icon", "glyph"})
     return {"name": name, "type": type_, "mod": catalog.CATALOG[type_],
@@ -215,6 +219,45 @@ def resolve_segment(name, tables, problems, pal, seen, where_line):
             "tpl": tpl, "missing": trees.get("missing"), "icon": opts.get("icon"),
             "tone": tone, "own_icon": own_icon, "bare": seg.bare, "quest": seg.quest,
             "elastic": seg.elastic}
+
+
+def _cycle(name, opts, tables, problems, pal, seen):
+    """A cycle slot: its members' specs, under the slot's name. A slot of one is that segment."""
+    where = f"segment.{name}.of"
+    members = []
+    for m in opts["of"]:
+        if m == name or type_of(m, tables) == "cycle":
+            problems.append(problem("error", where, f"{m!r} is a cycle; a cycle holds plain segments"))
+            continue
+        spec = resolve_segment(m, tables, problems, pal, seen, where)
+        if spec is not None:
+            members.append(spec)
+    if len(opts["of"]) < 2:
+        problems.append(problem("error", where, "a cycle needs two segments or more"))
+    if len(members) <= 1:
+        return members[0] if members else None
+    slot = name if (name.isascii() and all(c.isalnum() or c in "-_" for c in name) and len(name) <= 48) \
+        else "c%08x" % (__import__("zlib").crc32(name.encode()))
+    own = tables.get(name) or {}
+    prio = opts.get("priority") if "priority" in own else None      # else the strongest member's
+    return {"name": name, "type": "cycle", "mod": "core", "cycle": members, "slot": slot,
+            "prio": prio if prio is not None else max(s["prio"] for s in members),
+            "opts": {}, "tpl": (), "missing": None, "icon": None, "tone": members[0]["tone"],
+            "own_icon": False, "bare": False, "quest": any(s["quest"] for s in members),
+            "elastic": any(s["elastic"] for s in members)}
+
+
+def placed_names(ln, tables):
+    """Every segment name a raw line places, a cycle's members included."""
+    out = set()
+    for side in ("left", "right"):
+        for n in (ln.get(side) or []):
+            if isinstance(n, str):
+                out.add(n)
+                t = tables.get(n)
+                if isinstance(t, dict) and t.get("type") == "cycle" and isinstance(t.get("of"), list):
+                    out.update(m for m in t["of"] if isinstance(m, str))
+    return out
 
 
 def type_of(name, tables):
@@ -388,8 +431,7 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         activity["placement"] = "auto"
     if activity.get("enabled") and activity["placement"] == "auto" and lines_raw and \
             isinstance(lines_raw[-1], dict):
-        placed_now = {n for ln in lines_raw if isinstance(ln, dict) for side in ("left", "right")
-                      for n in (ln.get(side) or []) if isinstance(n, str)}
+        placed_now = {n for ln in lines_raw if isinstance(ln, dict) for n in placed_names(ln, tables)}
         if not {type_of(n, tables) for n in placed_now} & set(ACTIVITY_SEGMENTS):
             lines_raw = list(lines_raw) + [{"left": list(ACTIVITY_LINE["left"]),
                                            "right": list(ACTIVITY_LINE["right"]), "_auto": True}]
@@ -474,8 +516,7 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         problems.append(problem("warning", "panels.show", "game mode takes the whole bar; the panels are hidden"))
 
     lines_raw = [dict(ln) if isinstance(ln, dict) else ln for ln in lines_raw]
-    placed = {n for ln in lines_raw if isinstance(ln, dict) for side in ("left", "right")
-              for n in (ln.get(side) or []) if isinstance(n, str)}
+    placed = {n for ln in lines_raw if isinstance(ln, dict) for n in placed_names(ln, tables)}
     placed_types = {(tables.get(n) or {}).get("type", n) if isinstance(tables.get(n), dict) else n for n in placed}
     if quest.get("enabled") and not game:
         has_quest = any(t in catalog.CATALOG and catalog.CATALOG[t] == "quest" and t not in ("avatar",)

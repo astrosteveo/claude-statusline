@@ -158,16 +158,20 @@ def _head(ctx, name, count=None, right=None, w=0):
     return _row(left, right or Text(), w)
 
 
-def _more(ctx, n):
-    return Text.of(f"+{n} more", _st(ctx, "muted"))
-
-
-def _body(items, rows):
-    """The items that fit under a title in `rows` rows, and how many are left over."""
+def _page(ctx, name, items, rows):
+    """The items that fit under a title in `rows` rows, and the row under them when they do not
+    all fit: `+7 more`, or with clicks on, the page and a link to the next one."""
     room = max(0, rows - 1)
     if len(items) <= room:
-        return items, 0
-    return items[:max(0, room - 1)], len(items) - max(0, room - 1)
+        return items, None
+    per = max(1, room - 1)
+    from .menu import cycle_link, views
+    url = cycle_link(ctx, f"panel-{name}")
+    if not url:
+        return items[:per], Text.of(f"+{len(items) - per} more", _st(ctx, "muted"))
+    pages = -(-len(items) // per)
+    page = views(ctx).get(f"panel-{name}", 0) % pages
+    return items[page * per:(page + 1) * per], Text.of(f"page {page + 1}/{pages} ›", _st(ctx, "muted", 0, url))
 
 
 # -- the panels ----------------------------------------------------------------
@@ -206,7 +210,7 @@ def files(ctx, d, w, rows):
         out.append(_row(*_progress(ctx, p), w))
     if not fs:
         return out + [Text.of(f"{ctx.mark('ok') or '✓'} clean", _st(ctx, "green"))]
-    shown, more = _body(fs, rows - (1 if p else 0))
+    shown, more = _page(ctx, "files", fs, rows - (1 if p else 0))
     for xy, path, a, r in shown:
         right = Text()
         if xy == "??":
@@ -228,7 +232,7 @@ def files(ctx, d, w, rows):
         left.add(base, _st(ctx, "text", 0, link))
         out.append(_row(left, right, w))
     if more:
-        out.append(_more(ctx, more))
+        out.append(more)
     return out
 
 
@@ -298,7 +302,7 @@ def _sync(ctx, track):
 def branches(ctx, d, w, rows):
     bs = sorted(d.get("branches") or [], key=lambda b: not b[0])
     out = [_head(ctx, "branches", len(bs), w=w)]
-    shown, more = _body(bs, rows)
+    shown, more = _page(ctx, "branches", bs, rows)
     for current, name, upstream, track, ct, merged in shown:
         left = Text.of("● " if current else "  ", _st(ctx, "accent"))
         left.add(name, _st(ctx, "muted" if merged else "text", BOLD if current else 0))
@@ -314,7 +318,7 @@ def branches(ctx, d, w, rows):
         right.add(age(ctx, ct), _st(ctx, "muted"))
         out.append(_row(left, right, w))
     if more:
-        out.append(_more(ctx, more))
+        out.append(more)
     return out
 
 
@@ -333,7 +337,7 @@ def _progress(ctx, p):
 def stash(ctx, d, w, rows):
     ss = d.get("stashes") or []
     out = [_head(ctx, "stash", len(ss), w=w)]
-    shown, more = _body(ss, rows)
+    shown, more = _page(ctx, "stash", ss, rows)
     for idx, ct, msg in shown:
         for lead in ("WIP on ", "On "):
             if msg.startswith(lead):
@@ -343,7 +347,7 @@ def stash(ctx, d, w, rows):
         left = Text.of(f"{idx} ", _st(ctx, "muted")).add(msg, _st(ctx, "text"))
         out.append(_row(left, Text.of(age(ctx, ct), _st(ctx, "muted")), w))
     if more:
-        out.append(_more(ctx, more))
+        out.append(more)
     return out
 
 
