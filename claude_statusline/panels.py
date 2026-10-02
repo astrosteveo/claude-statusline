@@ -723,10 +723,18 @@ def _meter(ctx, pct):
 
 
 def _open_link(ctx, f, r):
-    """Where a click on a session goes: its window brought forward, or its page in agentboard."""
+    """Where a click on a session goes: its window brought forward, a background one attached in a new
+    kitty tab, or its page in agentboard."""
     if r.get("window"):
         from .menu import focus_link
         return focus_link(ctx, r["key"])
+    if r.get("bg"):
+        from .menu import attach_link
+        return attach_link(ctx, r["bg"]) or _board_page(f, r)
+    return _board_page(f, r)
+
+
+def _board_page(f, r):
     if f.get("src") == "web":
         from urllib.parse import quote
         from .fleet import PAGE_URL

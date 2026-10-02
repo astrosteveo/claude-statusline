@@ -68,11 +68,11 @@ class FleetFeatureTests(unittest.TestCase):
         self.assertEqual(c["ticks"], [NOW - 600, NOW - 2])                    # tool calls only
         self.assertEqual(c["flare"], [NOW - 2, "Bash"])
 
-    def text(self, cols=140, rows=14, now=NOW):
+    def text(self, cols=140, rows=14, now=NOW, snap=SNAP2):
         comp = compile_config({"preset": "fleet", "panels": {"rows": rows}})
         data = samples.load("busy", NOW)
         data["session_id"] = "me"
-        data["_panels"] = {"fleet": {"rows": fleet.rows(SNAP2), "at": NOW, "src": "web", "window": 3600}}
+        data["_panels"] = {"fleet": {"rows": fleet.rows(snap), "at": NOW, "src": "web", "window": 3600}}
         data["_view"] = {}                                                    # a sample: links as if clicks were on
         ctx = Context(data, comp, cols=cols, now=now, env={"COLORTERM": "truecolor"}, live=False)
         fits = render_lines(data, comp, ctx=ctx)
@@ -115,6 +115,73 @@ class FocusClickTests(unittest.TestCase):
         self.assertEqual(menu.parse("claude-statusline://me/focus/abc-1")[1:], ("focus", ["abc-1"]))
         with self.assertRaises(ValueError):
             menu.parse("claude-statusline://me/focus/a;b")
+        self.assertEqual(menu.parse("claude-statusline://me/attach/1fb37cf5")[1:], ("attach", ["1fb37cf5"]))
+        with self.assertRaises(ValueError):
+            menu.parse("claude-statusline://me/attach/a/b")
+
+
+class _Done:
+    def __init__(self, stdout="", returncode=0, stderr=""):
+        self.stdout, self.returncode, self.stderr = stdout, returncode, stderr
+
+
+class AttachTests(unittest.TestCase):
+    def test_a_background_session_with_an_id_attaches(self):
+        snap = {"rows": [dict(SNAP["rows"][0], id="1fb37cf5"), SNAP["rows"][3]]}
+        a, d = fleet.rows(snap)
+        self.assertEqual((a["bg"], d["bg"]), ("1fb37cf5", None))      # a desktop session can't be attached
+        bad = fleet.rows({"rows": [dict(SNAP["rows"][0], id="a;b")]})[0]
+        self.assertIsNone(bad["bg"])
+        for state in ("done", "failed", "stopped"):                     # attaching would start it again
+            self.assertIsNone(fleet.rows({"rows": [dict(SNAP["rows"][0], id="1fb37cf5", state=state)]})[0]["bg"])
+
+    def test_links(self):
+        rows = [dict(r, id="1fb37cf5") if r["key"] == "a" else r for r in SNAP2["rows"]]
+        _, out = FleetFeatureTests.text(self, snap=dict(SNAP2, rows=rows))
+        links = {s[3] for t in out for _, s in t.spans if s and len(s) > 3 and s[3]}
+        self.assertIn("claude-statusline://me/attach/1fb37cf5", links)
+        self.assertIn("claude-statusline://me/focus/c", links)
+        self.assertIn("http://localhost:7777/#/queue/session/d/conversation", links)   # the desktop app: its page
+
+    def test_opens_a_tab_in_the_focused_kitty(self):
+        calls = []
+
+        def run(argv):
+            calls.append(argv)
+            if argv[4] == "ls":
+                return _Done(stdout='[{"is_focused": %s}]' % ("true" if argv[3] == "unix:/tmp/k-2" else "false"))
+            return _Done()
+        did = fleet.attach("1fb37cf5", run=run, sockets=["unix:/tmp/k-1", "unix:/tmp/k-2"])
+        self.assertEqual(did, "attached 1fb37cf5 in a new kitty tab")
+        launch = calls[-1]
+        self.assertEqual(launch[2:5], ["--to", "unix:/tmp/k-2", "launch"])
+        self.assertIn("--type=tab", launch)
+        self.assertEqual(launch[-2:], ["attach", "1fb37cf5"])
+
+    def test_says_why_it_could_not(self):
+        with self.assertRaisesRegex(ValueError, "listen_on"):
+            fleet.attach("1fb37cf5", run=lambda a: _Done(), sockets=[])
+        with self.assertRaisesRegex(ValueError, "remote control is disabled"):
+            fleet.attach("1fb37cf5", run=lambda a: _Done(returncode=1, stderr="Error: remote control\nis disabled"),
+                         sockets=["unix:/tmp/k-1"])
+        with self.assertRaises(ValueError):
+            fleet.attach("-rf", run=lambda a: _Done(), sockets=["unix:/tmp/k-1"])
+
+    def test_finds_kitty_sockets_as_kitty_names_them(self):
+        d = tempfile.mkdtemp(prefix="sl-kitty-")
+        conf = os.path.join(d, "kitty.conf")
+        with open(conf, "w") as fh:
+            fh.write(f"allow_remote_control socket-only\nlisten_on unix:{d}/kitty\n")
+        open(os.path.join(d, "kitty-42"), "w").close()
+        env = os.environ.pop("KITTY_LISTEN_ON", None)
+        try:
+            self.assertEqual(fleet._kitty_sockets(conf, pids=["42", "43"]), [f"unix:{d}/kitty-42"])
+            os.environ["KITTY_LISTEN_ON"] = "unix:/tmp/kitty-7"
+            self.assertEqual(fleet._kitty_sockets(conf, pids=["42"]), ["unix:/tmp/kitty-7"])
+        finally:
+            os.environ.pop("KITTY_LISTEN_ON", None)
+            if env is not None:
+                os.environ["KITTY_LISTEN_ON"] = env
 
 
 class PayloadTests(unittest.TestCase):

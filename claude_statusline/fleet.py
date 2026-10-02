@@ -176,6 +176,92 @@ def focus(key):
         raise ValueError("agentboard web isn't running") from None
 
 
+def _kitty_sockets(conf=None, pids=None):
+    """The remote-control addresses of the kitty instances running here: KITTY_LISTEN_ON when a kitty
+    started us, else kitty.conf's listen_on with each running kitty's pid, as kitty itself names it."""
+    env = os.environ.get("KITTY_LISTEN_ON", "")
+    if env.startswith("unix:"):
+        return [env]
+    if conf is None:
+        base = os.environ.get("KITTY_CONFIG_DIRECTORY") or os.path.join(
+            os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "kitty")
+        conf = os.path.join(base, "kitty.conf")
+    listen = None
+    try:
+        with open(conf) as fh:
+            for line in fh:
+                parts = line.split(None, 1)
+                if len(parts) == 2 and parts[0] == "listen_on":
+                    listen = parts[1].strip()           # the last one wins, as in kitty
+    except OSError:
+        return []
+    if not listen or not listen.startswith("unix:"):
+        return []
+    path = os.path.expandvars(os.path.expanduser(listen[5:]))
+    if not path.startswith(("/", "@")):
+        import tempfile
+        path = os.path.join(tempfile.gettempdir(), path)
+    if "{kitty_pid}" not in path:
+        path += "-{kitty_pid}"
+    if pids is None:
+        pids = []
+        for p in filter(str.isdigit, os.listdir("/proc")):
+            try:
+                with open(f"/proc/{p}/comm") as fh:
+                    if fh.read().strip() == "kitty":
+                        pids.append(p)
+            except OSError:
+                pass
+    out = []
+    for pid in pids:
+        sock = path.replace("{kitty_pid}", str(pid))
+        if sock.startswith("@") or os.path.exists(sock):
+            out.append("unix:" + sock)
+    return out
+
+
+def _claude():
+    for exe in (shutil.which("claude"), os.path.expanduser("~/.local/bin/claude"), os.path.expanduser("~/.claude/local/claude")):
+        if exe and os.access(exe, os.X_OK):
+            return exe
+    return None
+
+
+def _kitty_focused(kitty, sock, run):
+    """Whether the kitty at `sock` has the focused OS window: the one you just clicked in."""
+    try:
+        p = run([kitty, "@", "--to", sock, "ls"])
+        return any(w.get("is_focused") for w in json.loads(p.stdout or "[]"))
+    except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+        return False
+
+
+def attach(bg_id, run=None, sockets=None):
+    """Open a background session in a new tab of the kitty you clicked in, with `claude attach`.
+    Returns what it did, or ValueError with why it could not."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", bg_id or ""):
+        raise ValueError("bad session id")
+    if run is None:
+        def run(argv):
+            return subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  timeout=4, text=True)
+    kitty, claude = shutil.which("kitty") or "/usr/bin/kitty", _claude()
+    if not claude:
+        raise ValueError("can't find the claude command")
+    socks = _kitty_sockets() if sockets is None else sockets
+    if not socks:
+        raise ValueError("Set allow_remote_control and listen_on in kitty.conf, then restart kitty.")
+    sock = next((s for s in socks if len(socks) == 1 or _kitty_focused(kitty, s, run)), socks[0])
+    try:
+        p = run([kitty, "@", "--to", sock, "launch", "--type=tab", "--cwd", os.path.expanduser("~"),
+                 "--tab-title", f"attach {bg_id}", claude, "attach", bg_id])
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError(f"kitty didn't answer: {exc}") from None
+    if p.returncode:
+        raise ValueError(_one_line(p.stderr) or f"kitty said {p.returncode}")
+    return f"attached {bg_id} in a new kitty tab"
+
+
 def _ts(s):
     """An agentboard time (RFC 3339, up to 9 digits of fraction) as Unix seconds, or 0."""
     if not isinstance(s, str) or not s:
@@ -205,8 +291,11 @@ def _row(r, ticks):
     key = r.get("key") or r.get("sessionId") or ""
     mine = ticks.get(key) or []
     pct = r.get("contextPct")
+    # Attaching to a finished background session starts it again, so only a running one attaches.
+    bg = r.get("id") if r.get("kind") == "background" and r.get("state") not in ("done", "failed", "stopped") else None
     return {
         "key": key,
+        "bg": bg if isinstance(bg, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", bg) else None,
         "sids": [r.get("sessionId") or ""],
         "parent": r.get("forkOf") if isinstance(r.get("forkOf"), dict) else None,
         "project": project,
