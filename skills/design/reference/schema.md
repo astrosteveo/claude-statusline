@@ -124,6 +124,12 @@ placement = "auto"    # auto: turn, tools, agents, tasks, mode get a line of the
 enabled = true
 cache_ttl = 2.0       # the background refresh's period
 
+[panels]              # git panels under the bar
+show = []             # files, graph, branches, stash: left to right; empty turns them off
+rows = 6              # 1 to 16
+cache_ttl = 3.0
+commits = 40
+
 [colors]              # override any role or alias
 accent = "#ff8800"
 

@@ -73,6 +73,16 @@ DEFAULTS = {
     "colors": {},
     # Command segments: false hides them all and runs nothing.
     "commands": {"enabled": True},
+    # Git panels under the bar: the changed files, the commit graph, the branches and the
+    # stashes, side by side (panels.py). Empty `show` turns them off.
+    "panels": {
+        "show": [],
+        "rows": 6,
+        # Seconds a refresh stays fresh; a commit, fetch or stash refreshes at once.
+        "cache_ttl": 3.0,
+        # Commits read for the graph.
+        "commits": 40,
+    },
     # Live activity: hooks that tell the bar what Claude is doing (statusline.py activity enable).
     "activity": {
         "enabled": False,

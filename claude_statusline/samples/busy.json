@@ -139,5 +139,147 @@
     "today": 61.2,
     "week": 212.4,
     "month": 488.9
+  },
+  "_panels": {
+    "files": [
+      [
+        "M ",
+        "src/parser/lexer.py",
+        42,
+        7
+      ],
+      [
+        " M",
+        "src/parser/grammar.py",
+        18,
+        3
+      ],
+      [
+        " M",
+        "src/parser/__init__.py",
+        2,
+        0
+      ],
+      [
+        " M",
+        "tests/test_parser.py",
+        64,
+        12
+      ],
+      [
+        "??",
+        "src/parser/tokens.py",
+        null,
+        null
+      ],
+      [
+        "??",
+        "notes.md",
+        null,
+        null
+      ]
+    ],
+    "graph": [
+      [
+        "* ",
+        "3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a",
+        "HEAD -> feat/parser",
+        "-25m",
+        "Split the lexer out of the parser"
+      ],
+      [
+        "* ",
+        "b7e204b7e204b7e204b7e204b7e204b7e204b7e2",
+        "",
+        "-1h",
+        "Parse nested lists"
+      ],
+      [
+        "* ",
+        "51c0d851c0d851c0d851c0d851c0d851c0d851c0",
+        "origin/feat/parser",
+        "-3h",
+        "Add a grammar table"
+      ],
+      [
+        "| * ",
+        "e2a917e2a917e2a917e2a917e2a917e2a917e2a9",
+        "origin/main, main",
+        "-5h",
+        "Release 2.3.0"
+      ],
+      [
+        "| * ",
+        "08d4f308d4f308d4f308d4f308d4f308d4f308d4",
+        "",
+        "-1d",
+        "Fix the CSV export"
+      ],
+      [
+        "|/",
+        "",
+        "",
+        0,
+        ""
+      ],
+      [
+        "* ",
+        "c4b6a2c4b6a2c4b6a2c4b6a2c4b6a2c4b6a2c4b6",
+        "tag: v2.2.0",
+        "-2d",
+        "Release 2.2.0"
+      ]
+    ],
+    "branches": [
+      [
+        true,
+        "feat/parser",
+        "origin/feat/parser",
+        "ahead 2",
+        "-25m",
+        false
+      ],
+      [
+        false,
+        "main",
+        "origin/main",
+        "",
+        "-5h",
+        false
+      ],
+      [
+        false,
+        "fix/csv-quotes",
+        "origin/fix/csv-quotes",
+        "behind 3",
+        "-2d",
+        false
+      ],
+      [
+        false,
+        "spike/wasm",
+        "",
+        "",
+        "-12d",
+        false
+      ],
+      [
+        false,
+        "chore/deps",
+        "origin/chore/deps",
+        "gone",
+        "-20d",
+        true
+      ]
+    ],
+    "stashes": [
+      [
+        "0",
+        "-2h",
+        "WIP on feat/parser: 1a2b3c4 try a faster tokenizer"
+      ]
+    ],
+    "progress": null,
+    "root": "/home/u/Projects/widget-factory"
   }
 }

@@ -1,0 +1,19 @@
+# dev — one line for the session, its meters and what Claude is doing, then git panels: changes, history, branches, stashes.
+#
+# The one line holds live activity too, so it needs no line of its own. The
+# panels sit under it: the files you have changed with their line
+# counts, the commit graph, the branches with how far each is ahead or behind
+# its upstream, and the stashes with any rebase or merge in progress. They
+# read git in the background, so the bar never waits. Your theme, style and
+# icons stay yours; any key you set yourself wins over these.
+
+[[line]]
+left = ["model", "dir", "git", "pr", "turn", "tools"]
+right = ["context", "limit_5h"]
+
+[panels]
+show = ["files", "graph", "branches", "stash"]
+rows = 6
+
+[quest]
+placement = "line"

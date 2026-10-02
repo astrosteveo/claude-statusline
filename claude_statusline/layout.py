@@ -82,7 +82,7 @@ def load_preset(name):
         return None
 
 
-PRESET_SECTIONS = ("quest", "bar", "activity", "layout", "thresholds")
+PRESET_SECTIONS = ("quest", "bar", "activity", "layout", "thresholds", "panels")
 
 
 def preset_sections(preset) -> dict:
@@ -449,6 +449,30 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         lines_raw += [{"right": [hud[i]] if i < len(hud) else [], "_scene": i, "_tables": compact, "_rich": rich}
                       for i in range(rows)]
 
+    panels = dict(cfg["panels"])
+    show = panels.get("show")
+    if not isinstance(show, list) or not all(isinstance(n, str) for n in show):
+        problems.append(problem("error", "panels.show", "a list of panel names"))
+        show = []
+    from .panels import PANELS
+    for n in show:
+        if n not in PANELS:
+            problems.append(problem("error", "panels.show", f"unknown panel {n!r}; one of "
+                                                            f"{', '.join(PANELS)}" + _hint(n, PANELS)))
+    panels["show"] = show = [n for n in dict.fromkeys(show) if n in PANELS]
+    prows = panels.get("rows")
+    if not isinstance(prows, int) or isinstance(prows, bool) or not 1 <= prows <= 16:
+        problems.append(problem("error", "panels.rows", "a whole number from 1 to 16"))
+        panels["rows"] = prows = 6
+    for key, low in (("cache_ttl", 0), ("commits", 1)):
+        v = panels.get(key)
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or v < low:
+            problems.append(problem("error", f"panels.{key}", f"a number from {low} up"))
+            panels[key] = DEFAULTS["panels"][key]
+    panels["commits"] = int(panels["commits"])
+    if show and game:
+        problems.append(problem("warning", "panels.show", "game mode takes the whole bar; the panels are hidden"))
+
     lines_raw = [dict(ln) if isinstance(ln, dict) else ln for ln in lines_raw]
     placed = {n for ln in lines_raw if isinstance(ln, dict) for side in ("left", "right")
               for n in (ln.get(side) or []) if isinstance(n, str)}
@@ -462,6 +486,9 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
             first = dict(lines_raw[0])
             first["right"] = ["quest"] + list(first.get("right") or [])
             lines_raw[0] = first
+    if show and not game:
+        # The panels come last, under your lines and the activity and quest lines.
+        lines_raw += [{"_panel": i} for i in range(prows)]
 
     seen = set()
     lines = []
@@ -471,7 +498,8 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
             problems.append(problem("error", where, "must be a table"))
             continue
         for key in ln:
-            if key not in ("left", "right", "gap", "_auto", "_scene", "_details", "_dtables", "_tables", "_rich"):
+            if key not in ("left", "right", "gap", "_auto", "_scene", "_details", "_dtables", "_tables", "_rich",
+                           "_panel"):
                 problems.append(problem("error", f"{where}.{key}", "unknown key (left, right, gap)"))
         own = ln.get("_tables", tables)
         groups = []
@@ -490,7 +518,9 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         if not isinstance(gap, int) or isinstance(gap, bool) or gap < 0:
             problems.append(problem("error", f"{where}.gap", "must be a non-negative integer"))
             gap = 2
-        if "_scene" in ln:
+        if "_panel" in ln:
+            lines.append({"left": [], "right": [], "gap": 0, "auto": True, "panel": ln["_panel"]})
+        elif "_scene" in ln:
             rich = [s for s in (resolve_segment(n, ln["_rich"], [], pal, set(), where) for n in ln["right"]) if s]
             lines.append({"left": [], "right": groups[1], "rich": rich, "gap": 0, "auto": True,
                           "scene": ln["_scene"]})
@@ -509,8 +539,9 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
             lines.append({"left": groups[0], "right": groups[1], "gap": gap, "auto": bool(ln.get("_auto"))})
         else:
             problems.append(problem("warning", where, "empty line"))
-    if len(lines) > 4 and not game:
-        problems.append(problem("warning", "line", f"{len(lines)} lines; the bar takes that many rows "
+    own_lines = [ln for ln in lines if "panel" not in ln]
+    if len(own_lines) > 4 and not game:
+        problems.append(problem("warning", "line", f"{len(own_lines)} lines; the bar takes that many rows "
                                                    f"from the conversation"))
 
     for n, table in tables.items():
@@ -536,5 +567,6 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
         "layout": dict(cfg["layout"], wide_glyphs=[g for g in wide if isinstance(g, str)]),
         "bar": bar, "thresholds": dict(cfg["thresholds"]), "git": dict(cfg["git"]),
         "glyphs": dict(cfg["glyphs"]) if isinstance(cfg.get("glyphs"), dict) else {},
-        "quest": quest, "activity": activity, "commands": dict(cfg["commands"]), "lines": lines,
+        "quest": quest, "activity": activity, "commands": dict(cfg["commands"]), "panels": panels,
+        "lines": lines,
     }

@@ -84,7 +84,8 @@ def render_lines(data, comp, cols=None, now=None, env=None, sync_git=False, ctx=
     if ctx.live and ctx.quest_cfg.get("enabled") and ctx.quest_cfg.get("avatar") not in ("off", False):
         try:
             from .segments.quest import avatar_pins
-            pins = avatar_pins(ctx, len(lines)) or pins
+            own = sum(1 for ln in lines if "panel" not in ln)      # the panels come last and carry no pet
+            pins = (avatar_pins(ctx, own) or pins[:own]) + [None] * (len(lines) - own)
         except Exception:
             if os.environ.get("CLAUDE_STATUSLINE_DEBUG"):
                 raise
@@ -94,7 +95,15 @@ def render_lines(data, comp, cols=None, now=None, env=None, sync_git=False, ctx=
         return decor.group(segs, ctx, side)
 
     fits = []
+    block = None
     for line, pin in zip(lines, pins):
+        if "panel" in line:
+            if block is None:
+                from .panels import block as panel_block
+                block = panel_block(ctx, sum(1 for ln in lines if "panel" in ln)) or []
+            text = block[line["panel"]] if line["panel"] < len(block) else None
+            fits.append(Fit(text, 0, [], ctx.avail) if text is not None else None)
+            continue
         avail = ctx.avail
         if pin is not None:
             avail = max(10, avail - pin.width - 1)

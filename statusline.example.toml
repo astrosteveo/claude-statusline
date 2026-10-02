@@ -126,6 +126,15 @@ enabled = true           # false: every command segment hidden, nothing run
 enabled = false
 placement = "auto"       # auto: its segments get a line of their own · manual: place them yourself
 
+# --- git panels ---------------------------------------------------------------------
+# A block under your lines: the changed files, the commit graph, the branches, the
+# stashes. Read in the background; `statusline.py use dev` turns them on.
+[panels]
+show = []                # e.g. ["files", "graph", "branches", "stash"]; left to right
+rows = 6                 # 1 to 16
+cache_ttl = 3.0
+commits = 40             # commits read for the graph
+
 # --- the finer points ---------------------------------------------------------------
 [layout]
 right_margin = 5         # columns Claude Code keeps at the right edge (statusline.py ruler)

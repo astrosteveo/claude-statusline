@@ -91,7 +91,7 @@ statusline.py preview --width 80,120,160
 theme = "midnight"      # colours
 style = "capsules"      # minimal, classic, dots, chips, capsules, pills, powerline, slant
 icons = "nerd"          # nerd, unicode, emoji, none
-preset = "classic"      # classic, compact, dashboard, focus, minimal, arcade
+preset = "classic"      # classic, compact, dashboard, focus, minimal, dev, arcade
 
 [[line]]                # your own lines replace the preset's
 left = ["model", "dir", "git", "pr", "cost"]
@@ -208,6 +208,38 @@ Nothing reads the transcript. The segments get a line of their own under
 yours (in game mode they join the top row's details) unless you place any of
 them yourself; `[activity] placement = "manual"` turns that off.
 
+## Git panels
+
+```sh
+statusline.py use dev              # the dev preset: the session on one line, the panels under it
+```
+
+A block of rows under your lines shows the repository side by side, so you
+rarely need `git status`, `git log --graph` or `git branch -vv` in another
+window:
+
+| panel | shows |
+|-------|-------|
+| `files` | the changed files, conflicts first, with lines added and removed, and a rebase, merge, cherry-pick or bisect in progress with its step |
+| `graph` | the commit graph of your branches: hash, branches and tags, subject, age |
+| `branches` | your branches, newest first: how far each is ahead of or behind its upstream, `local` with none, `gone` when the upstream was deleted, `merged` once the default branch has it |
+| `stash` | the stashes; shown only while there is one |
+
+```toml
+[panels]
+show = ["files", "graph", "branches", "stash"]   # left to right; empty turns them off
+rows = 6              # 1 to 16; the block keeps this height whatever git holds
+cache_ttl = 3.0       # seconds a refresh stays fresh; a commit, fetch or stash shows at once
+commits = 40          # commits read for the graph
+```
+
+A background process reads git, as for the `git` segment, so the bar never
+waits; the first refresh in a repository says `Reading git…`. The columns
+follow the terminal's width, and a panel that no longer fits drops, the last
+named first. Each file is a `file://` link, and each commit links to the
+web when Claude Code knows the repository (Ctrl+Shift+click in kitty). The
+panels are hidden in game mode, which takes the whole bar.
+
 ## Claude Quest
 
 ```sh
@@ -257,8 +289,8 @@ burn rate, tokens, the prompt cache, lines changed) and your session on the
 top row. `statusline.py use arcade` switches to it, or pick Layout in the
 game's menu. It keeps your theme, style and icons, takes out the keys of
 yours it sets (and your own `[[line]]` tables), and backs up your config
-first. A preset may carry `[quest]`, `[bar]`, `[activity]`, `[layout]` and
-`[thresholds]` settings; anything you set yourself afterwards wins.
+first. A preset may carry `[quest]`, `[bar]`, `[activity]`, `[layout]`,
+`[thresholds]` and `[panels]` settings; anything you set yourself afterwards wins.
 
 ```toml
 [quest]
