@@ -14,13 +14,10 @@ refresh, since it changes step by step.
 """
 from __future__ import annotations
 
-import marshal
 import os
-import sys
 import time
 
-from .config import runtime_dir
-from .gitstatus import LOCK_STALE, _run, find_repo, repo_key, spawn_detached
+from .gitstatus import _load, _paths, _run, _save, find_repo, repo_key, spawn_refresh, unlock
 
 BRANCHES = 30
 STASHES = 10
@@ -38,21 +35,6 @@ def panel_key(gitdir, common):
     return "|".join(parts)
 
 
-def _paths(root):
-    import zlib
-    tag = "%08x" % zlib.crc32(root.encode("utf-8", "replace"))
-    base = os.path.join(runtime_dir(), f"panels-{tag}")
-    return base + ".bin", base + ".lock"
-
-
-def _load(path):
-    try:
-        with open(path, "rb") as fh:
-            return marshal.loads(fh.read())
-    except Exception:
-        return None
-
-
 def data(cwd, cfg, git_cfg, sync=False, spawn=True):
     """What the panels show for `cwd` (dict), or None outside a repository.
     Before the first refresh lands it holds {"pending": True}."""
@@ -60,7 +42,7 @@ def data(cwd, cfg, git_cfg, sync=False, spawn=True):
     if repo is None:
         return None
     root, gitdir, common = repo
-    cache, lock = _paths(root)
+    cache, lock = _paths(root, "panels")
     blob = _load(cache)
     key = panel_key(gitdir, common)
     out = blob.get("data") if isinstance(blob, dict) else None
@@ -77,33 +59,11 @@ def data(cwd, cfg, git_cfg, sync=False, spawn=True):
         if sync:
             out = refresh(root, gitdir, common, commits, timeout)
         elif spawn:
-            _spawn_refresh(root, gitdir, common, commits, timeout, lock)
+            spawn_refresh("gitpanels", lock, [root, gitdir, common, commits, timeout, lock])
     out = dict(out) if out else {"pending": True}
     out["root"] = root
     out["progress"] = progress(gitdir)
     return out
-
-
-def _spawn_refresh(root, gitdir, common, commits, timeout, lock):
-    now = time.time()
-    try:
-        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        try:
-            if now - os.stat(lock).st_mtime < LOCK_STALE:
-                return
-            os.unlink(lock)
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except OSError:
-            return
-    except OSError:
-        return
-    os.close(fd)
-    parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    code = ("import sys; sys.path.insert(0, sys.argv[1]); "
-            "from claude_statusline.gitpanels import _refresh_main; _refresh_main(sys.argv[2:])")
-    spawn_detached([sys.executable, "-S", "-c", code, parent, root, gitdir, common, str(commits),
-                    str(timeout), lock])
 
 
 def _refresh_main(args):
@@ -111,10 +71,7 @@ def _refresh_main(args):
     try:
         refresh(root, gitdir, common, int(commits), float(timeout))
     finally:
-        try:
-            os.unlink(lock)
-        except OSError:
-            pass
+        unlock(lock)
 
 
 def _git(args, root, timeout):
@@ -128,14 +85,7 @@ def refresh(root, gitdir, common, commits=40, timeout=2.0):
     info = {"files": changed_files(root, timeout), "graph": graph(root, commits, timeout),
             "branches": branches(root, timeout), "stashes": stashes(root, common, timeout)}
     took = time.time() - started
-    cache, _ = _paths(root)
-    try:
-        tmp = f"{cache}.{os.getpid()}"
-        with open(tmp, "wb") as fh:
-            marshal.dump({"key": key, "ts": time.time(), "took": took, "n": commits, "data": info}, fh)
-        os.replace(tmp, cache)
-    except OSError:
-        pass
+    _save(_paths(root, "panels")[0], {"key": key, "ts": time.time(), "took": took, "n": commits, "data": info})
     return info
 
 

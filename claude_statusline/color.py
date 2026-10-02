@@ -83,10 +83,6 @@ def parse(spec):
     return None
 
 
-def hex_of(c) -> str:
-    return "#%02x%02x%02x" % (c[0], c[1], c[2])
-
-
 def mix(a, b, t: float):
     """`a` moved a fraction `t` of the way to `b`, as RGB."""
     t = max(0.0, min(1.0, t))

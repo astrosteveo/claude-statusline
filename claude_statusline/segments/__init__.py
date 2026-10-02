@@ -33,8 +33,6 @@ CATALOG = {
     "avatar": "quest", "pet": "quest", "quest_dungeon": "quest", "quest_raid": "quest",
     "quest_settings": "quest",
 }
-# Types from v2 configs that are spelt differently now.
-RENAMED = {}
 
 
 class Opt:

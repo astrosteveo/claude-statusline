@@ -15,8 +15,6 @@ panel shows only while there is a stash.
 from __future__ import annotations
 
 import os
-import re
-from urllib.parse import quote
 
 from .text import BOLD, Text
 from .width import char_width, width as cells
@@ -136,6 +134,27 @@ def _tail(s, n):
     return "…" + "".join(reversed(out))
 
 
+_SAFE_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/-_.~"
+_SAFE = frozenset(_SAFE_CHARS.encode())
+_SAFE_SET = frozenset(_SAFE_CHARS)
+
+
+def _quote(path):
+    """A path for a file:// link, percent-encoded (urllib.parse would cost the bar 1.5 ms to import)."""
+    if _SAFE_SET.issuperset(path):
+        return path
+    return "".join(chr(b) if b in _SAFE else "%%%02X" % b for b in path.encode("utf-8", "surrogateescape"))
+
+
+def _drop_hash(msg):
+    """"main: 1a2b3c4 subject" -> "main: subject": the hash says little."""
+    head, sep, rest = msg.partition(": ")
+    sha, space, subject = rest.partition(" ")
+    if sep and space and " " not in head and len(sha) >= 7 and all(c in "0123456789abcdef" for c in sha):
+        return head + sep + subject
+    return msg
+
+
 def age(ctx, ts):
     if not ts:
         return ""
@@ -226,7 +245,7 @@ def files(ctx, d, w, rows):
         shown_path = _tail(path, max(4, room))
         head, base = os.path.split(shown_path)
         left = _code(ctx, xy).add(" ")
-        link = ("file://" + quote(os.path.join(d["root"], path))) if d.get("root") else None
+        link = ("file://" + _quote(os.path.join(d["root"], path))) if d.get("root") else None
         if head:
             left.add(head + "/", _st(ctx, "subtext", 0, link))
         left.add(base, _st(ctx, "text", 0, link))
@@ -343,7 +362,7 @@ def stash(ctx, d, w, rows):
             if msg.startswith(lead):
                 msg = msg[len(lead):]
                 break
-        msg = re.sub(r"^(\S+: )[0-9a-f]{7,} ", r"\1", msg)     # "main: 1a2b3c4 subject": the hash says little
+        msg = _drop_hash(msg)
         left = Text.of(f"{idx} ", _st(ctx, "muted")).add(msg, _st(ctx, "text"))
         out.append(_row(left, Text.of(age(ctx, ct), _st(ctx, "muted")), w))
     if more:

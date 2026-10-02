@@ -43,13 +43,6 @@ check
 
 
 # --- helpers -------------------------------------------------------------------
-def _tty():
-    try:
-        return sys.stdout.isatty()
-    except Exception:
-        return False
-
-
 def _opts(argv, flags=(), values=()):
     """A tiny parser: (positional, {flag: True}, {name: value})."""
     pos, fl, vals = [], {}, {}

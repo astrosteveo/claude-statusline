@@ -78,7 +78,14 @@ def main(argv=None) -> int:
         except Exception:
             interactive = False
         if not interactive:
-            return render_stdin()
+            rc = render_stdin()
+            # The bar is out and every file it wrote is closed: skip the interpreter's teardown
+            # (about 1.3 ms of freeing modules on every refresh).
+            try:
+                sys.stderr.flush()
+            except Exception:
+                pass
+            os._exit(rc)
         argv = ["configure"]
     from .cli import run
     return run(argv)

@@ -79,10 +79,11 @@ def repo_key(gitdir) -> str:
     return "|".join(parts)
 
 
-def _paths(root):
+def _paths(root, kind="git"):
+    """(cache, lock) for `root`: `kind` keeps the status and the git panels apart."""
     import zlib
     tag = "%08x" % zlib.crc32(root.encode("utf-8", "replace"))
-    base = os.path.join(runtime_dir(), f"git-{tag}")
+    base = os.path.join(runtime_dir(), f"{kind}-{tag}")
     return base + ".bin", base + ".lock"
 
 
@@ -92,6 +93,46 @@ def _load(path):
             return marshal.loads(fh.read())
     except Exception:
         return None
+
+
+def _save(path, blob):
+    try:
+        tmp = f"{path}.{os.getpid()}"
+        with open(tmp, "wb") as fh:
+            marshal.dump(blob, fh)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def spawn_refresh(module, lock, args):
+    """Run `module`'s _refresh_main(args) in a detached process, unless a live lock says one
+    already runs. The refresh unlinks the lock when it is done."""
+    now = time.time()
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        try:
+            if now - os.stat(lock).st_mtime < LOCK_STALE:
+                return
+            os.unlink(lock)
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except OSError:
+            return
+    except OSError:
+        return
+    os.close(fd)
+    parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    code = ("import sys; sys.path.insert(0, sys.argv[1]); "
+            f"from claude_statusline.{module} import _refresh_main; _refresh_main(sys.argv[2:])")
+    spawn_detached([sys.executable, "-S", "-c", code, parent, *map(str, args)])
+
+
+def unlock(lock):
+    try:
+        os.unlink(lock)
+    except OSError:
+        pass
 
 
 def status(cwd, cfg, sync=False, last_commit=True):
@@ -118,7 +159,8 @@ def status(cwd, cfg, sync=False, last_commit=True):
         if sync:
             data = refresh(root, gitdir, common, last_commit, float(cfg.get("timeout", 2.0)))
         else:
-            _spawn_refresh(root, gitdir, common, last_commit, float(cfg.get("timeout", 2.0)), lock)
+            spawn_refresh("gitstatus", lock, [root, gitdir, common, "1" if last_commit else "0",
+                                              float(cfg.get("timeout", 2.0)), lock])
     out = dict(data) if data else {"branch": None, "sha": None, "upstream": None, "ahead": 0,
                                    "behind": 0, "staged": 0, "dirty": 0, "untracked": 0,
                                    "conflict": 0, "stash": 0, "state": None, "last_commit": None,
@@ -146,29 +188,6 @@ def _state(gitdir):
     return ""
 
 
-def _spawn_refresh(root, gitdir, common, last_commit, timeout, lock):
-    now = time.time()
-    try:
-        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        try:
-            if now - os.stat(lock).st_mtime < LOCK_STALE:
-                return
-            os.unlink(lock)
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except OSError:
-            return
-    except OSError:
-        return
-    os.close(fd)
-    parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    code = ("import sys; sys.path.insert(0, sys.argv[1]); "
-            "from claude_statusline.gitstatus import _refresh_main; _refresh_main(sys.argv[2:])")
-    argv = [sys.executable, "-S", "-c", code, parent, root, gitdir, common,
-            "1" if last_commit else "0", str(timeout), lock]
-    spawn_detached(argv)
-
-
 def spawn_detached(argv):
     """Start `argv` in its own session with no stdio, and do not wait for it."""
     devnull = os.devnull
@@ -194,10 +213,7 @@ def _refresh_main(args):
     try:
         refresh(root, gitdir, common, lc == "1", float(timeout))
     finally:
-        try:
-            os.unlink(lock)
-        except OSError:
-            pass
+        unlock(lock)
 
 
 def _run(args, cwd, timeout):
@@ -255,13 +271,6 @@ def refresh(root, gitdir, common, last_commit=True, timeout=2.0):
         if ct and ct.strip().isdigit():
             info["last_commit"] = int(ct.strip())
     took = time.time() - started
-    cache, _ = _paths(root)
-    try:
-        tmp = f"{cache}.{os.getpid()}"
-        with open(tmp, "wb") as fh:
-            marshal.dump({"key": key, "ts": time.time(), "took": took, "lc": bool(last_commit),
-                          "data": info}, fh)
-        os.replace(tmp, cache)
-    except OSError:
-        pass
+    _save(_paths(root)[0], {"key": key, "ts": time.time(), "took": took, "lc": bool(last_commit),
+                             "data": info})
     return info
