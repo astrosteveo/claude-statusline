@@ -121,17 +121,23 @@ enabled = true           # false: every command segment hidden, nothing run
 
 # --- live activity ----------------------------------------------------------------
 # What Claude is doing now: the turn, the tools running, subagents, the task list,
-# the permission mode. `statusline.py activity enable` registers the hooks.
+# the permission mode, a question it needs you to answer. `statusline.py activity enable`
+# registers the hooks.
 [activity]
 enabled = false
 placement = "auto"       # auto: its segments get a line of their own · manual: place them yourself
+notify = true            # desktop pop-ups: a question left unanswered, a long turn finished
+notify_ask = 20.0        # seconds a question waits before its pop-up
+notify_after = 120.0     # seconds a turn must run for a pop-up when it ends
 
 # --- git panels ---------------------------------------------------------------------
 # A block under your lines: the changed files, the commit graph, the branches, the
-# stashes. Read in the background; `statusline.py use dev` turns them on.
+# stashes, CI, reviews, test runs, your other sessions. Read in the background;
+# `statusline.py use dev` turns them on. `fleet` maps every session from agentboard
+# (`statusline.py use fleet`).
 [panels]
-show = []                # e.g. ["files", "graph", ["branches", "ci", "servers", "stash"]]
-rows = 6                 # 1 to 16
+show = []                # e.g. ["files", "graph", ["checks", "reviews", "ci", "sessions"]]
+rows = 6                 # 1 to 40
 cache_ttl = 3.0
 commits = 40             # commits read for the graph
 notify = true            # a desktop pop-up when a CI run on your commit finishes

@@ -72,8 +72,9 @@ DEFAULTS = {
     "colors": {},
     # Command segments: false hides them all and runs nothing.
     "commands": {"enabled": True},
-    # Git panels under the bar: the changed files, the commit graph, the branches and the
-    # stashes, side by side (panels.py). Empty `show` turns them off.
+    # Git panels under the bar: the changed files, the commit graph, the branches, the
+    # stashes, CI, reviews, test runs and your other sessions, side by side (panels.py).
+    # Empty `show` turns them off.
     "panels": {
         "show": [],
         "rows": 6,
@@ -89,6 +90,11 @@ DEFAULTS = {
         "enabled": False,
         # auto: the activity segments get a line of their own unless you place them yourself.
         "placement": "auto",
+        # Desktop pop-ups: a question Claude has waited on for notify_ask seconds, and a
+        # turn that ran notify_after seconds or longer.
+        "notify": True,
+        "notify_ask": 20.0,
+        "notify_after": 120.0,
     },
     "quest": {
         "enabled": False,

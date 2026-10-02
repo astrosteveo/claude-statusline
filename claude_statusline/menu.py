@@ -14,6 +14,9 @@ draws the result.
     claude-statusline://<session>/pick/<item>   every choice of a setting at once
     claude-statusline://<session>/set/<item>/<value>
     claude-statusline://<session>/back
+    claude-statusline://<session>/rerun/ask/<cache>/<run>   the CI panel: rerun a failed run?
+    claude-statusline://<session>/rerun/yes/<token>/-       ... yes (the token the panel shows)
+    claude-statusline://<session>/rerun/no/-/-
 
 Anything printed in the terminal can carry such a link, so `handle` trusts
 none of it: it knows a fixed set of verbs, settings and values, and never
@@ -211,6 +214,24 @@ def cycle_link(ctx, slot):
         return sid if sid and installed() else None
     sid = ctx.memo(("clicksid",), get)
     return link(sid, "cycle", slot) if sid else None
+
+
+def focus_link(ctx, key, verb="focus"):
+    """The link that brings a fleet session's window forward, or None where a click could not work."""
+    sid = None
+    if not _word(key, "-_"):
+        return None
+    if isinstance(ctx.data.get("_view"), dict):
+        sid = session_of(ctx.data) or "sample"
+    elif ctx.live:
+        sid = session_of(ctx.data)
+        sid = sid if sid and installed() else None
+    return link(sid, verb, key) if sid else None
+
+
+def attach_link(ctx, bg_id):
+    """The link that opens a background session in a new kitty tab, or None where a click could not work."""
+    return focus_link(ctx, bg_id, "attach")
 
 
 def gear(ctx):
@@ -485,7 +506,7 @@ def parse(url):
         raise ValueError("bad path")
     verb, args = parts[0], parts[1:]
     shape = {"open": 0, "close": 0, "back": 0, "page": 1, "pick": 1, "step": 2, "set": 2, "tab": 1, "do": 3,
-             "cycle": 1}
+             "cycle": 1, "rerun": 3, "focus": 1, "attach": 1}
     if shape.get(verb) != len(args):
         raise ValueError(f"unknown action {verb!r}")
     if verb in ("pick", "step", "set") and args[0] not in ITEM:
@@ -498,6 +519,8 @@ def parse(url):
         raise ValueError(f"unknown tab {args[0]!r}")
     if verb == "do" and args[1] not in ACTIONS:
         raise ValueError(f"unknown action {args[1]!r}")
+    if verb == "rerun" and args[0] not in ("ask", "yes", "no"):
+        raise ValueError(f"unknown step {args[0]!r}")
     return sid, verb, args
 
 
@@ -548,6 +571,16 @@ def handle(url, now=None):
                 json.dump(v, fh)
             os.replace(tmp, path)
         return f"moved {args[0]} on"
+    if verb == "focus":                 # a session on the fleet map: agentboard brings its window forward
+        from .fleet import focus
+        return focus(args[0])
+    if verb == "attach":                # a background session on the fleet map: `claude attach` in a new kitty tab
+        from .fleet import attach
+        return attach(args[0])
+    if verb == "rerun":                 # the CI panel's rerun button: two clicks, see ci.py
+        from .ci import rerun_click
+        with _Lock():
+            return rerun_click(sid, args, now)
     with _Lock():
         if verb == "close":
             try:

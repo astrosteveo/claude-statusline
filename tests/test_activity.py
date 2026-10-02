@@ -114,6 +114,84 @@ class ApplyTests(unittest.TestCase):
         self.assertFalse(s["closed"])
 
 
+class NewFieldTests(unittest.TestCase):
+    def test_a_question_waits_until_something_else_happens(self):
+        ask = dict(tool("Bash", "t1", "PermissionRequest", command="rm -rf build"), cwd="/home/u/api")
+        s = run_events([ev("UserPromptSubmit"), tool("Bash", "t1", command="rm -rf build"), ask])
+        self.assertEqual(s["ask"][1:3], ["Bash rm -rf build", "permission"])
+        self.assertEqual(s["cwd"], "/home/u/api")
+        A.apply(s, tool("Bash", "t1", command="rm -rf build"), NOW + 9)     # its own start, landing late
+        self.assertTrue(s["ask"][0])
+        A.apply(s, tool("Bash", "t1", "PostToolUse"), NOW + 10)
+        self.assertFalse(s["ask"][0])
+        A.apply(s, ev("Notification", notification_type="idle_prompt", message="waiting"), NOW + 11)
+        self.assertFalse(s["ask"][0])                           # only waiting, not a question
+        A.apply(s, ev("Notification", notification_type="elicitation_dialog", message="Pick one"), NOW + 12)
+        self.assertEqual(s["ask"][1], "Pick one")
+        A.apply(s, ev("Stop"), NOW + 13)
+        self.assertFalse(s["ask"][0])
+
+    def test_questions_in_bypass_mode(self):
+        q = {"questions": [{"question": "Which  database?", "header": "DB", "options": []}]}
+        s = run_events([ev("UserPromptSubmit"), tool("AskUserQuestion", "q1", **q)])
+        self.assertEqual(s["ask"][1:], ["Which database?", "question", "q1"])
+        A.apply(s, tool("Read", "r1", "PostToolUse", file_path="/a"), NOW + 5)               # a parallel tool ends
+        A.apply(s, tool("Bash", "b1", "PostToolUse", agent="sub", command="ls"), NOW + 6)    # a subagent works on
+        A.apply(s, ev("SubagentStop", agent_id="sub"), NOW + 7)
+        self.assertEqual(s["ask"][3], "q1")
+        A.apply(s, tool("AskUserQuestion", "q1", "PostToolUse"), NOW + 8)
+        self.assertFalse(s["ask"][0])
+        A.apply(s, tool("ExitPlanMode", "p1"), NOW + 9)
+        self.assertEqual(s["ask"][1], "approve the plan")
+        A.apply(s, tool("Grep", "g1", agent="sub", pattern="x"), NOW + 10)
+        self.assertTrue(s["ask"][0])
+        sub = run_events([tool("AskUserQuestion", "q2", agent="sub", **q)])                  # a subagent's own
+        self.assertFalse(sub["ask"][0])
+
+    def test_a_question_with_no_tool_waits_for_the_main_thread(self):
+        s = run_events([ev("Notification", notification_type="permission_prompt", message="Allow?")])
+        A.apply(s, tool("Read", "r1", "PostToolUse", agent="sub", file_path="/a"), NOW + 5)
+        self.assertTrue(s["ask"][0])
+        A.apply(s, tool("Read", "r2", file_path="/a"), NOW + 6)
+        self.assertFalse(s["ask"][0])
+
+    def test_a_late_question_about_a_finished_tool_is_ignored(self):
+        s = run_events([tool("Bash", "t1", "PostToolUse"), tool("Bash", "t1", "PermissionRequest")])
+        self.assertFalse(s["ask"][0])
+
+    def test_edits_and_checks(self):
+        s = run_events([tool("Edit", "t1", "PostToolUse", file_path="/r/a.py"),
+                        tool("Write", "t2", "PostToolUseFailure", file_path="/r/b.py"),
+                        tool("Read", "t3", "PostToolUse", file_path="/r/c.py")])
+        self.assertEqual(list(s["edited"]), ["/r/a.py"])
+        out = "FAILED tests/t.py::test_x - boom\n1 failed, 9 passed in 1s"
+        e = dict(tool("Bash", "t4", "PostToolUse", command="pytest -q"),
+                 tool_response={"stdout": out, "stderr": "", "exit_code": 1})
+        A.apply(s, e, NOW + 5)
+        kind = s["checks"]["test"]
+        self.assertEqual(kind[:5], ["pytest -q", False, 1, 9, [["test_x", "tests/t.py", 0]]])
+        err = dict(tool("Bash", "t5", "PostToolUseFailure", command="ruff check ."),
+                   error={"type": "execution_error", "message": "a.py:3:1: F401 unused\nFound 1 error."})
+        A.apply(s, err, NOW + 6)
+        self.assertEqual(s["checks"]["lint"][4], [["F401 unused", "a.py", 3]])
+        A.apply(s, dict(tool("Bash", "t6", "PostToolUse", command="git status"), tool_response={"stdout": "x"}), NOW + 7)
+        self.assertEqual(set(s["checks"]), {"test", "lint"})
+
+    def test_pop_ups(self):
+        cfg = {"notify": True, "notify_ask": 20.0, "notify_after": 120.0}
+        s = A.fresh()
+        A.apply(s, dict(ev("UserPromptSubmit"), cwd="/p/api"), NOW)
+        before = (s["turn"], s["ask"][0])
+        A.apply(s, tool("Bash", "t1", "PermissionRequest", command="ls"), NOW + 1)
+        self.assertEqual(A.pop_ups({"hook_event_name": "PermissionRequest"}, before, s, NOW + 1, cfg), [("ask", 20.0)])
+        before = (s["turn"], s["ask"][0])
+        A.apply(s, ev("Stop"), NOW + 200)
+        self.assertEqual(A.pop_ups({"hook_event_name": "Stop"}, before, s, NOW + 200, cfg),
+                         [("done", "Claude finished · api", "after 3m20s")])
+        self.assertEqual(A.pop_ups({"hook_event_name": "Stop"}, (NOW + 150, 0.0), s, NOW + 200, cfg), [])
+        self.assertEqual(A.pop_ups({"hook_event_name": "Stop"}, before, s, NOW + 200, dict(cfg, notify=False)), [])
+
+
 class RecordedTests(unittest.TestCase):
     """A real session's events (claude -p, one Read, a Bash, an Explore subagent), replayed."""
 
@@ -189,6 +267,8 @@ class SegmentTests(unittest.TestCase):
         self.assertEqual(self.one("turn", {"stop": -5, "failed": "rate_limit"}), "stopped: rate limited")
         self.assertEqual(self.one("turn", {"turn": -5, "compacting": True}), "compacting 5s")
         self.assertIsNone(self.one("mode", {"mode": "default"}))
+        self.assertEqual(self.one("turn", {"turn": -90, "ask": [-30, "Bash rm -rf build"]}),
+                         "needs you Bash rm -rf build 30s")
         self.assertIsNone(self.one("tools", {"stop": -5, "recent": [["Read", "a", -30, True, ""]]}))
 
     def test_nothing_without_the_hooks(self):
