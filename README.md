@@ -196,11 +196,29 @@ The bar shows what Claude is doing right now:
 
 | segment | shows |
 |---------|-------|
-| `turn` | `working 2m14s` while Claude answers, `waiting 4m` once it has, `compacting`, or why a turn stopped |
+| `turn` | `working 2m14s` while Claude answers, `needs you Bash rm -rf build` while it waits on a question, `waiting 4m` once it has answered, `compacting`, or why a turn stopped |
 | `tools` | the tool running (the longest-running, if several), what it works on and for how long, then this turn's finished ones: `Bash pytest -q 18s ✓ Edit ×2 · ✓ Read ×2` |
 | `agents` | the subagents at work: kind, task and time |
 | `tasks` | the task list, where the model keeps one: the task in hand and how many are done |
 | `mode` | the permission mode when it is not the default: plan, accept edits, auto, don't ask, bypass |
+
+When Claude waits on you (a permission prompt, a question it asks with
+AskUserQuestion, a plan to approve) and 20 seconds pass without an answer, a desktop pop-up says so,
+and a turn that ran two minutes or more pops one up when it ends.
+`[activity] notify = false` turns them off; `notify_ask` and `notify_after`
+set the seconds. They need `notify-send`.
+
+The `context` segment adds `~6 turns` once 15 or fewer turns fit before
+Claude Code compacts the conversation, at the typical growth of your last
+few turns. It assumes compaction where Claude Code does it by default: at
+the end of the window, or at about 967K tokens in a 1M one, or at
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`. If you set a window with `/autocompact`,
+give the same number of tokens to the segment's `compact_at`. A rate-limit
+segment whose pace runs out before the reset shows when: `→out 15:40`.
+
+After upgrading from 4.2 or earlier, run `statusline.py activity enable`
+once more: it registers the two new hooks (Notification and
+PermissionRequest) that `needs you` reads.
 
 The hooks run in the background (`async`), so no tool call waits for them,
 and each event updates a small file per session that a refresh reads once.
@@ -220,17 +238,21 @@ window:
 
 | panel | shows |
 |-------|-------|
-| `files` | the changed files, conflicts first, with lines added and removed, and a rebase, merge, cherry-pick or bisect in progress with its step |
+| `files` | the changed files, conflicts first, with lines added and removed, and a rebase, merge, cherry-pick or bisect in progress with its step. `✻` marks the files Claude edited this session (with Edit, Write or NotebookEdit; not a `sed -i` in Bash) |
 | `graph` | the commit graph of your branches: hash, branches and tags, subject, age |
 | `branches` | your branches, newest first: how far each is ahead of or behind its upstream, `local` with none, `gone` when the upstream was deleted, `merged` once the default branch has it |
 | `stash` | the stashes; shown only while there is one |
 | `ci` | GitHub Actions on this branch, the latest run of each workflow: failures first, running ones with a live timer, each a link to its run. Shown while there are runs; needs `gh` and a github.com remote |
+| `checks` | the last test, lint and build run Claude made this session: passed and failed counts, then each failure by name with a link to its file and line (pytest, unittest, jest, vitest, cargo, go test, and linters that print `path:line:`). Shown once there is a run; needs live activity |
+| `reviews` | this branch's pull request with its review decision and the comment threads still open, each a link, then the pull requests anywhere on GitHub waiting on your review. Shown while there is something to review; needs `gh` and a github.com remote, and asks at most every two minutes |
+| `sessions` | your other Claude Code sessions on this machine: those that need you first (with what they ask), then those working (with the tool running), then those waiting. Shown while there is one; needs live activity |
+| `fleet` | every Claude Code session on this machine, read from agentboard: each project a star with its sessions in orbit (`!` needs you, pulsing; `✗` a failed background job; `◆` your turn; `◐` working, turning; `○` idle; `◌` never prompted) and their agents as moons, in columns across the terminal. Forks of one session share a row with a count (`×3`). Each session shows its context use (`▰▰▱▱ 47%`), and a working one flashes the tool it just called (`⚡Bash`). Ctrl+Shift+click a title to bring its kitty window or tmux pane forward (needs `statusline.py clicks enable` and kitty remote control), or to open a background session in agentboard's web page. The rows the map leaves show the last hour, a lane of tool calls per session. When no `agentboard web` answers (`AGENTBOARD_URL`, default `http://127.0.0.1:7777`), the bar starts one in the background and runs `agentboard -once -json` meanwhile; `CLAUDE_STATUSLINE_AGENTBOARD=off` stops that. The bar saves Claude Code's payload to `last-payload.json` in its runtime folder (mode 0600) for agentboard's context and limits. Shows outside a repository too. `statusline.py use fleet` gives it 20 rows |
 | `servers` | the dev servers this project runs (any process listening on a port whose working folder is in the repository, Claude's background servers included), each a `http://localhost` link. Shown while one runs; Linux only, and ports Docker publishes do not show |
 
 ```toml
 [panels]
-show = ["files", "graph", ["branches", "ci", "servers", "stash"]]   # a list stacks in one column
-rows = 6              # 1 to 16; the block keeps this height whatever git holds
+show = ["files", "graph", ["branches", "checks", "ci", "stash"], ["sessions", "reviews", "servers"]]   # a list stacks
+rows = 6              # 1 to 40; the block keeps this height whatever git holds
 cache_ttl = 3.0       # seconds a refresh stays fresh; a commit, fetch or stash shows at once
 commits = 40          # commits read for the graph
 notify = true         # a desktop pop-up when a CI run on your commit finishes
@@ -247,7 +269,8 @@ the bar never waits; the first refresh in a repository says `Reading git…`. Th
 follow the terminal's width, and a panel that no longer fits drops, the last
 named first. Each file is a `file://` link, and each commit links to the
 web when Claude Code knows the repository (Ctrl+Shift+click in kitty). The
-panels are hidden in game mode, which takes the whole bar.
+panels are hidden in game mode, which takes the whole bar, and outside a git
+repository, the sessions panel too (the fleet map still shows there).
 
 ## Click to cycle
 
@@ -275,7 +298,9 @@ of = ["limit_5h", "limit_7d"]
 The `dev` preset places these two. Each member keeps its own options. Where
 it has a link of its own (a branch, a pull request), that part opens the link
 and the rest of it cycles. A git panel too long for its rows ends in
-`page 1/3 ›`: click it for the next page. Clicks change only what this
+`page 1/3 ›`: click it for the next page. A failed CI run ends in
+`↻ rerun`: click it, then `yes`, and its failed jobs run again
+(`gh run rerun --failed`). The question lapses after two minutes. Clicks change only what this
 session shows, never your config, and show on the next refresh. Without
 `clicks enable` a cycle shows its first segment and a long panel ends in
 `+7 more`.

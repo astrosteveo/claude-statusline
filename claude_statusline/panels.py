@@ -25,10 +25,13 @@ from .width import char_width, width as cells
 
 # name -> (smallest width, share of the spare columns)
 PANELS = {"files": (26, 3), "graph": (34, 4), "branches": (24, 2), "stash": (24, 2), "ci": (24, 2),
-          "servers": (22, 2)}
+          "servers": (22, 2), "checks": (26, 2), "sessions": (24, 2), "reviews": (26, 2),
+          "fleet": (40, 6)}
 TITLES = {"files": "Changes", "graph": "History", "branches": "Branches", "stash": "Stash", "ci": "CI",
-          "servers": "Servers"}
+          "servers": "Servers", "checks": "Checks", "sessions": "Sessions",
+          "reviews": "Reviews", "fleet": "Fleet"}
 SEP = " │ "
+CLAUDE = "✻"                   # marks a file Claude edited this session
 PAD = (None, None, 0, None)
 
 
@@ -72,33 +75,70 @@ def panel_data(ctx):
                         stashes=[[r[0], when(r[1])] + r[2:] for r in fake.get("stashes") or []],
                         ci=dict(fake["ci"], runs=[r[:6] + [when(r[6]), when(r[7])] + r[8:] for r in fake["ci"]["runs"]])
                         if fake.get("ci") else None,
-                        servers=[[r[0], r[1], when(r[2])] for r in fake.get("servers") or []])
-        if not ctx.comp["git"].get("enabled", True):
-            return None
-        from .gitpanels import data
+                        servers=[[r[0], r[1], when(r[2])] for r in fake.get("servers") or []],
+                        sessions=[[r[0], r[1], when(r[2]), r[3]] for r in fake.get("sessions") or []],
+                        reviews=dict(fake["reviews"], asked=[r[:5] + [when(r[5])] + r[6:]
+                                                             for r in fake["reviews"]["asked"]])
+                        if fake.get("reviews") else None)
         cfg = ctx.comp.get("panels") or {}
-        d = data(ctx.cwd, cfg, ctx.comp["git"], sync=ctx.sync_git, spawn=ctx.live)
-        if d is None:
-            return None
         shown = {n for c in cfg.get("show") or [] for n in members(c)}
+        fleet = None
+        if "fleet" in shown:                       # every session on the machine, so it needs no repository
+            from .fleet import data as fleet_data, save_payload
+            if ctx.live:                           # agentboard reads it for context windows and limits
+                save_payload(ctx.data, ctx.now)
+            fleet = fleet_data(sync=ctx.sync_git, spawn=ctx.live)
+        d = None
+        if ctx.comp["git"].get("enabled", True):
+            from .gitpanels import data
+            d = data(ctx.cwd, cfg, ctx.comp["git"], sync=ctx.sync_git, spawn=ctx.live)
+        if d is None:
+            return {"fleet": fleet, "nogit": True} if "fleet" in shown else None
+        d["fleet"] = fleet
         if "ci" in shown:
             from .ci import data as ci_data
             d["ci"] = ci_data(d["root"], d["gitdir"], d["common"], cfg, sync=ctx.sync_git, spawn=ctx.live)
         if "servers" in shown:
             from .servers import data as server_data
             d["servers"] = server_data(d["root"], sync=ctx.sync_git, spawn=ctx.live)
+        if "reviews" in shown:
+            from .reviews import data as review_data
+            d["reviews"] = review_data(d["root"], d["gitdir"], sync=ctx.sync_git, spawn=ctx.live)
+        if "sessions" in shown:
+            from .sessions import others
+            d["sessions"] = others(ctx.data.get("session_id"), ctx.now) if ctx.live else []
         return d
     return ctx.memo("panels", get)
 
 
+def with_activity(ctx, d):
+    """The panel data plus what this session's activity knows: the files Claude edited and the
+    last test, lint and build runs."""
+    from .segments.live import activity
+    s = activity(ctx) or {}
+    return dict(d, edited=s.get("edited") or {}, checks=s.get("checks") or {})
+
+
 def _says(d, name):
     """Whether a panel that shows only when it has something to say has it."""
+    if name == "fleet":
+        return True
+    if d.get("nogit"):
+        return False
     if name == "stash":
         return bool(d.get("stashes"))
     if name == "ci":
         return bool((d.get("ci") or {}).get("runs"))
     if name == "servers":
         return bool(d.get("servers"))
+    if name == "sessions":
+        return bool(d.get("sessions"))
+    if name == "checks":
+        return bool(d.get("checks"))
+    if name == "reviews":
+        r = d.get("reviews") or {}
+        mine = r.get("mine")
+        return bool(r.get("asked") or mine and (mine[4] or mine[3] == "CHANGES_REQUESTED"))
     return True
 
 
@@ -131,6 +171,7 @@ def block(ctx, rows):
     d = panel_data(ctx)
     if d is None:
         return None
+    d = with_activity(ctx, d)
     cfg = ctx.comp.get("panels") or {}
     cols = [[n for n in members(c) if not d.get("pending") and _says(d, n) or
              d.get("pending") and n in ("files", "graph", "branches")] for c in cfg.get("show") or []]
@@ -139,7 +180,7 @@ def block(ctx, rows):
         return None
     drawn = []
     for col, w in cols:
-        if d.get("pending"):                        # the titles at once, so nothing moves when git answers
+        if d.get("pending") and "fleet" not in members(col):   # the titles at once, so nothing moves when git answers
             lines = [_head(ctx, members(col)[0], w=w)] + \
                 ([Text.of("Reading git…", _st(ctx, "muted"))] if not drawn else [])
         else:
@@ -154,7 +195,7 @@ def block(ctx, rows):
                 t.extend(sep)
             t.extend(col[r])
         if not t.plain().strip():                   # Claude Code trims a row of spaces away: a blank
-            t = Text([("⠀", PAD)] + t.clip(t.width - 1).spans)    # braille cell is not whitespace
+            t = Text([("⠀", PAD)])                 # braille cell is not whitespace
         out.append(t)
     return out
 
@@ -236,10 +277,12 @@ def age(ctx, ts):
     return f"{int(s // (86400 * 365))}y"
 
 
-def _head(ctx, name, count=None, right=None, w=0):
+def _head(ctx, name, count=None, right=None, w=0, extra=None):
     left = Text.of(TITLES[name], _st(ctx, "accent", BOLD))
     if count is not None:
         left.add(f" {count}", _st(ctx, "muted"))
+    if extra:
+        left.extend(extra)
     return _row(left, right or Text(), w)
 
 
@@ -291,7 +334,11 @@ def files(ctx, d, w, rows):
         total.add(f"+{added}", _st(ctx, "green"))
     if removed:
         total.add((" " if added else "") + f"-{removed}", _st(ctx, "red"))
-    out = [_head(ctx, "files", len(fs) if fs else None, total, w)]
+    edited = d.get("edited") or {}
+    root = d.get("root") or ""
+    claude = {f[1] for f in fs if os.path.join(root, f[1]) in edited}
+    mine = Text.of(f" {CLAUDE}{len(claude)}", _st(ctx, "accent")) if claude else None
+    out = [_head(ctx, "files", len(fs) if fs else None, total, w, mine)]
     p = d.get("progress")
     if p:
         out.append(_row(*_progress(ctx, p), w))
@@ -312,7 +359,7 @@ def files(ctx, d, w, rows):
         room = w - 3 - (right.width + 1 if right else 0)
         shown_path = _tail(path, max(4, room))
         head, base = os.path.split(shown_path)
-        left = _code(ctx, xy).add(" ")
+        left = _code(ctx, xy).add(CLAUDE if path in claude else " ", _st(ctx, "accent"))
         link = ("file://" + _quote(os.path.join(d["root"], path))) if d.get("root") else None
         if head:
             left.add(head + "/", _st(ctx, "subtext", 0, link))
@@ -467,6 +514,7 @@ def ci(ctx, d, w, rows):
         Text.of("CI", _st(ctx, "accent", BOLD)).add(" stale", _st(ctx, "muted"))
     out = [_row(head, right, w) if right else head]
     shown, more = _page(ctx, "ci", runs, rows)
+    rerun = _rerun_links(ctx, d, runs)
     for r in shown:
         _, glyph, role = _run_state(r)
         left = Text.of(glyph + " ", _st(ctx, role)).add(r[1], _st(ctx, "text", 0, r[8] or None))
@@ -475,9 +523,34 @@ def ci(ctx, d, w, rows):
                            _clock(ctx.now - r[6]) if r[6] else r[3], _st(ctx, "yellow"))
         else:
             when = Text.of(age(ctx, r[7] or r[6]), _st(ctx, "muted"))
+        if r[0] in rerun:
+            when = rerun[r[0]].add(" ", PAD).extend(when)
         out.append(_row(left, when, w))
     if more:
         out.append(more)
+    return out
+
+
+def _rerun_links(ctx, d, runs):
+    """{run id: Text} for the failed runs a click can rerun: `rerun`, or `rerun? yes no` once asked."""
+    from .ci import RERUNNABLE, cache_tag, pending
+    from .menu import cycle_link, link, session_of
+    failed = [r for r in runs if r[3] == "completed" and r[4] in RERUNNABLE]
+    if not failed or not d.get("root") or not cycle_link(ctx, "ci"):
+        return {}
+    sid = session_of(ctx.data) or "sample"
+    asked = ctx.data.get("_rerun") if isinstance(ctx.data.get("_rerun"), dict) else \
+        (pending(sid, ctx.now) if ctx.live else None)
+    tag = cache_tag(d["root"])
+    out = {}
+    for r in failed:
+        if asked and asked.get("run") == r[0]:
+            t = Text.of("rerun?", _st(ctx, "orange", BOLD)).add(" ", PAD)
+            t.add("yes", _st(ctx, "green", BOLD, link(sid, "rerun", "yes", str(asked.get("token")), "-")))
+            t.add(" ", PAD).add("no", _st(ctx, "muted", 0, link(sid, "rerun", "no", "-", "-")))
+        else:
+            t = Text.of("↻ rerun", _st(ctx, "subtext", 0, link(sid, "rerun", "ask", tag, str(r[0]))))
+        out[r[0]] = t
     return out
 
 
@@ -504,4 +577,304 @@ def servers(ctx, d, w, rows):
     return out
 
 
-DRAW = {"files": files, "graph": graph, "branches": branches, "stash": stash, "ci": ci, "servers": servers}
+KINDS = (("test", "tests"), ("lint", "lint"), ("build", "build"))
+
+
+def checks(ctx, d, w, rows):
+    """The last test, lint and build runs this session: failures first, then each failure by name."""
+    cs = d.get("checks") or {}
+    runs = sorted(((k, label, cs[k]) for k, label in KINDS if k in cs), key=lambda r: r[2][1])
+    bad = sum(1 for r in runs if not r[2][1])
+    right = Text.of(f"✗{bad}", _st(ctx, "red")) if bad else Text.of(ctx.mark("ok") or "✓", _st(ctx, "green"))
+    out = [_head(ctx, "checks", right=right, w=w)]
+    items = []
+    for kind, label, (cmd, ok, n, passed, names, at, cwd) in runs:
+        left = Text.of((ctx.mark("ok") or "✓") if ok else (ctx.mark("fail") or "✗"), _st(ctx, "green" if ok else "red"))
+        left.add(f" {label}", _st(ctx, "text", BOLD))
+        if not ok:
+            left.add(f" {n} failed", _st(ctx, "red"))
+        if passed is not None:
+            left.add((" ·" if not ok else "") + f" {passed} passed", _st(ctx, "muted"))
+        items.append(_row(left, Text.of(age(ctx, at), _st(ctx, "muted")), w))
+        root = d.get("root") or cwd
+        for name, path, line in names:
+            t = Text.of("  ")
+            full = path if os.path.isabs(path) else os.path.join(cwd or root, path) if path else ""
+            rel = os.path.relpath(full, root) if full and root and full.startswith(root + "/") else path
+            where = Text()
+            if rel:
+                where.add(_tail(os.path.basename(rel), max(8, w // 3)) + (f":{line}" if line else ""),
+                          _st(ctx, "subtext", 0, "file://" + _quote(full)))
+            t.add(name, _st(ctx, "text", 0, "file://" + _quote(full) if full else None))
+            items.append(_row(t, where, w))
+    shown, more = _page(ctx, "checks", items, rows)
+    out += shown
+    if more:
+        out.append(more)
+    return out
+
+
+SESSION = {"ask": ("!", "red", "needs you"), "work": ("●", "accent", ""), "wait": ("○", "muted", "waiting")}
+
+
+def sessions(ctx, d, w, rows):
+    """Your other Claude Code sessions: those that need you, those working, those waiting."""
+    ss = d.get("sessions") or []
+    asks = sum(1 for r in ss if r[1] == "ask")
+    right = Text.of(f"{asks} need{'s' if asks == 1 else ''} you", _st(ctx, "red", BOLD)) if asks else None
+    out = [_head(ctx, "sessions", len(ss), right, w)]
+    shown, more = _page(ctx, "sessions", ss, rows)
+    for project, state, since, what in shown:
+        glyph, role, word = SESSION.get(state, SESSION["wait"])
+        left = Text.of(glyph + " ", _st(ctx, role, BOLD)).add(project, _st(ctx, "text", BOLD))
+        if word and state == "ask":
+            left.add(" " + word, _st(ctx, "red"))
+        if what:
+            left.add(" " + " ".join(what.split()), _st(ctx, "subtext"))
+        out.append(_row(left, Text.of(_clock(ctx.now - since), _st(ctx, role if state != "work" else "muted")), w))
+    if more:
+        out.append(more)
+    return out
+
+
+DECISION = {"CHANGES_REQUESTED": ("changes requested", "red"), "APPROVED": ("approved", "green"),
+            "REVIEW_REQUIRED": ("review required", "yellow")}
+
+
+def reviews(ctx, d, w, rows):
+    """This branch's pull request with its open threads, then the pull requests waiting on your review."""
+    r = d.get("reviews") or {}
+    mine, asked = r.get("mine"), r.get("asked") or []
+    right = Text.of(f"{len(asked)} for you", _st(ctx, "yellow", BOLD)) if asked else None
+    head = _head(ctx, "reviews", w=w, right=right)
+    if r.get("stale"):
+        head = _row(Text.of("Reviews", _st(ctx, "accent", BOLD)).add(" stale", _st(ctx, "muted")), right, w)
+    out, items = [head], []
+    if mine:
+        number, title, url, decision, threads = mine
+        left = Text.of(f"#{number}", _st(ctx, "cyan", BOLD, url or None))
+        word, role = DECISION.get(decision, ("", "muted"))
+        if word:
+            left.add(" " + word, _st(ctx, role))
+        if threads:
+            left.add(f" · {len(threads)} open", _st(ctx, "orange"))
+        items.append(_row(left, Text.of("this branch", _st(ctx, "muted")), w))
+        for path, line, author, body, link, outdated in threads:
+            t = Text.of("  ")
+            if author:
+                t.add(author + " ", _st(ctx, "subtext", BOLD, link or None))
+            t.add(body, _st(ctx, "muted" if outdated else "text", 0, link or None))
+            where = Text.of(_tail(os.path.basename(path), max(8, w // 3)) + (f":{line}" if line else ""),
+                            _st(ctx, "subtext")) if path else Text()
+            items.append(_row(t, where, w))
+    for repo, number, title, url, author, updated, draft in asked:
+        left = Text.of(f"{repo.rsplit('/', 1)[-1]}#{number}", _st(ctx, "yellow", 0, url or None))
+        left.add(" " + title, _st(ctx, "muted" if draft else "text", 0, url or None))
+        right = Text.of((author + " " if author else "") + age(ctx, updated), _st(ctx, "muted"))
+        items.append(_row(left, right, w))
+    shown, more = _page(ctx, "reviews", items, rows)
+    out += shown
+    if more:
+        out.append(more)
+    return out
+
+
+FLEET = {"needs": ("!", "red"), "turn": ("◆", "pink"), "working": ("●", "accent"), "settled": ("○", "muted")}
+FLEET_ORDER = {"needs": 0, "turn": 1, "working": 2, "settled": 3}
+FLEET_COL = 56                  # the narrowest column of systems
+SPIN = "◐◓◑◒"                    # a working session turns, one step a second
+FLARE = 5.0                     # seconds a tool call's name flashes on its session
+SPARK = " ▁▂▃▄▅▆▇█"
+
+
+def _glyph(ctx, r):
+    if r.get("fresh"):
+        return "◌", "subtle"
+    if r.get("failed"):
+        return "✗", "red"
+    if r["section"] == "working":
+        return SPIN[int(ctx.now) % len(SPIN)], "accent"
+    if r["section"] == "needs":                    # pulses while it waits on you
+        return "!", "red" if int(ctx.now) % 2 else "orange"
+    return FLEET[r["section"]]
+
+
+def _context(ctx, r):
+    """The session's context use in percent: agentboard's, or worked out from this session's
+    window when it runs the same model and the tokens fit in it."""
+    if r.get("ctx") is not None:
+        return r["ctx"]
+    cw = ctx.data.get("context_window") or {}
+    size = cw.get("context_window_size") if isinstance(cw, dict) else None
+    model = (ctx.data.get("model") or {}).get("id") if isinstance(ctx.data.get("model"), dict) else None
+    if isinstance(size, int) and size > 0 and model and r.get("model") == model and 0 < r.get("tokens", 0) <= size:
+        return r["tokens"] * 100 // size
+    return None
+
+
+def _meter(ctx, pct):
+    """`▰▰▱▱ 47%`, coloured by the thresholds."""
+    th = ctx.comp.get("thresholds") or {}
+    role = "red" if pct >= th.get("red", 90) else "orange" if pct >= th.get("orange", 75) else \
+        "yellow" if pct >= th.get("yellow", 50) else "green"
+    full = min(4, (pct + 12) // 25)
+    return Text.of("▰" * full, _st(ctx, role)).add("▱" * (4 - full), _st(ctx, "subtle")) \
+        .add(f" {pct}%", _st(ctx, role)).add(" ")
+
+
+def _open_link(ctx, f, r):
+    """Where a click on a session goes: its window brought forward, or its page in agentboard."""
+    if r.get("window"):
+        from .menu import focus_link
+        return focus_link(ctx, r["key"])
+    if f.get("src") == "web":
+        from urllib.parse import quote
+        from .fleet import PAGE_URL
+        return f"{PAGE_URL}/#/queue/session/{quote(r['key'], safe='')}/conversation"
+    return None
+
+
+def _system(ctx, f, project, ss, w, own):
+    """One project as a star with its sessions in orbit and their agents as moons."""
+    worst = min(ss, key=lambda r: FLEET_ORDER[r["section"]])["section"]
+    out = [Text.of("★ ", _st(ctx, FLEET[worst][1], BOLD)).add(project, _st(ctx, "text", BOLD))
+           .add(f" {sum(r.get('count', 1) for r in ss)}", _st(ctx, "muted"))]
+    for i, r in enumerate(ss):
+        last = i == len(ss) - 1
+        glyph, role = _glyph(ctx, r)
+        left = Text.of("└ " if last else "├ ", _st(ctx, "subtle")).add(glyph + " ", _st(ctx, role, BOLD))
+        if r.get("fork"):
+            left.add("⑂ ", _st(ctx, "muted"))
+        left.add(r["title"], _st(ctx, "text", BOLD if r["section"] != "settled" else 0, _open_link(ctx, f, r)))
+        if r.get("count", 1) > 1:
+            left.add(f" ×{r['count']}", _st(ctx, "muted", BOLD))
+        if own and own in (r.get("sids") or [r.get("sid")]):
+            left.add(" ◂ here", _st(ctx, "accent", BOLD))
+        for flag in r.get("flags") or []:
+            left.add(f" ⚠{flag}", _st(ctx, "orange"))
+        flare = r.get("flare")
+        if flare and r["section"] == "working" and 0 <= ctx.now - flare[0] < FLARE:
+            left.add(f" ⚡{flare[1]}", _st(ctx, "yellow", BOLD))
+        when = _clock(ctx.now - r["since"]) if r["section"] == "working" else age(ctx, r["since"])
+        right = Text()
+        pct = _context(ctx, r)
+        if pct is not None and w >= 48:
+            right.extend(_meter(ctx, pct))
+        right.add(r.get("where", ""), _st(ctx, "subtle")).add(" " + when if when else "", _st(ctx, role))
+        orbit = "  " if last else "│ "
+        what = r.get("what") if r["section"] != "settled" else ""    # an idle session's last reply is old news
+        if r.get("failed") and what.lower().startswith("failed"):    # ✗ says it already
+            what = ""
+        style = _st(ctx, "red" if r["section"] == "needs" and not r.get("failed") else "subtext")
+        if what and left.width + 1 + cells(what) + 1 + right.width <= w:    # short: on the same line
+            left.add(" " + what, style)
+            what = ""
+        out.append(_row(left, right, w))
+        if what:
+            out.append(Text.of(orbit + "  ", _st(ctx, "subtle")).add(what, style))
+        for a in r.get("agents") or []:
+            out.append(Text.of(orbit, _st(ctx, "subtle")).add("  ◦ ", _st(ctx, "cyan")).add(a, _st(ctx, "subtext")))
+    return out
+
+
+def _timeline(ctx, f, ss, w, lanes):
+    """The fleet's last hour: a lane per busy session, a bar for each slice of time by its tool calls."""
+    span = float(f.get("window") or 3600)
+    busy = [r for r in ss if any(ctx.now - t <= span for t in r.get("ticks") or [])][:lanes]
+    if not busy:
+        return []
+    label_w = max(10, min(24, w // 5))
+    n = max(1, w - label_w - 1)
+    counts = []
+    for r in busy:
+        c = [0] * n
+        for t in r["ticks"]:
+            age_ = ctx.now - t
+            if 0 <= age_ <= span:
+                c[min(n - 1, int((span - age_) / span * n))] += 1
+        counts.append(c)
+    top = max(max(c) for c in counts) or 1
+    mins = int(span // 60)
+    out = [_row(Text.of("Activity", _st(ctx, "accent", BOLD)).add(f" {mins}m", _st(ctx, "muted")),
+                Text.of("now", _st(ctx, "muted")), w)]
+    for r, c in zip(busy, counts):
+        glyph, role = _glyph(ctx, r)
+        label = _exact(Text.of(glyph + " ", _st(ctx, role, BOLD)).add(r["title"], _st(ctx, "subtext")), label_w)
+        bars = "".join(SPARK[0 if not v else max(1, round(v / top * 8))] for v in c)
+        out.append(label.add(" ").add(bars, _st(ctx, role if r["section"] != "settled" else "muted")))
+    return out
+
+
+def fleet(ctx, d, w, rows):
+    """Every Claude Code session on the machine, from agentboard: each project a star, its
+    sessions in orbit around it and their agents as moons, laid out in columns like a map, with
+    the last hour's activity in the rows left under it."""
+    try:
+        return _fleet(ctx, d, w, rows)
+    except Exception:                              # a bad row must not cost the session its bar
+        if os.environ.get("CLAUDE_STATUSLINE_DEBUG"):
+            raise
+        return [_head(ctx, "fleet", w=w), Text.of("The map hit an error; agentboard's data looks new.",
+                                                  _st(ctx, "muted"))]
+
+
+def _fleet(ctx, d, w, rows):
+    f = d.get("fleet")
+    if f is None:
+        return [_head(ctx, "fleet", w=w), Text.of("Asking agentboard…", _st(ctx, "muted"))]
+    if f.get("missing"):
+        return [_head(ctx, "fleet", w=w), Text.of("agentboard isn't installed or didn't answer. "
+                                                  "Install it, or run `agentboard web`.", _st(ctx, "muted"))]
+    ss = f.get("rows") or []
+    total = sum(r.get("count", 1) for r in ss)
+    count = {k: sum(r.get("count", 1) for r in ss if r["section"] == k) for k in FLEET}
+    extra = Text()
+    for k, word in (("needs", "need you"), ("turn", "your turn"), ("working", "working")):
+        if count[k]:
+            extra.add(f" · {count[k]} {word}", _st(ctx, FLEET[k][1], BOLD if k == "needs" else 0))
+    stale = ctx.now - float(f.get("at") or ctx.now)
+    right = Text.of(f"stale {age(ctx, f['at'])}", _st(ctx, "orange")) if stale > 60 else None
+    groups = {}
+    for r in ss:                                  # already in queue order, so a star's place is its first session's
+        groups.setdefault(r["project"], []).append(r)
+    ncols = max(1, min(len(groups), (w + len(SEP)) // (FLEET_COL + len(SEP))))
+    cw = (w - len(SEP) * (ncols - 1)) // ncols
+    room = max(0, rows - 1)
+    cols, hidden = [[] for _ in range(ncols)], 0
+    own = ctx.data.get("session_id")
+    for project, members_ in groups.items():
+        lines = _system(ctx, f, project, members_, cw, own)
+        col = min(cols, key=len)
+        gap = 1 if col else 0
+        free = room - len(col) - gap
+        if free < 2:
+            hidden += sum(r.get("count", 1) for r in members_)
+            continue
+        if len(lines) > free:
+            cut = sum(1 for t in lines[free - 1:] if t.plain()[:1] in "├└")
+            lines = lines[:free - 1] + [Text.of(f"  +{cut} more", _st(ctx, "muted"))]
+        col += [Text()] * gap + lines
+    if hidden:                                    # on the right, which gives way last
+        note = Text.of(f"{hidden} off the map", _st(ctx, "muted"))
+        right = note.add(" ").extend(right) if right else note
+    out = [_head(ctx, "fleet", total, right, w, extra)]
+    sep = Text.of(SEP, _st(ctx, "subtle"))
+    for i in range(max((len(c) for c in cols), default=0)):
+        t = Text()
+        for j, c in enumerate(cols):
+            if j:
+                t.extend(sep)
+            t.extend(_exact(c[i] if i < len(c) else Text(), cw))
+        out.append(t)
+    if not ss:
+        out.append(Text.of("No sessions.", _st(ctx, "muted")))
+    spare = rows - len(out)
+    if spare >= 3:                                # the rows the map leaves: the fleet's last hour
+        tl = _timeline(ctx, f, ss, w, spare - 2)
+        if tl:
+            out += [Text()] + tl
+    return out
+
+
+DRAW = {"fleet": fleet, "files": files, "graph": graph, "branches": branches, "stash": stash, "ci": ci, "servers": servers,
+        "checks": checks, "sessions": sessions, "reviews": reviews}

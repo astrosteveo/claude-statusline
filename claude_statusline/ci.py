@@ -165,3 +165,87 @@ def pop_up(run):
             "timed_out": "timed out"}.get(run[4], run[4] or "finished")
     spawn_detached(["notify-send", "-a", "claude-statusline", "-i", "dialog-information" if ok else "dialog-error",
                     f"{run[1]} {word}", run[2]])
+
+
+# ---- rerunning a failed run from the panel --------------------------------------------------
+# A link anything in the terminal can print must not spend CI minutes, so a rerun takes two
+# clicks. `rerun/ask/<cache tag>/<run>` only remembers the run, and only one that the cache holds
+# as failed; the panel then shows `rerun? yes · no`, and the yes link carries a fresh random
+# token that only the bar has seen. The question lapses after CONFIRM seconds.
+CONFIRM = 120.0
+RERUNNABLE = ("failure", "timed_out", "cancelled", "startup_failure")
+
+
+def pending_path(sid):
+    from .config import runtime_dir
+    return os.path.join(runtime_dir(), f"rerun-{sid}.json")
+
+
+def pending(sid, now):
+    """The rerun this session is asking about ({"run", "token", "at", "name"}), or None."""
+    import json
+    try:
+        with open(pending_path(sid)) as fh:
+            p = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(p, dict) or now - float(p.get("at") or 0) > CONFIRM:
+        return None
+    return p
+
+
+def cache_tag(root):
+    return os.path.basename(_paths(root, "ci")[0])[3:-4]
+
+
+def _cached_run(tag, run):
+    from .config import runtime_dir
+    if not (tag.isalnum() and run.isdigit()):
+        return None
+    blob = _load(os.path.join(runtime_dir(), f"ci-{tag}.bin"))
+    runs = ((blob or {}).get("data") or {}).get("runs") or [] if isinstance(blob, dict) else []
+    return next((r for r in runs if str(r[0]) == run and r[3] == "completed" and r[4] in RERUNNABLE), None)
+
+
+def rerun_click(sid, args, now):
+    """What a rerun link does: ask, yes or no. Returns what it did; ValueError when it may not."""
+    import json
+    import secrets
+    step = args[0]
+    path = pending_path(sid)
+    if step == "ask":
+        r = _cached_run(args[1], args[2])
+        if r is None:
+            raise ValueError("no such failed run")
+        p = {"run": r[0], "name": r[1], "url": r[8], "tag": args[1], "token": secrets.token_hex(8), "at": now}
+        tmp = f"{path}.{os.getpid()}"
+        with open(tmp, "w") as fh:
+            json.dump(p, fh)
+        os.replace(tmp, path)
+        return f"rerun {r[1]}?"
+    p = pending(sid, now)
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+    if step == "no":
+        return "kept the run as it is"
+    if step != "yes" or not p or not secrets.compare_digest(str(p.get("token")), args[1]):
+        raise ValueError("that rerun button has lapsed")
+    from .reviews import owner_name
+    where = owner_name((p.get("url") or "").split("/actions/")[0])
+    if not where or _cached_run(p["tag"], str(p["run"])) is None:
+        raise ValueError("that run is no longer a failed one")
+    from .gitstatus import spawn_detached
+    import shutil
+    gh = shutil.which("gh")
+    if not gh:
+        raise ValueError("gh is not installed")
+    spawn_detached([gh, "run", "rerun", str(p["run"]), "--failed", "--repo", "/".join(where)])
+    from .config import runtime_dir
+    cache = os.path.join(runtime_dir(), f"ci-{p['tag']}.bin")
+    blob = _load(cache)
+    if isinstance(blob, dict):
+        blob["ts"] = 0                  # ask again on the next refresh: the run is queued now
+        _save(cache, blob)
+    return f"rerunning the failed jobs of {p['name']}"

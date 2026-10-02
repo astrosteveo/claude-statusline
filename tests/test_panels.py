@@ -195,7 +195,7 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual([ln.get("panel") for ln in comp["lines"]][:4], [None, None, None, 0])
 
     def test_bad_settings(self):
-        comp = compile_config({"panels": {"show": ["files", "grpah"], "rows": 40}})
+        comp = compile_config({"panels": {"show": ["files", "grpah"], "rows": 41}})
         where = [p[1] for p in comp["problems"]]
         self.assertIn("panels.show", where)
         self.assertIn("panels.rows", where)
@@ -214,7 +214,7 @@ class LayoutTests(unittest.TestCase):
             self.assertTrue(cols)
             self.assertEqual(sum(w for _, w in cols) + len(SEP) * (len(cols) - 1), avail)
             self.assertEqual([n for n, _ in cols], names[:len(cols)])
-        self.assertEqual(len(columns(300, names)), 6)
+        self.assertEqual(len(columns(300, names)), len(PANELS))
 
     def test_a_stack_is_as_wide_as_its_widest_panel(self):
         cols = columns(100, ["files", "graph", ["branches", "ci", "servers"]])

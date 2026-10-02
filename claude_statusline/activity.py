@@ -18,9 +18,14 @@ import time
 
 EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure",
           "SubagentStart", "SubagentStop", "Stop", "StopFailure", "PreCompact", "PostCompact",
-          "TaskCreated", "TaskCompleted", "SessionEnd")
+          "TaskCreated", "TaskCompleted", "SessionEnd", "Notification", "PermissionRequest")
 TOOL_EVENTS = ("PreToolUse", "PostToolUse", "PostToolUseFailure")
-VERSION = 1
+# Notifications that mean Claude is stuck until you answer (idle_prompt only says it is waiting).
+ASKS = ("permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input")
+ASK_TOOLS = ("AskUserQuestion", "ExitPlanMode")      # tools that wait for you to answer
+EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
+VERSION = 2
+EDITED = 300                  # files Claude edited, remembered for the changes panel
 KEEP_ENDED = 120.0            # seconds an end mark waits for a start that arrives late
 TOOL_EXPIRES = 1800.0         # a tool with no end is forgotten after this long
 AGENT_EXPIRES = 4 * 3600.0
@@ -37,7 +42,8 @@ def path(session_id):
 def fresh():
     return {"v": VERSION, "at": 0.0, "turn": 0.0, "stop": 0.0, "failed": "", "tools": {}, "ended": {},
             "recent": [], "agents": {}, "pending": [], "compact": [0.0, 0.0, ""], "compactions": 0,
-            "tasks": {}, "mode": "", "calls": 0, "closed": 0.0}
+            "tasks": {}, "mode": "", "calls": 0, "closed": 0.0,
+            "cwd": "", "ask": [0.0, "", "", ""], "edited": {}, "checks": {}}
 
 
 # --- what a tool call is about ---------------------------------------------------------
@@ -78,6 +84,27 @@ def tool_label(name):
     return name
 
 
+def _question(tool, tool_input):
+    """What a tool that waits on you asks: the first question, or the plan to approve."""
+    ti = tool_input if isinstance(tool_input, dict) else {}
+    if tool == "ExitPlanMode":
+        return "approve the plan"
+    qs = ti.get("questions")
+    q = qs[0] if isinstance(qs, list) and qs and isinstance(qs[0], dict) else {}
+    return " ".join(str(q.get("question") or ti.get("question") or "a question").split())[:200]
+
+
+def _answered(ask, name, tid, agent):
+    """Whether `name` means the question in `ask` has been answered. A question about a tool call
+    lasts until that call ends; one with no call until the main thread uses a tool. A new prompt,
+    the end of the turn or of the session answers either. Subagents working on answer nothing."""
+    if name in ("UserPromptSubmit", "Stop", "StopFailure", "SessionEnd"):
+        return True
+    if ask[3]:
+        return name in ("PostToolUse", "PostToolUseFailure") and tid == ask[3]
+    return name in TOOL_EVENTS and not agent
+
+
 # --- folding one event in ----------------------------------------------------------------
 def apply(s, event, now):
     """Fold one hook event into the state `s` (changed in place). False to delete the file."""
@@ -85,17 +112,24 @@ def apply(s, event, now):
     if s.get("closed") and name != "SessionStart":
         return True                        # async events that arrive after the session ended change nothing
     s["closed"] = 0.0
+    cwd = event.get("cwd")
+    if isinstance(cwd, str) and cwd:
+        s["cwd"] = cwd
+    tid = str(event.get("tool_use_id") or "")
+    agent = str(event.get("agent_id") or "")
+    if s["ask"][0] and _answered(s["ask"], name, tid, agent):
+        s["ask"] = [0.0, "", "", ""]
     mode = event.get("permission_mode")
     if isinstance(mode, str) and mode:
         s["mode"] = mode
-    agent = str(event.get("agent_id") or "")
     if name in TOOL_EVENTS:
-        tid = str(event.get("tool_use_id") or "")
         tool = str(event.get("tool_name") or "?")
         if name == "PreToolUse":
             if tid and tid not in s["ended"]:
                 s["tools"][tid] = [tool, target(tool, event.get("tool_input")), now, agent]
                 s["calls"] += 1
+                if tool in ASK_TOOLS and not agent:
+                    s["ask"] = [now, _question(tool, event.get("tool_input")), "question", tid]
             if tool == "Agent":
                 ti = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
                 s["pending"].append([str(ti.get("subagent_type") or "general-purpose"),
@@ -110,6 +144,20 @@ def apply(s, event, now):
                                 now, ok, agent])
             s["recent"] = s["recent"][-RECENT:]
             _task_tool(s, tool, event.get("tool_input"), event.get("tool_response"))
+            ti = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
+            if ok and tool in EDIT_TOOLS:
+                fp = ti.get("file_path") or ti.get("notebook_path")
+                if isinstance(fp, str) and fp:
+                    s["edited"].pop(fp, None)
+                    s["edited"][fp] = now
+                    if len(s["edited"]) > EDITED:
+                        s["edited"] = dict(list(s["edited"].items())[-EDITED:])
+            resp = event.get("tool_response")
+            if tool == "Bash" and not (isinstance(resp, dict) and resp.get("interrupted")):
+                from .checks import failed, output_of, summary
+                found = summary(ti.get("command"), output_of(event), failed(event))
+                if found:
+                    s["checks"][found[0]] = found[1:] + [now, s["cwd"]]
         if agent in s["agents"]:
             a = s["agents"][agent]
             a[3], a[4] = tool, target(tool, event.get("tool_input"))
@@ -149,6 +197,15 @@ def apply(s, event, now):
             done = name == "TaskCompleted"
             s["tasks"][tid] = [str(event.get("task_subject") or ""), "completed" if done else
                                (s["tasks"].get(tid, [0, "pending"])[1])]
+    elif name == "Notification":
+        kind = str(event.get("notification_type") or "")
+        if kind in ASKS and not s["ask"][0]:
+            s["ask"] = [now, str(event.get("message") or "")[:200], kind, ""]
+    elif name == "PermissionRequest":
+        if tid not in s["ended"]:          # an async hook can land after the tool it asked about ran
+            tool = str(event.get("tool_name") or "?")
+            what = target(tool, event.get("tool_input"))
+            s["ask"] = [now, f"{tool_label(tool)} {what}".strip(), "permission", tid]
     elif name == "SessionEnd":
         s["closed"] = now
         s["tools"], s["agents"] = {}, {}
@@ -213,12 +270,13 @@ def shown(session_id):
 
 
 def record(event, now=None):
-    """Fold `event` into its session's file, under the session's lock."""
+    """Fold `event` into its session's file, under the session's lock. Returns (state before
+    the event's turn and ask, state after) for the pop-ups."""
     import fcntl
     import marshal
     sid = event.get("session_id")
     if not sid:
-        return
+        return None
     now = time.time() if now is None else now
     dest = path(sid)
     with open(dest + ".lock", "w") as lock:
@@ -226,19 +284,69 @@ def record(event, now=None):
         s = load(sid)
         if s is None or now - float(s.get("at") or 0) > STALE:
             s = fresh()
+        before = (s["turn"], s["ask"][0])
         apply(s, event, now)
         tmp = f"{dest}.{os.getpid()}"
         with open(tmp, "wb") as fh:
             fh.write(marshal.dumps(s))
         os.replace(tmp, dest)
+    return before, s
+
+
+def _cfg() -> dict:
+    try:
+        from .config import compiled
+        return compiled()["activity"]
+    except Exception:
+        return {}
 
 
 def enabled() -> bool:
-    try:
-        from .config import compiled
-        return bool(compiled()["activity"].get("enabled"))
-    except Exception:
-        return False
+    return bool(_cfg().get("enabled"))
+
+
+# --- pop-ups ----------------------------------------------------------------------------------
+def project_of(s):
+    return _base(s.get("cwd")) or "Claude"
+
+
+def pop_ups(event, before, s, now, cfg):
+    """What to do after an event: [("ask", seconds)] to check back on a question, or
+    [("done", title, body)] for a long turn that just ended."""
+    if not cfg.get("notify", True):
+        return []
+    name = event.get("hook_event_name")
+    if s["ask"][0] and s["ask"][0] != before[1]:
+        return [("ask", max(0.0, float(cfg.get("notify_ask", 20.0))))]
+    if name in ("Stop", "StopFailure") and before[0]:
+        took = now - before[0]
+        if took >= float(cfg.get("notify_after", 120.0)):
+            what = "stopped" if name == "StopFailure" else "finished"
+            return [("done", f"Claude {what} · {project_of(s)}", f"after {_took(took)}")]
+    return []
+
+
+def _took(sec):
+    sec = int(sec)
+    return f"{sec // 60}m{sec % 60:02d}s" if sec < 3600 else f"{sec // 3600}h{sec % 3600 // 60:02d}m"
+
+
+def notify(title, body, urgent=False):
+    import shutil
+    from .gitstatus import spawn_detached
+    if shutil.which("notify-send"):
+        spawn_detached(["notify-send", "-a", "Claude Code", "-u", "critical" if urgent else "normal",
+                        "-i", "dialog-question" if urgent else "dialog-information", title, body])
+
+
+def _nudge_main(args):
+    """A detached check, a little after a question: still unanswered, so say so on the desktop."""
+    sid, asked, wait = args[0], float(args[1]), float(args[2])
+    time.sleep(wait)
+    s = load(sid)
+    if not s or s.get("closed") or s["ask"][0] != asked:
+        return
+    notify(f"Claude needs you · {project_of(s)}", s["ask"][1] or "waiting for an answer", urgent=True)
 
 
 def hook_main() -> int:
@@ -252,13 +360,28 @@ def hook_main() -> int:
         from .fastjson import loads
         event = loads(raw)
         if isinstance(event, dict):
-            record(event, now)
+            done = record(event, now)
             if event.get("hook_event_name") == "SessionStart":
                 sweep()
+            if done:
+                for act in pop_ups(event, *done, now, _cfg()):
+                    if act[0] == "done":
+                        notify(act[1], act[2])
+                    else:
+                        _spawn_nudge(str(event.get("session_id")), done[1]["ask"][0], act[1])
     except Exception:
         if os.environ.get("CLAUDE_STATUSLINE_DEBUG"):
             raise
     return 0
+
+
+def _spawn_nudge(sid, asked, wait):
+    import sys
+    from .gitstatus import spawn_detached
+    parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    code = ("import sys; sys.path.insert(0, sys.argv[1]); "
+            "from claude_statusline.activity import _nudge_main; _nudge_main(sys.argv[2:])")
+    spawn_detached([sys.executable, "-S", "-c", code, parent, sid, repr(asked), str(wait)])
 
 
 def sweep(max_age=STALE, locks=False):
@@ -271,7 +394,7 @@ def sweep(max_age=STALE, locks=False):
     except OSError:
         return
     for n in names:
-        if n.startswith("activity-") and (locks or not n.endswith(".lock")):
+        if (n.startswith("activity-") and (locks or not n.endswith(".lock"))) or n.startswith("turns-"):
             p = os.path.join(runtime_dir(), n)
             try:
                 if now - os.stat(p).st_mtime > max_age:

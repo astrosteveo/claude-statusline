@@ -1,0 +1,27 @@
+# fleet — one line for this session, then a map of every Claude Code session on this machine, from agentboard.
+#
+# Each project is a star. Its sessions orbit it, marked by what they need:
+# ! needs you, ✗ a failed job, ◆ your turn, ◐ working, ○ idle, ◌ never
+# prompted. Forks share a row (×3), each session shows its context, and its
+# running agents hang under it as moons. Ctrl+Shift+click a title to jump to
+# its window. The rows the map leaves show the last hour's tool calls. The
+# bar starts `agentboard web` in the background when none runs
+# (CLAUDE_STATUSLINE_AGENTBOARD=off stops that) and never waits on it. Raise
+# or lower `rows` to fit your screen; Claude's prompt and conversation need
+# the rest. Your theme, style and icons stay yours.
+
+[[line]]
+left = ["model", "dir", "git", "pr", "turn", "tools"]
+right = ["usage", "limits"]
+
+[segment.usage]
+type = "cycle"
+of = ["context", "tokens", "cost"]
+
+[segment.limits]
+type = "cycle"
+of = ["limit_5h", "limit_7d"]
+
+[panels]
+show = ["fleet"]
+rows = 20

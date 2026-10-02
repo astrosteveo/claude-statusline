@@ -289,6 +289,11 @@ class SegmentTests(unittest.TestCase):
         self.assertNotIn("↻", self.one("limit_5h", d, reset=False))
         camel = {"rateLimits": {"fiveHour": {"usedPercentage": 12}}}
         self.assertIn("12%", self.one("limit_5h", camel))
+        hot = {"rate_limits": {"five_hour": {"used_percentage": 90, "resets_at": NOW + 3600}}}
+        import time
+        when = time.strftime("%H:%M", time.localtime(NOW + 1600))    # 90% after 4h: out in 26m40s
+        self.assertIn(f"→out {when}", self.one("limit_5h", hot))
+        self.assertIn("→112%", self.one("limit_5h", hot, out_clock=False))
         model = {"rate_limits": {"seven_day": {"used_percentage": 20}, "seven_day_opus": {"used_percentage": 70}}}
         self.assertIn("7d·opus", self.one("limit_7d_model", model))
 
@@ -297,6 +302,16 @@ class SegmentTests(unittest.TestCase):
         self.assertIn("84k/200k", self.one("context", d))
         self.assertIn("58%", self.one("context", d, remaining=True))
         self.assertEqual(self.one("context", {"exceeds_200k_tokens": True}), "◔ ctx >200k")
+        near = {"context_window": {"used_percentage": 60, "used_tokens": 120000, "context_window_size": 200000},
+                "_activity": {"turn_tokens": [60000, 80000, 90000, 120000]}}     # a turn's median: 20k
+        self.assertIn("~4 turns", self.one("context", near))                     # 80k to the window's end
+        self.assertNotIn("turn", self.one("context", near, turns=0))
+        self.assertIn("~2 turns", self.one("context", near, compact_at=160000))
+        from claude_statusline.compact import compact_at
+        self.assertEqual(compact_at(0, 1_000_000), 967_000)
+        self.assertEqual(compact_at(500_000, 200_000), 200_000)
+        far = dict(near, _activity={"turn_tokens": [1000, 2000, 3000]})
+        self.assertNotIn("turn", self.one("context", far))                       # 38 turns: no need to say
 
     def test_cost_cache_burn(self):
         d = {"cost": {"total_cost_usd": 12.5, "total_duration_ms": 3_600_000}}

@@ -37,6 +37,11 @@ def _from_sample(d, now):
     s["at"] = now
     s["turn"], s["stop"] = t(d.get("turn")), t(d.get("stop"))
     s["failed"] = str(d.get("failed") or "")
+    if d.get("ask"):
+        s["ask"] = [t(d["ask"][0]), str(d["ask"][1]), "permission", ""]
+    s["cwd"] = str(d.get("cwd") or "")
+    s["edited"] = {p: t(w) for p, w in (d.get("edited") or {}).items()}
+    s["checks"] = {k: v[:5] + [t(v[5]), str(v[6] if len(v) > 6 else "")] for k, v in (d.get("checks") or {}).items()}
     s["mode"] = str(d.get("mode") or "")
     for i, (name, tgt, start, agent) in enumerate(d.get("tools") or []):
         s["tools"][f"t{i}"] = [name, tgt, t(start), agent]
@@ -197,15 +202,19 @@ class Tasks(LiveSegment):
 class Turn(LiveSegment):
     name = "turn"
     doc = ("How long Claude has been working on your last message, or how long it has waited for you "
-           "since it finished; compaction and a failed turn too (live activity).")
+           "since it finished; a question it needs you to answer, compaction and a failed turn too "
+           "(live activity).")
     priority = 52
     tone = "accent"
-    format = "<turnc>{state}</turnc>[ <muted>{time}</muted>]"
+    format = "<turnc>{state}</turnc>[ <subtext>{ask}</subtext>][ <muted>{time}</muted>]"
     options = {"waiting": Opt(bool, True, "Show how long Claude has waited for you."),
-               "wait_max": Opt(float, 12.0, "Hours after which the wait is no longer shown.")}
-    fields_doc = {"state": "working, waiting, compacting, or why a turn stopped",
+               "wait_max": Opt(float, 12.0, "Hours after which the wait is no longer shown."),
+               "ask": Opt(int, 40, "Longest question shown after `needs you`; 0 for none.")}
+    fields_doc = {"state": "working, needs you, waiting, compacting, or why a turn stopped",
+                  "ask": "what Claude asks you: the tool it wants to run, or its question",
                   "time": "how long, in that state", "compactions": "compactions this session"}
-    colors_doc = {"turnc": "accent working, muted waiting, yellow compacting, red after a failure"}
+    colors_doc = {"turnc": "accent working, red when it needs you, muted waiting, yellow compacting, "
+                           "red after a failure"}
 
     def fields(self, ctx, opts, level):
         s = self.data(ctx)
@@ -213,7 +222,12 @@ class Turn(LiveSegment):
             return None
         now = ctx.now
         c_start, c_end = s["compact"][0], s["compact"][1]
-        base = {"compactions": str(s.get("compactions", 0))}
+        base = {"compactions": str(s.get("compactions", 0)), "ask": ""}
+        asked, question = s["ask"][0], s["ask"][1]
+        if asked and now - asked < 3600:
+            cap = opts["ask"] if level < LESS else (min(opts["ask"], 20) if level < NARROW else 0)
+            return dict(base, state="needs you", ask=clip(" ".join(question.split()), cap) if cap > 0 else "",
+                        time=elapsed(now - asked) if level < LEAN else "", _role="red")
         if c_start and not c_end and now - c_start < 600:
             return dict(base, state="compacting", time=elapsed(now - c_start) if level < NARROW else "",
                         _role="yellow")

@@ -512,8 +512,8 @@ def compile_config(raw: dict, path=None, read_error=None) -> dict:
             cols.append(col[0] if isinstance(c, str) else col)
     panels["show"] = show = cols
     prows = panels.get("rows")
-    if not isinstance(prows, int) or isinstance(prows, bool) or not 1 <= prows <= 16:
-        problems.append(problem("error", "panels.rows", "a whole number from 1 to 16"))
+    if not isinstance(prows, int) or isinstance(prows, bool) or not 1 <= prows <= 40:
+        problems.append(problem("error", "panels.rows", "a whole number from 1 to 40"))
         panels["rows"] = prows = 6
     for key, low in (("cache_ttl", 0), ("commits", 1)):
         v = panels.get(key)

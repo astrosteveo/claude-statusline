@@ -119,14 +119,16 @@ enabled = true        # false hides every command segment and runs nothing
 [activity]
 enabled = false       # `statusline.py activity enable` registers the hooks and sets this
 placement = "auto"    # auto: turn, tools, agents, tasks, mode get a line of their own; manual
+notify = true         # pop-ups: a question unanswered for notify_ask s, a turn over notify_after s
 
 [git]
 enabled = true
 cache_ttl = 2.0       # the background refresh's period
 
 [panels]              # git panels under the bar
-show = []             # files, graph, branches, stash, ci, servers; a list stacks them in a column
-rows = 6              # 1 to 16
+show = []             # files, graph, branches, stash, ci, servers, checks, reviews, sessions, fleet;
+                      # a list stacks them in a column
+rows = 6              # 1 to 40
 cache_ttl = 3.0
 commits = 40
 notify = true         # a pop-up when a CI run on your commit finishes

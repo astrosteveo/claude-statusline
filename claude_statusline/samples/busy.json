@@ -133,7 +133,43 @@
         "Update the docs",
         "pending"
       ]
-    ]
+    ],
+    "cwd": "/home/u/Projects/widget-factory",
+    "edited": {
+      "/home/u/Projects/widget-factory/src/parser/lexer.py": -60,
+      "/home/u/Projects/widget-factory/tests/test_parser.py": -40
+    },
+    "checks": {
+      "test": [
+        "pytest tests/test_parser.py -q",
+        false,
+        2,
+        46,
+        [
+          [
+            "TestNested::test_quotes_inside_lists",
+            "tests/test_parser.py",
+            88
+          ],
+          [
+            "test_empty_input",
+            "tests/test_parser.py",
+            12
+          ]
+        ],
+        -95,
+        "/home/u/Projects/widget-factory"
+      ],
+      "lint": [
+        "ruff check .",
+        true,
+        0,
+        null,
+        [],
+        -300,
+        "/home/u/Projects/widget-factory"
+      ]
+    }
   },
   "_spend": {
     "today": 61.2,
@@ -333,6 +369,73 @@
         8000,
         "uvicorn app:api",
         "-2h"
+      ]
+    ],
+    "reviews": {
+      "stale": false,
+      "mine": [
+        1234,
+        "Split the lexer out of the parser",
+        "https://github.com/octocat/widget-factory/pull/1234",
+        "CHANGES_REQUESTED",
+        [
+          [
+            "src/parser/lexer.py",
+            42,
+            "mona",
+            "This drops the quote state when a list nests; keep it on the stack?",
+            "https://github.com/octocat/widget-factory/pull/1234#discussion_r1",
+            false
+          ],
+          [
+            "tests/test_parser.py",
+            88,
+            "hubot",
+            "Add a case for an empty nested list.",
+            "https://github.com/octocat/widget-factory/pull/1234#discussion_r2",
+            false
+          ]
+        ]
+      ],
+      "asked": [
+        [
+          "octocat/api-gateway",
+          87,
+          "Rate-limit the export endpoint",
+          "https://github.com/octocat/api-gateway/pull/87",
+          "mona",
+          "-3h",
+          false
+        ],
+        [
+          "octocat/widget-factory",
+          1229,
+          "Bump the CSV parser",
+          "https://github.com/octocat/widget-factory/pull/1229",
+          "dependabot",
+          "-1d",
+          true
+        ]
+      ]
+    },
+    "sessions": [
+      [
+        "api-gateway",
+        "ask",
+        "-40s",
+        "Bash terraform apply"
+      ],
+      [
+        "docs-site",
+        "work",
+        "-3m",
+        "Edit getting-started.md"
+      ],
+      [
+        "dotfiles",
+        "wait",
+        "-25m",
+        ""
       ]
     ]
   }

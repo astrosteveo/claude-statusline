@@ -22,7 +22,7 @@ Every segment also takes `format` (its body template), `priority`, `icon` ("" hi
 | `diff` | 57 | Lines added and removed this session. |
 | `spend` | 56 | What today cost across every session this bar has drawn (local days), with the week and the month, and an optional daily budget drawn as a bar. |
 | `limit_7d_model` | 55 | The per-model weekly window, shown only when it differs from the overall one. |
-| `turn` | 52 | How long Claude has been working on your last message, or how long it has waited for you since it finished; compaction and a failed turn too (live activity). |
+| `turn` | 52 | How long Claude has been working on your last message, or how long it has waited for you since it finished; a question it needs you to answer, compaction and a failed turn too (live activity). |
 | `cycle` | 50 | A slot that shows one of several segments and moves to the next when you click it (ctrl+shift+click in kitty; needs `statusline.py clicks enable`). Name it, list them in `of`, and place the name: [segment.limits] type = "cycle", of = ["limit_5h", "limit_7d"]. |
 | `env` | 50 | The active virtualenv or conda env, and the host when the session is remote. |
 | `tools` | 48 | The tools Claude is running now, with what they work on and for how long, then the ones just finished this turn (live activity). |
@@ -162,6 +162,7 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bol
 | `pace_mode` | str | `"recent"` | recent: the rate over the last stretch of the window; average: usage so far over the window gone. One of: recent, average. |
 | `pace_min_elapsed` | float | `0.1` | Don't extrapolate an average from under this much of the window. |
 | `pace_lookback` | float | `0.1` | The stretch `recent` measures, as a fraction of the window. |
+| `out_clock` | bool | `true` | When the pace runs out before the reset, show when (⇢out 15:40) instead of the projected percentage. |
 | `reset` | bool | `true` | Show the time until the window resets (↻). |
 | `clock` | bool | `true` | ...and the time of day it resets. |
 | `missing` | str | `"<muted>{label} —</muted>"` | Shown when the host sends no such window; empty hides the segment. |
@@ -171,7 +172,8 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bol
 | `{label}` | the window's label |
 | `{bar}` | the bar |
 | `{pct}` | whole percentage |
-| `{pace}` | ⇢ projected usage at reset |
+| `{pace}` | ⇢ projected usage at reset, or when the pace runs out |
+| `{out}` | the time the pace reaches 100%, when it does before the reset |
 | `{reset}` | ↻ time until reset |
 | `{clock}` | time of day of the reset |
 | `{left}` | percentage left |
@@ -197,6 +199,7 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bol
 | `pace_mode` | str | `"recent"` | recent: the rate over the last stretch of the window; average: usage so far over the window gone. One of: recent, average. |
 | `pace_min_elapsed` | float | `0.1` | Don't extrapolate an average from under this much of the window. |
 | `pace_lookback` | float | `0.1` | The stretch `recent` measures, as a fraction of the window. |
+| `out_clock` | bool | `true` | When the pace runs out before the reset, show when (⇢out 15:40) instead of the projected percentage. |
 | `reset` | bool | `true` | Show the time until the window resets (↻). |
 | `clock` | bool | `true` | ...and the time of day it resets. |
 | `missing` | str | `"<muted>{label} —</muted>"` | Shown when the host sends no such window; empty hides the segment. |
@@ -206,7 +209,8 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bol
 | `{label}` | the window's label |
 | `{bar}` | the bar |
 | `{pct}` | whole percentage |
-| `{pace}` | ⇢ projected usage at reset |
+| `{pace}` | ⇢ projected usage at reset, or when the pace runs out |
+| `{out}` | the time the pace reaches 100%, when it does before the reset |
 | `{reset}` | ↻ time until reset |
 | `{clock}` | time of day of the reset |
 | `{left}` | percentage left |
@@ -232,6 +236,7 @@ Tone: `gold`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bold
 | `pace_mode` | str | `"recent"` | recent: the rate over the last stretch of the window; average: usage so far over the window gone. One of: recent, average. |
 | `pace_min_elapsed` | float | `0.1` | Don't extrapolate an average from under this much of the window. |
 | `pace_lookback` | float | `0.1` | The stretch `recent` measures, as a fraction of the window. |
+| `out_clock` | bool | `true` | When the pace runs out before the reset, show when (⇢out 15:40) instead of the projected percentage. |
 | `reset` | bool | `true` | Show the time until the window resets (↻). |
 | `clock` | bool | `true` | ...and the time of day it resets. |
 | `missing` | str | `""` | Shown when absent; empty hides it. |
@@ -241,7 +246,8 @@ Tone: `gold`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bold
 | `{label}` | the window's label |
 | `{bar}` | the bar |
 | `{pct}` | whole percentage |
-| `{pace}` | ⇢ projected usage at reset |
+| `{pace}` | ⇢ projected usage at reset, or when the pace runs out |
+| `{out}` | the time the pace reaches 100%, when it does before the reset |
 | `{reset}` | ↻ time until reset |
 | `{clock}` | time of day of the reset |
 | `{left}` | percentage left |
@@ -255,7 +261,7 @@ Tone: `gold`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bold
 
 How full the context window is: a bar, the percentage, and the tokens.
 
-Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ][<level><bold>{pct}%</bold></level>][ <muted>{detail}</muted>]`
+Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ][<level><bold>{pct}%</bold></level>][ <muted>{detail}</muted>][ <turnsc>{turns}</turnsc>]`
 
 | option | type | default | meaning |
 |--------|------|---------|---------|
@@ -266,6 +272,8 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ][<level><bo
 | `tokens` | bool | `true` | Show the tokens used beside the percentage. |
 | `size` | bool | `true` | ...and the window's size, as 279k/1.0M. |
 | `remaining` | bool | `false` | Show what is left instead of what is used. |
+| `turns` | int | `15` | Show the turns left before Claude Code compacts once they are this few or fewer (needs live activity); 0 never. |
+| `compact_at` | int | `0` | Tokens at which Claude Code compacts (set it if you use /autocompact); 0: CLAUDE_CODE_AUTO_COMPACT_WINDOW, else the window (967k for 1M). |
 
 | field | holds |
 |-------|-------|
@@ -276,10 +284,13 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ][<level><bo
 | `{size}` | window size |
 | `{left}` | tokens left |
 | `{detail}` | tokens, or tokens/size |
+| `{turns}` | ~6 turns: turns left before compaction, at the typical turn's growth |
+| `{turns_left}` | the same as a bare number |
 
 | colour | when |
 |--------|------|
 | `<level>` | green / yellow / orange / red by [thresholds] |
+| `<turnsc>` | muted, orange at 5 turns or fewer, red at 2 or fewer |
 
 ## pr
 
@@ -445,6 +456,7 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bol
 | `pace_mode` | str | `"recent"` | recent: the rate over the last stretch of the window; average: usage so far over the window gone. One of: recent, average. |
 | `pace_min_elapsed` | float | `0.1` | Don't extrapolate an average from under this much of the window. |
 | `pace_lookback` | float | `0.1` | The stretch `recent` measures, as a fraction of the window. |
+| `out_clock` | bool | `true` | When the pace runs out before the reset, show when (⇢out 15:40) instead of the projected percentage. |
 | `reset` | bool | `true` | Show the time until the window resets (↻). |
 | `clock` | bool | `false` | ...and the time of day it resets. |
 | `missing` | str | `""` | Shown when absent; empty hides it. |
@@ -454,7 +466,8 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bol
 | `{label}` | the window's label |
 | `{bar}` | the bar |
 | `{pct}` | whole percentage |
-| `{pace}` | ⇢ projected usage at reset |
+| `{pace}` | ⇢ projected usage at reset, or when the pace runs out |
+| `{out}` | the time the pace reaches 100%, when it does before the reset |
 | `{reset}` | ↻ time until reset |
 | `{clock}` | time of day of the reset |
 | `{left}` | percentage left |
@@ -466,24 +479,26 @@ Tone: `green`. Default format: `[<subtext>{label}</subtext> ][{bar} ]<level><bol
 
 ## turn
 
-How long Claude has been working on your last message, or how long it has waited for you since it finished; compaction and a failed turn too (live activity).
+How long Claude has been working on your last message, or how long it has waited for you since it finished; a question it needs you to answer, compaction and a failed turn too (live activity).
 
-Tone: `accent`. Default format: `<turnc>{state}</turnc>[ <muted>{time}</muted>]`
+Tone: `accent`. Default format: `<turnc>{state}</turnc>[ <subtext>{ask}</subtext>][ <muted>{time}</muted>]`
 
 | option | type | default | meaning |
 |--------|------|---------|---------|
 | `waiting` | bool | `true` | Show how long Claude has waited for you. |
 | `wait_max` | float | `12.0` | Hours after which the wait is no longer shown. |
+| `ask` | int | `40` | Longest question shown after `needs you`; 0 for none. |
 
 | field | holds |
 |-------|-------|
-| `{state}` | working, waiting, compacting, or why a turn stopped |
+| `{state}` | working, needs you, waiting, compacting, or why a turn stopped |
+| `{ask}` | what Claude asks you: the tool it wants to run, or its question |
 | `{time}` | how long, in that state |
 | `{compactions}` | compactions this session |
 
 | colour | when |
 |--------|------|
-| `<turnc>` | accent working, muted waiting, yellow compacting, red after a failure |
+| `<turnc>` | accent working, red when it needs you, muted waiting, yellow compacting, red after a failure |
 
 ## cycle
 
