@@ -127,7 +127,7 @@ class _Done:
 
 class AttachTests(unittest.TestCase):
     def test_a_background_session_with_an_id_attaches(self):
-        snap = {"rows": [dict(SNAP["rows"][0], id="1fb37cf5"), SNAP["rows"][3]]}
+        snap = {"rows": [dict(SNAP["rows"][0], id="1fb37cf5", state="blocked"), SNAP["rows"][3]]}
         a, d = fleet.rows(snap)
         self.assertEqual((a["bg"], d["bg"]), ("1fb37cf5", None))      # a desktop session can't be attached
         bad = fleet.rows({"rows": [dict(SNAP["rows"][0], id="a;b")]})[0]
@@ -136,7 +136,7 @@ class AttachTests(unittest.TestCase):
             self.assertIsNone(fleet.rows({"rows": [dict(SNAP["rows"][0], id="1fb37cf5", state=state)]})[0]["bg"])
 
     def test_links(self):
-        rows = [dict(r, id="1fb37cf5") if r["key"] == "a" else r for r in SNAP2["rows"]]
+        rows = [dict(r, id="1fb37cf5", state="blocked") if r["key"] == "a" else r for r in SNAP2["rows"]]
         _, out = FleetFeatureTests.text(self, snap=dict(SNAP2, rows=rows))
         links = {s[3] for t in out for _, s in t.spans if s and len(s) > 3 and s[3]}
         self.assertIn("claude-statusline://me/attach/1fb37cf5", links)
@@ -148,6 +148,8 @@ class AttachTests(unittest.TestCase):
 
         def run(argv):
             calls.append(argv)
+            if argv[1] == "agents":
+                return _Done(stdout='[{"id": "1fb37cf5", "state": "blocked"}]')
             if argv[4] == "ls":
                 return _Done(stdout='[{"is_focused": %s}]' % ("true" if argv[3] == "unix:/tmp/k-2" else "false"))
             return _Done()
@@ -159,13 +161,34 @@ class AttachTests(unittest.TestCase):
         self.assertEqual(launch[-2:], ["attach", "1fb37cf5"])
 
     def test_says_why_it_could_not(self):
+        def run(state="working", fails=None):
+            def go(argv):
+                if argv[1] == "agents":
+                    return _Done(stdout='[{"id": "1fb37cf5", "state": "%s"}]' % state)
+                return fails or _Done()
+            return go
         with self.assertRaisesRegex(ValueError, "listen_on"):
-            fleet.attach("1fb37cf5", run=lambda a: _Done(), sockets=[])
+            fleet.attach("1fb37cf5", run=run(), sockets=[])
         with self.assertRaisesRegex(ValueError, "remote control is disabled"):
-            fleet.attach("1fb37cf5", run=lambda a: _Done(returncode=1, stderr="Error: remote control\nis disabled"),
+            fleet.attach("1fb37cf5", run=run(fails=_Done(returncode=1, stderr="Error: remote control\nis disabled")),
                          sockets=["unix:/tmp/k-1"])
         with self.assertRaises(ValueError):
-            fleet.attach("-rf", run=lambda a: _Done(), sockets=["unix:/tmp/k-1"])
+            fleet.attach("-rf", run=run(), sockets=["unix:/tmp/k-1"])
+
+    def test_a_session_that_finished_since_the_map_was_drawn_is_left_alone(self):
+        launched = []
+
+        def run(state):
+            def go(argv):
+                if argv[1] == "agents":
+                    return _Done(stdout='[{"id": "1fb37cf5", "state": "%s"}]' % state if state else "[]")
+                launched.append(argv)
+                return _Done()
+            return go
+        for state in ("done", "failed", "stopped", None):
+            with self.assertRaisesRegex(ValueError, "attaching would start it again"):
+                fleet.attach("1fb37cf5", run=run(state), sockets=["unix:/tmp/k-1"])
+        self.assertEqual(launched, [])
 
     def test_finds_kitty_sockets_as_kitty_names_them(self):
         d = tempfile.mkdtemp(prefix="sl-kitty-")
